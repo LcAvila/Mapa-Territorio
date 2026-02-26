@@ -1,7 +1,10 @@
 import { X, Map as MapIcon, Loader2, RotateCcw } from "lucide-react";
-import { getMunicipioResponsaveis, hasBairros, getBairroResponsaveis, allBairros } from "@/data/territories";
-import { getRepByCode, getRepColor } from "@/data/representatives";
+import { getRepColor, getRepByCode } from "@/data/representatives";
+import { getMunicipioResponsaveis } from "@/data/territories";
 import { useMunicipioInfo } from "@/hooks/use-geo-data";
+import { useQuery } from "@tanstack/react-query";
+import type { Representative } from "@/data/representatives";
+import type { TerritoryAssignment } from "@/data/territories";
 
 interface DetailPanelProps {
   municipio: string;
@@ -13,49 +16,45 @@ interface DetailPanelProps {
   isBairrosActive?: boolean;
 }
 
+function useApiData() {
+  const repsQ = useQuery<Representative[]>({
+    queryKey: ["api", "representatives"],
+    queryFn: async () => {
+      const res = await fetch("http://localhost:3001/api/representatives");
+      return res.ok ? res.json() : [];
+    },
+    staleTime: 30_000,
+  });
+
+  const terrQ = useQuery<TerritoryAssignment[]>({
+    queryKey: ["api", "territories"],
+    queryFn: async () => {
+      const res = await fetch("http://localhost:3001/api/territories");
+      return res.ok ? res.json() : [];
+    },
+    staleTime: 30_000,
+  });
+
+  return { reps: repsQ.data || [], territories: terrQ.data || [] };
+}
+
 export default function DetailPanel({ municipio, uf, modo, onClose, onViewBairros, ufCode, isBairrosActive }: DetailPanelProps) {
   const { data: municipiosInfo, isLoading: loadingInfo } = useMunicipioInfo(ufCode || null);
-  const reps = getMunicipioResponsaveis(municipio, uf, modo);
+  const { reps: apiReps, territories: apiTerritories } = useApiData();
+
+  const repCodes = getMunicipioResponsaveis(municipio, uf, modo, apiTerritories);
 
   const handleViewBairros = () => {
     if (!onViewBairros || !municipiosInfo) return;
-
-    if (isBairrosActive) {
-      onViewBairros(null);
-      return;
-    }
-
-    // Find municipality code by name
-    const mun = municipiosInfo.find(
-      (m: any) => m.nome.toLowerCase() === municipio.toLowerCase()
-    );
-
-    if (mun) {
-      onViewBairros(mun.id);
-    }
+    if (isBairrosActive) { onViewBairros(null); return; }
+    const mun = municipiosInfo.find((m: any) => m.nome.toLowerCase() === municipio.toLowerCase());
+    if (mun) onViewBairros(mun.id);
   };
-  const temBairros = hasBairros(municipio, uf);
-
-  // Get bairros for this municipality in the current mode
-  const bairros = allBairros.filter(
-    b => b.municipio.toLowerCase() === municipio.toLowerCase() &&
-      b.uf === uf &&
-      b.modo === modo
-  );
-
-  // Group bairros by name
-  const bairroMap = new Map<string, string[]>();
-  bairros.forEach(b => {
-    const existing = bairroMap.get(b.bairro) || [];
-    existing.push(b.repCode);
-    bairroMap.set(b.bairro, existing);
-  });
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden animate-in slide-in-from-right-4 duration-300">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between"
-        style={{ background: "var(--gradient-header)" }}>
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between" style={{ background: "var(--gradient-header)" }}>
         <div>
           <h2 className="font-semibold text-foreground">{municipio}</h2>
           <p className="text-xs text-muted-foreground">{uf} · {modo === "planejamento" ? "Planejamento" : "Atendimento"}</p>
@@ -71,28 +70,28 @@ export default function DetailPanel({ municipio, uf, modo, onClose, onViewBairro
           {modo === "planejamento" ? "Responsável Principal" : "Responsáveis"}
         </h3>
 
-        {reps.length === 0 ? (
+        {repCodes.length === 0 ? (
           <p className="text-sm text-muted-foreground italic">Sem responsável atribuído</p>
         ) : (
           <div className="space-y-2">
-            {reps.map((code, i) => {
-              const rep = getRepByCode(code);
-              if (!rep) return null;
+            {repCodes.map((code, i) => {
+              const rep = getRepByCode(code, apiReps);
+              if (!rep) return (
+                <div key={`${code}-${i}`} className="flex items-center gap-3 p-2 rounded-md bg-secondary/50">
+                  <span className="w-3 h-3 rounded-sm flex-shrink-0 bg-muted" />
+                  <p className="text-sm font-medium text-foreground">{code}</p>
+                </div>
+              );
               return (
                 <div key={`${code}-${i}`} className="flex items-center gap-3 p-2 rounded-md bg-secondary/50">
                   <span
                     className="w-3 h-3 rounded-sm flex-shrink-0"
-                    style={{
-                      backgroundColor: getRepColor(rep),
-                      border: rep.isVago ? "2px dashed hsl(0, 70%, 50%)" : "none"
-                    }}
+                    style={{ backgroundColor: getRepColor(rep), border: rep.isVago ? "2px dashed hsl(0, 70%, 50%)" : "none" }}
                   />
                   <div>
                     <p className="text-sm font-medium text-foreground">{rep.code} - {rep.name}</p>
-                    {rep.isVago && (
-                      <span className="text-[10px] text-destructive font-medium uppercase">VAGO</span>
-                    )}
-                    {i === 0 && modo === "atendimento" && reps.length > 1 && (
+                    {rep.isVago && <span className="text-[10px] text-destructive font-medium uppercase">VAGO</span>}
+                    {i === 0 && modo === "atendimento" && repCodes.length > 1 && (
                       <span className="text-[10px] text-primary font-medium ml-2">PRINCIPAL</span>
                     )}
                   </div>
@@ -102,41 +101,7 @@ export default function DetailPanel({ municipio, uf, modo, onClose, onViewBairro
           </div>
         )}
 
-        {/* Bairros section */}
-        {temBairros && bairroMap.size > 0 && (
-          <div className="border-t border-border pt-3 mt-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-              Bairros ({bairroMap.size})
-            </h3>
-            <div className="max-h-[300px] overflow-y-auto space-y-1 pr-1">
-              {Array.from(bairroMap.entries()).map(([bairro, codes]) => {
-                const mainRep = getRepByCode(codes[0]);
-                return (
-                  <div key={bairro} className="flex items-center gap-2 py-1.5 px-2 rounded text-xs hover:bg-secondary/50 transition-colors">
-                    <span
-                      className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: mainRep ? getRepColor(mainRep) : "hsl(0,0%,50%)" }}
-                    />
-                    <span className="text-foreground flex-1">{bairro}</span>
-                    <span className="text-muted-foreground font-mono text-[10px]">
-                      {codes.length > 1 ? `${codes.length} reps` : codes[0]}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {temBairros && bairroMap.size === 0 && (
-          <div className="border-t border-border pt-3 mt-3">
-            <p className="text-xs text-muted-foreground italic">
-              Bairros cadastrados neste município. Selecione modo correto para ver.
-            </p>
-          </div>
-        )}
-
-        {/* Global/IBGE Bairros Visualization Button */}
+        {/* Bairros Visualization */}
         <div className="border-t border-border pt-4 mt-2">
           <button
             onClick={handleViewBairros}
@@ -146,19 +111,11 @@ export default function DetailPanel({ municipio, uf, modo, onClose, onViewBairro
               : "bg-primary text-primary-foreground hover:bg-primary/90"
               }`}
           >
-            {loadingInfo ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : isBairrosActive ? (
-              <RotateCcw className="w-4 h-4" />
-            ) : (
-              <MapIcon className="w-4 h-4" />
-            )}
+            {loadingInfo ? <Loader2 className="w-4 h-4 animate-spin" /> : isBairrosActive ? <RotateCcw className="w-4 h-4" /> : <MapIcon className="w-4 h-4" />}
             {isBairrosActive ? "Esconder Bairros no Mapa" : "Visualizar Bairros no Mapa"}
           </button>
           <p className="text-[10px] text-muted-foreground mt-2 text-center">
-            {isBairrosActive
-              ? "Divisões municipais (subdistritos/bairros) ativas."
-              : "* Carrega os limites geográficos (subdistritos) do IBGE para este município."}
+            {isBairrosActive ? "Divisões municipais ativas." : "* Carrega os limites geográficos (IBGE) para este município."}
           </p>
         </div>
       </div>

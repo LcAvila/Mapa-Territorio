@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown } from "lucide-react";
+import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2 } from "lucide-react";
 import { exportTerritoriesToExcel } from "@/utils/export-utils";
 import { UF_DATA } from "@/data/uf-codes";
 import { Button } from "@/components/ui/button";
@@ -18,17 +19,24 @@ interface MapHeaderProps {
 }
 
 export default function MapHeader({
-  selectedUF,
-  onSelectUF,
-  modo,
-  onSetModo,
-  searchQuery,
-  onSearchChange,
-  isAuthenticated,
-  role,
-  logout
+  selectedUF, onSelectUF, modo, onSetModo,
+  searchQuery, onSearchChange, isAuthenticated, role, logout
 }: MapHeaderProps) {
   const navigate = useNavigate();
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await exportTerritoriesToExcel();
+      toast.success("Relatório exportado com sucesso!");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao exportar relatório");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <header className="bg-card border-b border-border px-4 py-3 flex items-center gap-4 flex-wrap">
       {/* Logo / Title */}
@@ -62,8 +70,7 @@ export default function MapHeader({
           onClick={() => onSetModo("planejamento")}
           className={`px-3 py-1.5 text-xs font-medium rounded transition-all ${modo === "planejamento"
             ? "bg-primary text-primary-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
-            }`}
+            : "text-muted-foreground hover:text-foreground"}`}
         >
           Planejamento
         </button>
@@ -71,8 +78,7 @@ export default function MapHeader({
           onClick={() => onSetModo("atendimento")}
           className={`px-3 py-1.5 text-xs font-medium rounded transition-all ${modo === "atendimento"
             ? "bg-primary text-primary-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
-            }`}
+            : "text-muted-foreground hover:text-foreground"}`}
         >
           Atendimento
         </button>
@@ -80,12 +86,15 @@ export default function MapHeader({
 
       {/* Export Button */}
       <button
-        onClick={exportTerritoriesToExcel}
-        className="flex items-center gap-2 px-3 py-1.5 bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium rounded-md border border-border transition-all"
+        onClick={handleExport}
+        disabled={exporting}
+        className="flex items-center gap-2 px-3 py-1.5 bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium rounded-md border border-border transition-all disabled:opacity-60 disabled:cursor-not-allowed"
         title="Exportar todos os territórios para Excel"
       >
-        <FileDown className="w-4 h-4 text-primary" />
-        <span>Exportar</span>
+        {exporting
+          ? <Loader2 className="w-4 h-4 text-primary animate-spin" />
+          : <FileDown className="w-4 h-4 text-primary" />}
+        <span>{exporting ? "Exportando..." : "Exportar"}</span>
       </button>
 
       {/* Search */}
@@ -114,33 +123,19 @@ export default function MapHeader({
       {/* Auth / Admin Buttons */}
       <div className="flex items-center gap-2 ml-auto lg:ml-0">
         {!isAuthenticated ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/login')}
-            className="gap-2 border-primary/20 hover:bg-primary/10"
-          >
+          <Button variant="outline" size="sm" onClick={() => navigate('/login')} className="gap-2 border-primary/20 hover:bg-primary/10">
             <LogIn className="w-4 h-4" /> Entrar
           </Button>
         ) : (
           <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-1 border border-border/50">
             {role === 'admin' && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate('/admin')}
-                className="gap-2 hover:bg-background h-8 px-2"
-              >
+              <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="gap-2 hover:bg-background h-8 px-2">
                 <Settings className="w-4 h-4 text-primary" />
                 <span className="hidden sm:inline">Admin</span>
               </Button>
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => { logout(); toast.info('Sessão encerrada'); }}
-              className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
-            >
+            <Button variant="ghost" size="sm" onClick={() => { logout(); toast.info('Sessão encerrada'); }}
+              className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive">
               <LogOut className="w-4 h-4" />
             </Button>
           </div>

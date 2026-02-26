@@ -60,6 +60,7 @@ const Index = () => {
           searchQuery={searchQuery}
           municipioCodeForBairros={municipioCodeForBairros}
           onDeactivateBairros={() => setMunicipioCodeForBairros(null)}
+          selectedMunicipioName={selectedMunicipio?.nome}
         />
 
         {/* Legend overlay - bottom left */}

@@ -1,4 +1,5 @@
-import { representatives, getRepColor, Representative } from "@/data/representatives";
+import { useQuery } from "@tanstack/react-query";
+import { getRepColor, Representative } from "@/data/representatives";
 
 interface MapLegendProps {
   modo: "planejamento" | "atendimento";
@@ -8,6 +9,19 @@ interface MapLegendProps {
   onToggleVagos: () => void;
 }
 
+function useApiRepresentatives() {
+  return useQuery<Representative[]>({
+    queryKey: ["api", "representatives"],
+    queryFn: async () => {
+      const res = await fetch("http://localhost:3001/api/representatives");
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
 export default function MapLegend({
   modo,
   filtroRepresentante,
@@ -15,6 +29,7 @@ export default function MapLegend({
   mostrarVagos,
   onToggleVagos,
 }: MapLegendProps) {
+  const { data: representatives = [] } = useApiRepresentatives();
   const activeReps = representatives.filter(r => !r.isVago);
   const vagoReps = representatives.filter(r => r.isVago);
 
@@ -29,44 +44,45 @@ export default function MapLegend({
         </span>
       </div>
 
-      <div className="space-y-1">
-        {activeReps.map((rep) => (
-          <button
-            key={rep.code}
-            onClick={() => onFilterRep(filtroRepresentante === rep.code ? null : rep.code)}
-            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-all ${
-              filtroRepresentante === rep.code
-                ? "bg-secondary ring-1 ring-primary"
-                : filtroRepresentante && filtroRepresentante !== rep.code
-                ? "opacity-40"
-                : "hover:bg-secondary/50"
-            }`}
-          >
-            <span
-              className="w-3 h-3 rounded-sm flex-shrink-0"
-              style={{ backgroundColor: getRepColor(rep) }}
-            />
-            <span className="font-mono text-[10px] text-muted-foreground">{rep.code}</span>
-            <span className="text-foreground truncate">{rep.name}</span>
-          </button>
-        ))}
-      </div>
+      {activeReps.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic text-center py-2">
+          Nenhum representante cadastrado
+        </p>
+      ) : (
+        <div className="space-y-1">
+          {activeReps.map((rep) => (
+            <button
+              key={rep.code}
+              onClick={() => onFilterRep(filtroRepresentante === rep.code ? null : rep.code)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-all ${filtroRepresentante === rep.code
+                  ? "bg-secondary ring-1 ring-primary"
+                  : filtroRepresentante && filtroRepresentante !== rep.code
+                    ? "opacity-40"
+                    : "hover:bg-secondary/50"
+                }`}
+            >
+              <span
+                className="w-3 h-3 rounded-sm flex-shrink-0"
+                style={{ backgroundColor: getRepColor(rep) }}
+              />
+              <span className="font-mono text-[10px] text-muted-foreground">{rep.code}</span>
+              <span className="text-foreground truncate">{rep.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="border-t border-border pt-2">
         <button
           onClick={onToggleVagos}
-          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-all ${
-            mostrarVagos
+          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-all ${mostrarVagos
               ? "bg-destructive/10 ring-1 ring-destructive text-destructive"
               : "hover:bg-secondary/50"
-          }`}
+            }`}
         >
           <span
             className="w-3 h-3 rounded-sm flex-shrink-0 border-2 border-dashed"
-            style={{ 
-              backgroundColor: "hsl(0, 0%, 30%)", 
-              borderColor: "hsl(0, 70%, 50%)" 
-            }}
+            style={{ backgroundColor: "hsl(0, 0%, 30%)", borderColor: "hsl(0, 70%, 50%)" }}
           />
           <span className="text-foreground">Mostrar VAGOS</span>
           {vagoReps.length > 0 && (
