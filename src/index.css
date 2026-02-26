@@ -1,0 +1,133 @@
+@import "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 10%;
+    --foreground: 210 20% 92%;
+
+    --card: 220 18% 13%;
+    --card-foreground: 210 20% 92%;
+
+    --popover: 220 18% 15%;
+    --popover-foreground: 210 20% 92%;
+
+    --primary: 168 70% 45%;
+    --primary-foreground: 220 20% 10%;
+
+    --secondary: 220 15% 18%;
+    --secondary-foreground: 210 20% 85%;
+
+    --muted: 220 15% 16%;
+    --muted-foreground: 215 12% 55%;
+
+    --accent: 168 50% 30%;
+    --accent-foreground: 168 70% 85%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 15% 20%;
+    --input: 220 15% 20%;
+    --ring: 168 70% 45%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 220 20% 8%;
+    --sidebar-foreground: 210 15% 80%;
+    --sidebar-primary: 168 70% 45%;
+    --sidebar-primary-foreground: 220 20% 10%;
+    --sidebar-accent: 220 15% 14%;
+    --sidebar-accent-foreground: 210 15% 80%;
+    --sidebar-border: 220 15% 18%;
+    --sidebar-ring: 168 70% 45%;
+
+    /* Representative colors */
+    --rep-1: 200 80% 55%;
+    --rep-2: 340 75% 55%;
+    --rep-3: 45 90% 55%;
+    --rep-4: 270 65% 60%;
+    --rep-5: 150 70% 45%;
+    --rep-6: 25 85% 55%;
+    --rep-7: 190 75% 50%;
+
+    /* Vacancy colors */
+    --vago: 0 0% 40%;
+    --vago-pattern: 0 0% 30%;
+
+    /* Map */
+    --map-bg: 220 20% 8%;
+    --map-state-fill: 220 15% 20%;
+    --map-state-stroke: 220 15% 30%;
+    --map-hover: 168 70% 45%;
+
+    /* Gradients */
+    --gradient-sidebar: linear-gradient(180deg, hsl(220 20% 8%) 0%, hsl(220 18% 11%) 100%);
+    --gradient-header: linear-gradient(90deg, hsl(168 70% 45% / 0.1) 0%, transparent 100%);
+    --shadow-card: 0 4px 24px -4px hsl(0 0% 0% / 0.4);
+    --shadow-popup: 0 8px 32px -8px hsl(0 0% 0% / 0.6);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+  }
+
+  code,
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Leaflet overrides */
+.leaflet-container {
+  background: hsl(var(--map-bg)) !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+}
+
+.leaflet-control-zoom {
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: var(--radius) !important;
+  overflow: hidden;
+}
+
+.leaflet-control-zoom a {
+  background: hsl(var(--card)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: hsl(var(--secondary)) !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: hsl(var(--card)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow-popup) !important;
+  border: 1px solid hsl(var(--border));
+}
+
+.leaflet-popup-tip {
+  background: hsl(var(--card)) !important;
+}
+
+.leaflet-control-attribution {
+  background: hsl(var(--background) / 0.8) !important;
+  color: hsl(var(--muted-foreground)) !important;
+  font-size: 10px !important;
+}
+
+.leaflet-control-attribution a {
+  color: hsl(var(--primary)) !important;
+}
