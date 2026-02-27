@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { UserPlus, Trash2, MapPin, Loader2, LogOut, Plus, Map, X, Check, ChevronDown, Search, Pencil, Save } from 'lucide-react';
+import { UserPlus, Trash2, MapPin, Loader2, LogOut, Plus, Map, X, Check, ChevronDown, Search, Pencil, Save, Users, ShieldCheck, User, HandHeart, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { REP_COLOR_PALETTE, getNextColorIndex } from '@/data/representatives';
@@ -24,6 +24,27 @@ interface Territory {
     uf: string;
     repCode: string;
     modo: string;
+}
+
+interface SystemUser {
+    id: number;
+    username: string;
+    role: string;
+    repCode: string | null;
+}
+
+interface InterestRequest {
+    id: number;
+    nome: string;
+    email: string | null;
+    telefone: string | null;
+    empresa: string | null;
+    municipio: string;
+    uf: string;
+    modo: string | null;
+    observacoes: string | null;
+    status: 'pending' | 'accepted' | 'rejected';
+    created_at: string;
 }
 
 const API = 'http://localhost:3001';
@@ -122,8 +143,10 @@ export default function Admin() {
 
     const [reps, setReps] = useState<Representative[]>([]);
     const [territories, setTerritories] = useState<Territory[]>([]);
+    const [users, setUsers] = useState<SystemUser[]>([]);
+    const [interests, setInterests] = useState<InterestRequest[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'reps' | 'territories'>('reps');
+    const [activeTab, setActiveTab] = useState<'reps' | 'territories' | 'users' | 'interests'>('reps');
 
     // Edit representative state
     const [editingCode, setEditingCode] = useState<string | null>(null);
@@ -131,6 +154,13 @@ export default function Admin() {
 
     // New representative form
     const [newRep, setNewRep] = useState({ code: '', name: '', fullName: '', isVago: false });
+
+    // Users tab state
+    const [newUser, setNewUser] = useState({ username: '', password: '', role: 'user', repCode: '' });
+    const [editingUserId, setEditingUserId] = useState<number | null>(null);
+    const [editUserForm, setEditUserForm] = useState({ username: '', password: '', role: 'user', repCode: '' });
+    const [showNewUserPassword, setShowNewUserPassword] = useState(false);
+    const [showEditUserPassword, setShowEditUserPassword] = useState(false);
 
     // Territory assignment form - IBGE cascading dropdowns
     const [selectedUF, setSelectedUF] = useState('');
@@ -159,12 +189,16 @@ export default function Admin() {
     const fetchAll = async () => {
         setLoading(true);
         try {
-            const [repsRes, terrRes] = await Promise.all([
+            const [repsRes, terrRes, usersRes, interestsRes] = await Promise.all([
                 fetch(`${API}/api/representatives`),
                 fetch(`${API}/api/territories`),
+                fetch(`${API}/api/users`, { headers: authHeaders }),
+                fetch(`${API}/api/interest`, { headers: authHeaders }),
             ]);
             if (repsRes.ok) setReps(await repsRes.json());
             if (terrRes.ok) setTerritories(await terrRes.json());
+            if (usersRes.ok) setUsers(await usersRes.json());
+            if (interestsRes.ok) setInterests(await interestsRes.json());
         } catch { toast.error('Erro ao carregar dados do servidor'); }
         finally { setLoading(false); }
     };
@@ -308,6 +342,57 @@ export default function Admin() {
         return true;
     });
 
+    // User handlers
+    const handleCreateUser = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newUser.username.trim() || !newUser.password.trim()) {
+            toast.error('Username e senha são obrigatórios'); return;
+        }
+        const body: Record<string, string> = { username: newUser.username, password: newUser.password, role: newUser.role };
+        if (newUser.repCode) body.repCode = newUser.repCode;
+        const res = await fetch(`${API}/api/users`, { method: 'POST', headers: authHeaders, body: JSON.stringify(body) });
+        if (res.ok) {
+            toast.success(`Usuário "${newUser.username}" criado!`);
+            setNewUser({ username: '', password: '', role: 'user', repCode: '' });
+            fetchAll();
+        } else { const err = await res.json(); toast.error(err.message || 'Erro ao criar usuário'); }
+    };
+
+    const startEditUser = (u: SystemUser) => {
+        setEditingUserId(u.id);
+        setEditUserForm({ username: u.username, password: '', role: u.role, repCode: u.repCode || '' });
+    };
+
+    const cancelEditUser = () => setEditingUserId(null);
+
+    const handleUpdateUser = async (id: number) => {
+        if (!editUserForm.username.trim()) { toast.error('Username é obrigatório'); return; }
+        const body: Record<string, string> = { username: editUserForm.username, role: editUserForm.role, repCode: editUserForm.repCode };
+        if (editUserForm.password.trim()) body.password = editUserForm.password;
+        const res = await fetch(`${API}/api/users/${id}`, { method: 'PUT', headers: authHeaders, body: JSON.stringify(body) });
+        if (res.ok) { toast.success('Usuário atualizado!'); setEditingUserId(null); fetchAll(); }
+        else { const err = await res.json(); toast.error(err.message || 'Erro ao atualizar'); }
+    };
+
+    const handleDeleteUser = async (id: number, username: string) => {
+        if (!confirm(`Remover o usuário "${username}"?`)) return;
+        const res = await fetch(`${API}/api/users/${id}`, { method: 'DELETE', headers: authHeaders });
+        if (res.ok) { toast.success('Usuário removido!'); fetchAll(); }
+        else { const err = await res.json(); toast.error(err.message || 'Erro ao remover'); }
+    };
+
+    // Interest handlers
+    const handleInterestStatus = async (id: number, status: 'accepted' | 'rejected') => {
+        const res = await fetch(`${API}/api/interest/${id}`, {
+            method: 'PUT', headers: authHeaders,
+            body: JSON.stringify({ status }),
+        });
+        if (res.ok) {
+            toast.success(status === 'accepted' ? 'Solicitação aceita!' : 'Solicitação recusada');
+            fetchAll();
+        } else toast.error('Erro ao atualizar status');
+    };
+
     if (loading) return (
         <div className="flex h-screen items-center justify-center bg-background">
             <div className="flex flex-col items-center gap-4">
@@ -346,6 +431,8 @@ export default function Admin() {
                     {[
                         { id: 'reps', label: `Representantes (${reps.length})` },
                         { id: 'territories', label: `Territórios (${territories.length})` },
+                        { id: 'users', label: `Usuários (${users.length})` },
+                        { id: 'interests', label: `Interesses (${interests.filter(i => i.status === 'pending').length})` },
                     ].map(tab => (
                         <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
                             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
@@ -722,6 +809,320 @@ export default function Admin() {
                     </div>
                 )}
             </div>
+
+            {/* === USERS TAB === */}
+            {activeTab === 'users' && (
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+                    {/* Create User Form */}
+                    <Card className="lg:col-span-2 border-border/50 h-fit">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                <UserPlus className="w-4 h-4 text-primary" /> Novo Usuário
+                            </CardTitle>
+                            <CardDescription>Crie logins para representantes ou administradores</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <form onSubmit={handleCreateUser} className="space-y-3">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-medium text-muted-foreground">Username *</label>
+                                    <Input
+                                        placeholder="Ex: joao.silva"
+                                        value={newUser.username}
+                                        onChange={e => setNewUser({ ...newUser, username: e.target.value })}
+                                        autoComplete="off"
+                                        required
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-medium text-muted-foreground">Senha *</label>
+                                    <div className="relative">
+                                        <Input
+                                            type={showNewUserPassword ? 'text' : 'password'}
+                                            placeholder="Senha de acesso"
+                                            value={newUser.password}
+                                            onChange={e => setNewUser({ ...newUser, password: e.target.value })}
+                                            autoComplete="new-password"
+                                            required
+                                        />
+                                        <button type="button" tabIndex={-1}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors text-xs"
+                                            onClick={() => setShowNewUserPassword(v => !v)}>
+                                            {showNewUserPassword ? 'Ocultar' : 'Ver'}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-medium text-muted-foreground">Papel *</label>
+                                    <div className="flex gap-2">
+                                        {(['user', 'admin'] as const).map(r => (
+                                            <button key={r} type="button" onClick={() => setNewUser({ ...newUser, role: r })}
+                                                className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold border transition-all flex items-center justify-center gap-1.5 ${newUser.role === r ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:border-primary/50'
+                                                    }`}>
+                                                {r === 'admin' ? <ShieldCheck className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
+                                                {r === 'admin' ? 'Admin' : 'Usuário'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground pt-0.5">
+                                        {newUser.role === 'admin' ? 'Acesso total ao painel e ao mapa' : 'Acesso somente ao mapa'}
+                                    </p>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-medium text-muted-foreground">Vincular a Representante <span className="font-normal">(opcional)</span></label>
+                                    <select
+                                        className="w-full h-9 px-3 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                                        value={newUser.repCode}
+                                        onChange={e => setNewUser({ ...newUser, repCode: e.target.value })}
+                                    >
+                                        <option value="">— Nenhum —</option>
+                                        {reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
+                                    </select>
+                                </div>
+                                <Button className="w-full gap-2" type="submit">
+                                    <Plus className="w-4 h-4" /> Criar Usuário
+                                </Button>
+                            </form>
+                        </CardContent>
+                    </Card>
+
+                    {/* Users Table */}
+                    <Card className="lg:col-span-3 border-border/50">
+                        <CardHeader>
+                            <CardTitle className="text-base flex items-center gap-2">
+                                <Users className="w-4 h-4 text-primary" /> Usuários do Sistema
+                            </CardTitle>
+                            <CardDescription>Gerencie os acessos ao sistema</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {users.length === 0 ? (
+                                <div className="py-12 text-center text-muted-foreground">
+                                    <Users className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                                    <p className="text-sm">Nenhum usuário encontrado</p>
+                                </div>
+                            ) : (
+                                <div className="overflow-hidden rounded-md border border-border/50">
+                                    <Table>
+                                        <TableHeader className="bg-muted/50">
+                                            <TableRow>
+                                                <TableHead className="w-8">ID</TableHead>
+                                                <TableHead>Username</TableHead>
+                                                <TableHead className="w-24">Papel</TableHead>
+                                                <TableHead>Representante</TableHead>
+                                                <TableHead className="w-20"></TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {users.map(u => (
+                                                <React.Fragment key={u.id}>
+                                                    <TableRow className={editingUserId === u.id ? 'bg-primary/5' : ''}>
+                                                        <TableCell className="text-xs text-muted-foreground font-mono">{u.id}</TableCell>
+                                                        <TableCell className="font-medium text-sm">{u.username}</TableCell>
+                                                        <TableCell>
+                                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 w-fit ${u.role === 'admin'
+                                                                ? 'bg-amber-500/20 text-amber-400'
+                                                                : 'bg-blue-500/20 text-blue-400'
+                                                                }`}>
+                                                                {u.role === 'admin' ? <ShieldCheck className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                                                                {u.role === 'admin' ? 'Admin' : 'Usuário'}
+                                                            </span>
+                                                        </TableCell>
+                                                        <TableCell className="text-xs text-muted-foreground">
+                                                            {u.repCode ? (() => { const rep = reps.find(r => r.code === u.repCode); return rep ? `${rep.code} — ${rep.name}` : u.repCode; })() : '—'}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="flex gap-1">
+                                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10"
+                                                                    onClick={() => editingUserId === u.id ? cancelEditUser() : startEditUser(u)}>
+                                                                    {editingUserId === u.id ? <X className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
+                                                                </Button>
+                                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                                                    onClick={() => handleDeleteUser(u.id, u.username)}>
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                </Button>
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+
+                                                    {editingUserId === u.id && (
+                                                        <TableRow className="bg-primary/5 border-t-0">
+                                                            <TableCell colSpan={5} className="py-3 px-4">
+                                                                <div className="space-y-2">
+                                                                    <p className="text-[10px] font-semibold text-primary uppercase tracking-wider">Editando usuário #{u.id}</p>
+                                                                    <div className="grid grid-cols-2 gap-2">
+                                                                        <div className="space-y-1">
+                                                                            <label className="text-[10px] text-muted-foreground">Username</label>
+                                                                            <Input value={editUserForm.username} onChange={e => setEditUserForm(f => ({ ...f, username: e.target.value }))} className="h-8 text-xs" />
+                                                                        </div>
+                                                                        <div className="space-y-1">
+                                                                            <label className="text-[10px] text-muted-foreground">Nova Senha <span className="font-normal">(deixe em branco para manter)</span></label>
+                                                                            <div className="relative">
+                                                                                <Input
+                                                                                    type={showEditUserPassword ? 'text' : 'password'}
+                                                                                    value={editUserForm.password}
+                                                                                    onChange={e => setEditUserForm(f => ({ ...f, password: e.target.value }))}
+                                                                                    className="h-8 text-xs pr-10"
+                                                                                    placeholder="Nova senha..."
+                                                                                />
+                                                                                <button type="button" tabIndex={-1}
+                                                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-[10px]"
+                                                                                    onClick={() => setShowEditUserPassword(v => !v)}>
+                                                                                    {showEditUserPassword ? 'Ocultar' : 'Ver'}
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="grid grid-cols-2 gap-2">
+                                                                        <div className="space-y-1">
+                                                                            <label className="text-[10px] text-muted-foreground">Papel</label>
+                                                                            <div className="flex gap-1.5">
+                                                                                {(['user', 'admin'] as const).map(r => (
+                                                                                    <button key={r} type="button" onClick={() => setEditUserForm(f => ({ ...f, role: r }))}
+                                                                                        className={`flex-1 py-1 px-2 rounded text-[10px] font-semibold border transition-all flex items-center justify-center gap-1 ${editUserForm.role === r ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground'
+                                                                                            }`}>
+                                                                                        {r === 'admin' ? <ShieldCheck className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                                                                                        {r === 'admin' ? 'Admin' : 'Usuário'}
+                                                                                    </button>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="space-y-1">
+                                                                            <label className="text-[10px] text-muted-foreground">Representante</label>
+                                                                            <select
+                                                                                className="w-full h-8 px-2 bg-background border border-input rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                                                                value={editUserForm.repCode}
+                                                                                onChange={e => setEditUserForm(f => ({ ...f, repCode: e.target.value }))}
+                                                                            >
+                                                                                <option value="">— Nenhum —</option>
+                                                                                {reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
+                                                                            </select>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex gap-2">
+                                                                        <Button size="sm" className="gap-1.5 h-7 text-xs" onClick={() => handleUpdateUser(u.id)}>
+                                                                            <Save className="w-3 h-3" /> Salvar
+                                                                        </Button>
+                                                                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={cancelEditUser}>Cancelar</Button>
+                                                                    </div>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )}
+                                                </React.Fragment>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+    )}
+            {/* === INTERESTS TAB === */}
+            {activeTab === 'interests' && (
+                <div className="space-y-4">
+                    <Card className="border-border/50">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                <HandHeart className="w-4 h-4 text-primary" /> Solicitações de Interesse
+                            </CardTitle>
+                            <CardDescription>
+                                Revise e aprove ou recuse as manifestações de interesse por área
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {interests.length === 0 ? (
+                                <div className="py-16 text-center text-muted-foreground">
+                                    <HandHeart className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                                    <p className="text-sm">Nenhuma solicitação recebida ainda</p>
+                                </div>
+                            ) : (() => {
+                                const groups = [
+                                    { key: 'pending', label: 'Pendentes', icon: Clock, color: 'text-amber-400', badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30', items: interests.filter(i => i.status === 'pending') },
+                                    { key: 'accepted', label: 'Aceitas', icon: CheckCircle2, color: 'text-emerald-400', badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', items: interests.filter(i => i.status === 'accepted') },
+                                    { key: 'rejected', label: 'Recusadas', icon: XCircle, color: 'text-destructive', badge: 'bg-destructive/10 text-destructive border-destructive/30', items: interests.filter(i => i.status === 'rejected') },
+                                ].filter(g => g.items.length > 0);
+                                return (
+                                    <div className="space-y-8">
+                                        {groups.map(({ key, label, icon: Icon, color, badge, items }) => (
+                                            <div key={key}>
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <Icon className={`w-4 h-4 ${color}`} />
+                                                    <h3 className="text-sm font-semibold text-foreground">{label}</h3>
+                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge}`}>{items.length}</span>
+                                                </div>
+                                                <div className="overflow-hidden rounded-md border border-border/50">
+                                                    <Table>
+                                                        <TableHeader className="bg-muted/50">
+                                                            <TableRow>
+                                                                <TableHead>Solicitante</TableHead>
+                                                                <TableHead>Área</TableHead>
+                                                                <TableHead className="w-24">Modo</TableHead>
+                                                                <TableHead className="w-32">Data</TableHead>
+                                                                {key === 'pending' && <TableHead className="w-36">Ação</TableHead>}
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {items.map(req => (
+                                                                <TableRow key={req.id}>
+                                                                    <TableCell>
+                                                                        <p className="text-sm font-medium">{req.nome}</p>
+                                                                        <div className="flex flex-wrap gap-x-3 mt-0.5">
+                                                                            {req.empresa && <span className="text-[10px] text-muted-foreground">{req.empresa}</span>}
+                                                                            {req.email && <span className="text-[10px] text-primary/80">{req.email}</span>}
+                                                                            {req.telefone && <span className="text-[10px] text-muted-foreground">{req.telefone}</span>}
+                                                                        </div>
+                                                                        {req.observacoes && (
+                                                                            <p className="text-[10px] text-muted-foreground/60 mt-1 italic max-w-[260px] truncate" title={req.observacoes}>
+                                                                                "{req.observacoes}"
+                                                                            </p>
+                                                                        )}
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <MapPin className="w-3 h-3 text-primary shrink-0" />
+                                                                            <div>
+                                                                                <p className="text-xs font-medium">{req.municipio}</p>
+                                                                                <p className="text-[10px] text-muted-foreground font-mono">{req.uf}</p>
+                                                                            </div>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        {req.modo && (
+                                                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${req.modo === 'planejamento' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                                                                                {req.modo === 'planejamento' ? 'Plan.' : 'Atend.'}
+                                                                            </span>
+                                                                        )}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-[10px] text-muted-foreground tabular-nums">
+                                                                        {new Date(req.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                                                    </TableCell>
+                                                                    {key === 'pending' && (
+                                                                        <TableCell>
+                                                                            <div className="flex gap-1.5">
+                                                                                <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white border-0" onClick={() => handleInterestStatus(req.id, 'accepted')}>
+                                                                                    <CheckCircle2 className="w-3 h-3" /> Aceitar
+                                                                                </Button>
+                                                                                <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-destructive hover:bg-destructive/10" onClick={() => handleInterestStatus(req.id, 'rejected')}>
+                                                                                    <XCircle className="w-3 h-3" /> Recusar
+                                                                                </Button>
+                                                                            </div>
+                                                                        </TableCell>
+                                                                    )}
+                                                                </TableRow>
+                                                            ))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
         </div>
     );
 }

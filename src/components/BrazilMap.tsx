@@ -27,6 +27,8 @@ interface BrazilMapProps {
   municipioCodeForBairros?: number | null;
   onDeactivateBairros?: () => void;
   selectedMunicipioName?: string | null;
+  onContextMenuState?: (nome: string, uf: string, x: number, y: number) => void;
+  onContextMenuMunicipio?: (nome: string, uf: string, x: number, y: number) => void;
 }
 
 const API_BASE = "http://localhost:3001";
@@ -84,6 +86,7 @@ export default function BrazilMap({
   selectedUF, modo, filtroRepresentante, mostrarVagos,
   onSelectUF, onSelectMunicipio, searchQuery,
   municipioCodeForBairros, onDeactivateBairros, selectedMunicipioName,
+  onContextMenuState, onContextMenuMunicipio,
 }: BrazilMapProps) {
   const { data: statesGeo } = useStatesGeoJSON();
   const { data: apiReps = [] } = useApiRepresentatives();
@@ -171,8 +174,12 @@ export default function BrazilMap({
       mouseover: (e) => { e.target.setStyle({ fillOpacity: 0.3, weight: 2.5 }); e.target.bindTooltip(uf.nome, { sticky: true }).openTooltip(); },
       mouseout: (e) => { e.target.setStyle(stateStyle(feature)); e.target.closeTooltip(); },
       click: () => onSelectUF(uf.sigla),
+      contextmenu: (e: any) => {
+        e.originalEvent.preventDefault();
+        onContextMenuState?.(uf.nome, uf.sigla, e.originalEvent.clientX, e.originalEvent.clientY);
+      },
     });
-  }, [stateStyle, onSelectUF]);
+  }, [stateStyle, onSelectUF, onContextMenuState]);
 
   const onEachMunicipio = useCallback((feature: any, layer: L.Layer) => {
     if (!municipioNames || !selectedUF) return;
@@ -188,8 +195,12 @@ export default function BrazilMap({
       mouseover: (e) => { e.target.setStyle({ fillOpacity: 0.8, weight: 3 }); e.target.bindTooltip(tooltipHtml, { sticky: true }).openTooltip(); e.target.bringToFront(); },
       mouseout: (e) => { e.target.setStyle(municipioStyle(feature)); e.target.closeTooltip(); },
       click: () => onSelectMunicipio(name, selectedUF),
+      contextmenu: (e: any) => {
+        e.originalEvent.preventDefault();
+        onContextMenuMunicipio?.(name, selectedUF, e.originalEvent.clientX, e.originalEvent.clientY);
+      },
     });
-  }, [municipioNames, selectedUF, modo, municipioStyle, onSelectMunicipio, apiTerritories, apiReps]);
+  }, [municipioNames, selectedUF, modo, municipioStyle, onSelectMunicipio, apiTerritories, apiReps, onContextMenuMunicipio]);
 
   // ── Neighborhood label markers — names are now baked into feature.properties.nome ───
   const markers: Array<{ center: L.LatLng; name: string }> = [];

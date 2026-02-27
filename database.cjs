@@ -11,7 +11,8 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE,
     password TEXT,
-    role TEXT
+    role TEXT,
+    repCode TEXT
   );
 
   CREATE TABLE IF NOT EXISTS representatives (
@@ -41,7 +42,25 @@ db.exec(`
     modo TEXT,
     FOREIGN KEY(repCode) REFERENCES representatives(code)
   );
+
+  CREATE TABLE IF NOT EXISTS interest_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL,
+    email TEXT,
+    telefone TEXT,
+    empresa TEXT,
+    municipio TEXT NOT NULL,
+    uf TEXT NOT NULL,
+    modo TEXT,
+    observacoes TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
 `);
+
+// Migrate: add repCode column if it doesn't exist yet
+try { db.exec('ALTER TABLE users ADD COLUMN repCode TEXT'); } catch (_) { /* column already exists */ }
+// Migrate: add status column to interest_requests
+try { db.exec("ALTER TABLE interest_requests ADD COLUMN status TEXT DEFAULT 'pending'"); } catch (_) { /* already exists */ }
 
 // Seed Admin User
 const adminPassword = bcrypt.hashSync('admin123', 10);

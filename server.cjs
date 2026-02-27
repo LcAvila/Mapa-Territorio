@@ -44,6 +44,101 @@ app.post('/api/login', (req, res) => {
     }
 });
 
+// --- INTEREST ROUTES ---
+
+// Submit interest in an area (public — no auth required)
+app.post('/api/interest', (req, res) => {
+    const { nome, email, telefone, empresa, municipio, uf, modo, observacoes } = req.body;
+    if (!nome || !municipio || !uf) {
+        return res.status(400).json({ message: 'Nome, município e UF são obrigatórios' });
+    }
+    db.prepare(`
+        INSERT INTO interest_requests (nome, email, telefone, empresa, municipio, uf, modo, observacoes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(nome, email || null, telefone || null, empresa || null, municipio, uf, modo || null, observacoes || null);
+    res.json({ success: true });
+});
+
+// List all interest requests (admin only)
+app.get('/api/interest', authenticate, requireAdmin, (req, res) => {
+    const rows = db.prepare('SELECT * FROM interest_requests ORDER BY created_at DESC').all();
+    res.json(rows);
+});
+
+// Update interest request status (admin only)
+app.put('/api/interest/:id', authenticate, requireAdmin, (req, res) => {
+    const id = Number(req.params.id);
+    const { status } = req.body;
+    if (!['pending', 'accepted', 'rejected'].includes(status)) {
+        return res.status(400).json({ message: 'Status inválido. Use: pending, accepted, rejected' });
+    }
+    const existing = db.prepare('SELECT id FROM interest_requests WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ message: 'Solicitação não encontrada' });
+    db.prepare('UPDATE interest_requests SET status = ? WHERE id = ?').run(status, id);
+    res.json({ success: true });
+});
+
+// --- USER MANAGEMENT ROUTES ---
+
+// List all users (no passwords)
+app.get('/api/users', authenticate, requireAdmin, (req, res) => {
+    const users = db.prepare('SELECT id, username, role, repCode FROM users ORDER BY id ASC').all();
+    res.json(users);
+});
+
+// Create user
+app.post('/api/users', authenticate, requireAdmin, (req, res) => {
+    const { username, password, role, repCode } = req.body;
+    if (!username || !password || !role) {
+        return res.status(400).json({ message: 'Username, senha e papel são obrigatórios' });
+    }
+    if (!['admin', 'user'].includes(role)) {
+        return res.status(400).json({ message: 'Papel inválido. Use "admin" ou "user"' });
+    }
+    const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+    if (existing) return res.status(409).json({ message: 'Username já existe' });
+
+    const hashed = bcrypt.hashSync(password, 10);
+    db.prepare('INSERT INTO users (username, password, role, repCode) VALUES (?, ?, ?, ?)').run(
+        username, hashed, role, repCode || null
+    );
+    res.json({ success: true });
+});
+
+// Update user
+app.put('/api/users/:id', authenticate, requireAdmin, (req, res) => {
+    const id = Number(req.params.id);
+    const { username, password, role, repCode } = req.body;
+    const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ message: 'Usuário não encontrado' });
+
+    const newUsername = username || existing.username;
+    const newRole = role || existing.role;
+    const newRepCode = repCode !== undefined ? (repCode || null) : existing.repCode;
+    const newPassword = password ? bcrypt.hashSync(password, 10) : existing.password;
+
+    // Check username uniqueness if changing
+    if (newUsername !== existing.username) {
+        const conflict = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(newUsername, id);
+        if (conflict) return res.status(409).json({ message: 'Username já existe' });
+    }
+
+    db.prepare('UPDATE users SET username = ?, password = ?, role = ?, repCode = ? WHERE id = ?').run(
+        newUsername, newPassword, newRole, newRepCode, id
+    );
+    res.json({ success: true });
+});
+
+// Delete user
+app.delete('/api/users/:id', authenticate, requireAdmin, (req, res) => {
+    const id = Number(req.params.id);
+    if (req.user.id === id) return res.status(400).json({ message: 'Você não pode deletar sua própria conta' });
+    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ message: 'Usuário não encontrado' });
+    db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    res.json({ success: true });
+});
+
 // --- REPRESENTATIVES ROUTES ---
 
 // Get all representatives
