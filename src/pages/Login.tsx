@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { LogIn, Loader2 } from 'lucide-react';
+import { Map, Eye, EyeOff, User, Lock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Login() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const { login } = useAuth();
     const navigate = useNavigate();
@@ -17,24 +15,21 @@ export default function Login() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-
         try {
             const response = await fetch('http://localhost:3001/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password }),
             });
-
             const data = await response.json();
-
             if (response.ok) {
                 login(data.token, data.role, data.tipo, data.repCode);
-                toast.success('Login realizado com sucesso!');
+                toast.success('Bem-vindo ao sistema!');
                 navigate(data.role === 'admin' ? '/admin' : '/');
             } else {
-                toast.error(data.message || 'Erro ao fazer login');
+                toast.error(data.message || 'Credenciais inválidas');
             }
-        } catch (err) {
+        } catch {
             toast.error('Erro de conexão com o servidor');
         } finally {
             setLoading(false);
@@ -42,62 +37,123 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen w-full flex items-center justify-center bg-background/50 backdrop-blur-sm">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-secondary/5 -z-10" />
+        <div className="login-root">
+            {/* Animated coordinate grid */}
+            <div className="login-grid" aria-hidden="true" />
 
-            <Card className="w-full max-w-md border-border/50 shadow-2xl">
-                <CardHeader className="space-y-1">
-                    <CardTitle className="text-2xl font-bold flex items-center gap-2">
-                        <LogIn className="w-6 h-6 text-primary" />
-                        Acesso ao Sistema
-                    </CardTitle>
-                    <CardDescription>
-                        Entre com suas credenciais para gerenciar os territórios
-                    </CardDescription>
-                </CardHeader>
-                <form onSubmit={handleSubmit}>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                Usuário
-                            </label>
-                            <Input
-                                type="text"
-                                placeholder="admin"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                required
-                                className="bg-background/50 border-border/50"
-                            />
+            {/* Floating decorative pins */}
+            <div className="login-decoration" aria-hidden="true">
+                {[...Array(6)].map((_, i) => (
+                    <div key={i} className={`login-pin login-pin-${i + 1}`}>
+                        <Map className="w-5 h-5" />
+                    </div>
+                ))}
+            </div>
+
+            {/* Radar pulse rings */}
+            <div className="login-radar" aria-hidden="true">
+                <div className="login-radar-ring login-radar-ring-1" />
+                <div className="login-radar-ring login-radar-ring-2" />
+                <div className="login-radar-ring login-radar-ring-3" />
+            </div>
+
+            {/* Card */}
+            <div className="login-card-wrapper">
+                <div className="login-card">
+
+                    {/* Header */}
+                    <div className="login-card-header">
+                        <div className="login-logo">
+                            <div className="login-logo-icon">
+                                <Map className="w-7 h-7" />
+                            </div>
+                            <div className="login-radar-dot" />
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                Senha
-                            </label>
-                            <Input
-                                type="password"
-                                placeholder="••••••••"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                                className="bg-background/50 border-border/50"
-                            />
+                        <h1 className="login-title">Mapa Território</h1>
+                        <p className="login-subtitle">Sistema de Gestão de Territórios Comerciais</p>
+                        <div className="login-title-line" />
+                    </div>
+
+                    {/* Form */}
+                    <form onSubmit={handleSubmit} className="login-form">
+                        {/* Username */}
+                        <div className="login-field">
+                            <label className="login-label" htmlFor="username">Usuário</label>
+                            <div className="login-input-wrap">
+                                <User className="login-input-icon" />
+                                <input
+                                    id="username"
+                                    type="text"
+                                    value={username}
+                                    onChange={e => setUsername(e.target.value)}
+                                    placeholder="Digite seu usuário"
+                                    required
+                                    autoComplete="username"
+                                    className="login-input"
+                                />
+                            </div>
                         </div>
-                    </CardContent>
-                    <CardFooter>
-                        <Button className="w-full" type="submit" disabled={loading}>
+
+                        {/* Password */}
+                        <div className="login-field">
+                            <label className="login-label" htmlFor="password">Senha</label>
+                            <div className="login-input-wrap">
+                                <Lock className="login-input-icon" />
+                                <input
+                                    id="password"
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={password}
+                                    onChange={e => setPassword(e.target.value)}
+                                    placeholder="••••••••"
+                                    required
+                                    autoComplete="current-password"
+                                    className="login-input login-input-password"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(v => !v)}
+                                    className="login-eye-btn"
+                                    tabIndex={-1}
+                                >
+                                    {showPassword
+                                        ? <EyeOff className="w-4 h-4" />
+                                        : <Eye className="w-4 h-4" />
+                                    }
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Submit */}
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="login-btn"
+                        >
                             {loading ? (
                                 <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    <Loader2 className="w-4 h-4 animate-spin" />
                                     Entrando...
                                 </>
                             ) : (
-                                'Entrar'
+                                <>
+                                    <Map className="w-4 h-4" />
+                                    Acessar Sistema
+                                </>
                             )}
-                        </Button>
-                    </CardFooter>
-                </form>
-            </Card>
+                        </button>
+                    </form>
+
+                    {/* Footer note */}
+                    <div className="login-footer">
+                        <span className="login-footer-dot" />
+                        <p>Acesso restrito — apenas usuários autorizados</p>
+                        <span className="login-footer-dot" />
+                    </div>
+                </div>
+
+                {/* Glow effect under card */}
+                <div className="login-card-glow" aria-hidden="true" />
+            </div>
         </div>
     );
 }
