@@ -228,6 +228,9 @@ export default function BrazilMap({
         className="w-full h-full"
         zoomControl={true} attributionControl={false}
         style={{ background: "hsl(220, 20%, 8%)" }}
+        minZoom={2}
+        maxBounds={[[-90, -180], [90, 180]]}
+        maxBoundsViscosity={1.0}
       >
         <AttributionControl prefix={false} />
         <MapController center={center} zoom={zoom} />

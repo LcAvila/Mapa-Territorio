@@ -48,6 +48,30 @@ const Index = () => {
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
+  // Fetch IBGE municipality code then activate bairros view
+  const handleViewBairrosFromMenu = useCallback(async (nome: string, uf: string) => {
+    // Ensure UF is selected so the municipio data loads
+    handleSelectUF(uf);
+    handleSelectMunicipio(nome, uf);
+    const ufInfo = getUFBySigla(uf);
+    if (!ufInfo) { toast.error('UF não encontrada'); return; }
+    toast.loading('Carregando bairros...', { id: 'bairros' });
+    try {
+      const res = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${ufInfo.codigo}/municipios`);
+      if (!res.ok) throw new Error();
+      const data: { id: number; nome: string }[] = await res.json();
+      const mun = data.find(m => m.nome.toLowerCase() === nome.toLowerCase());
+      if (mun) {
+        setMunicipioCodeForBairros(mun.id);
+        toast.success(`Bairros de ${nome} carregados!`, { id: 'bairros' });
+      } else {
+        toast.error('Município não encontrado no IBGE', { id: 'bairros' });
+      }
+    } catch {
+      toast.error('Erro ao carregar bairros', { id: 'bairros' });
+    }
+  }, [handleSelectUF, handleSelectMunicipio]);
+
   const ufInfo = selectedUF ? getUFBySigla(selectedUF) : null;
 
   return (
@@ -130,13 +154,12 @@ const Index = () => {
           onClose={closeContextMenu}
           onSelectState={() => handleSelectUF(contextMenu.uf)}
           onViewDetails={() => {
-            handleSelectMunicipio(contextMenu.nome, contextMenu.uf);
             if (selectedUF !== contextMenu.uf) handleSelectUF(contextMenu.uf);
+            handleSelectMunicipio(contextMenu.nome, contextMenu.uf);
+            toast.success(`Detalhes de ${contextMenu.nome}`, { description: `${contextMenu.uf} — painel aberto à direita` });
           }}
           onViewBairros={() => {
-            // Open detail panel first so the "Ver bairros" button becomes accessible
-            handleSelectMunicipio(contextMenu.nome, contextMenu.uf);
-            if (selectedUF !== contextMenu.uf) handleSelectUF(contextMenu.uf);
+            handleViewBairrosFromMenu(contextMenu.nome, contextMenu.uf);
           }}
           onRegisterInterest={() => setInterestTarget({ municipio: contextMenu.nome, uf: contextMenu.uf })}
           onCopyName={() => {

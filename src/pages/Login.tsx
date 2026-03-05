@@ -28,7 +28,7 @@ export default function Login() {
             const data = await response.json();
 
             if (response.ok) {
-                login(data.token, data.role);
+                login(data.token, data.role, data.tipo, data.repCode);
                 toast.success('Login realizado com sucesso!');
                 navigate(data.role === 'admin' ? '/admin' : '/');
             } else {

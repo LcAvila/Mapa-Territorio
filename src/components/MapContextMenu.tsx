@@ -93,6 +93,7 @@ export default function MapContextMenu({
                     <>
                         <Item icon={Eye} label="Ver detalhes" onClick={onViewDetails} />
                         <Item icon={Layers} label="Ver bairros/distritos" onClick={onViewBairros} />
+                        <Item icon={Copy} label="Copiar nome" onClick={onCopyName} />
                         <div className="border-t border-border/50 my-1" />
                         <Item icon={HandHeart} label="Manifestar interesse aqui" onClick={onRegisterInterest} highlight />
                     </>

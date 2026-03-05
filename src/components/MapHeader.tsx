@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2 } from "lucide-react";
+import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User } from "lucide-react";
 import { exportTerritoriesToExcel } from "@/utils/export-utils";
 import { UF_DATA } from "@/data/uf-codes";
 import { Button } from "@/components/ui/button";
@@ -134,6 +134,10 @@ export default function MapHeader({
                 <span className="hidden sm:inline">Admin</span>
               </Button>
             )}
+            <Button variant="ghost" size="sm" onClick={() => navigate('/perfil')} className="gap-2 hover:bg-background h-8 px-2" title="Meu Perfil">
+              <User className="w-4 h-4 text-indigo-500" />
+              <span className="hidden sm:inline text-xs">Perfil</span>
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => { logout(); toast.info('Sessão encerrada'); }}
               className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive">
               <LogOut className="w-4 h-4" />

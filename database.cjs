@@ -5,14 +5,30 @@ const bcrypt = require('bcryptjs');
 const dbPath = path.resolve(__dirname, 'database.sqlite');
 const db = new Database(dbPath);
 
+// Enable WAL for better performance
+db.pragma('journal_mode = WAL');
+
 // Create tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE,
     password TEXT,
-    role TEXT,
-    repCode TEXT
+    role TEXT DEFAULT 'user',
+    repCode TEXT,
+    tipo TEXT DEFAULT 'representante',
+    full_name TEXT,
+    cpf_cnpj TEXT,
+    telefone TEXT,
+    cep TEXT,
+    logradouro TEXT,
+    numero TEXT,
+    complemento TEXT,
+    bairro_end TEXT,
+    cidade TEXT,
+    estado_end TEXT,
+    photo TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
   );
 
   CREATE TABLE IF NOT EXISTS representatives (
@@ -57,14 +73,27 @@ db.exec(`
   );
 `);
 
-// Migrate: add repCode column if it doesn't exist yet
-try { db.exec('ALTER TABLE users ADD COLUMN repCode TEXT'); } catch (_) { /* column already exists */ }
-// Migrate: add status column to interest_requests
-try { db.exec("ALTER TABLE interest_requests ADD COLUMN status TEXT DEFAULT 'pending'"); } catch (_) { /* already exists */ }
+// Safe migrations — add columns if they don't exist yet
+const safeAlter = (sql) => { try { db.exec(sql); } catch (_) { } };
+safeAlter('ALTER TABLE users ADD COLUMN repCode TEXT');
+safeAlter("ALTER TABLE interest_requests ADD COLUMN status TEXT DEFAULT 'pending'");
+safeAlter("ALTER TABLE users ADD COLUMN tipo TEXT DEFAULT 'representante'");
+safeAlter('ALTER TABLE users ADD COLUMN full_name TEXT');
+safeAlter('ALTER TABLE users ADD COLUMN cpf_cnpj TEXT');
+safeAlter('ALTER TABLE users ADD COLUMN telefone TEXT');
+safeAlter('ALTER TABLE users ADD COLUMN cep TEXT');
+safeAlter('ALTER TABLE users ADD COLUMN logradouro TEXT');
+safeAlter('ALTER TABLE users ADD COLUMN numero TEXT');
+safeAlter('ALTER TABLE users ADD COLUMN complemento TEXT');
+safeAlter('ALTER TABLE users ADD COLUMN bairro_end TEXT');
+safeAlter('ALTER TABLE users ADD COLUMN cidade TEXT');
+safeAlter('ALTER TABLE users ADD COLUMN estado_end TEXT');
+safeAlter('ALTER TABLE users ADD COLUMN photo TEXT');
+safeAlter("ALTER TABLE users ADD COLUMN created_at TEXT DEFAULT (datetime('now'))");
 
 // Seed Admin User
 const adminPassword = bcrypt.hashSync('admin123', 10);
-const insertUser = db.prepare('INSERT OR IGNORE INTO users (username, password, role) VALUES (?, ?, ?)');
-insertUser.run('admin', adminPassword, 'admin');
+const insertUser = db.prepare('INSERT OR IGNORE INTO users (username, password, role, tipo, full_name) VALUES (?, ?, ?, ?, ?)');
+insertUser.run('admin', adminPassword, 'admin', 'admin', 'Administrador');
 
 module.exports = db;
