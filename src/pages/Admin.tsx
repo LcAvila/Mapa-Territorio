@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { REP_COLOR_PALETTE, getNextColorIndex } from '@/data/representatives';
 import { UF_DATA } from '@/data/uf-codes';
 
@@ -486,6 +487,7 @@ export default function Admin() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <button onClick={fetchAll} className="p-2 rounded-lg hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-all" title="Recarregar dados">
               <RefreshCw className="w-4 h-4" />
             </button>

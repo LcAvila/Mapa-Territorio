@@ -6,6 +6,7 @@ import { exportTerritoriesToExcel } from "@/utils/export-utils";
 import { UF_DATA } from "@/data/uf-codes";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface MapHeaderProps {
   selectedUF: string | null;
@@ -162,6 +163,8 @@ export default function MapHeader({
 
       {/* Auth / Admin / Notifications Buttons */}
       <div className="flex items-center gap-2 ml-auto lg:ml-0">
+        <ThemeToggle />
+
         {!isAuthenticated ? (
           <Button variant="outline" size="sm" onClick={() => navigate('/login')} className="gap-2 border-primary/20 hover:bg-primary/10">
             <LogIn className="w-4 h-4" /> Entrar
