@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { Camera, Save, ArrowLeft, User, MapPin, Phone, FileText, Lock, ShieldCheck, Loader2, Building2 } from 'lucide-react';
+import { Camera, Save, ArrowLeft, User, MapPin, Phone, FileText, Lock, ShieldCheck, Loader2, Building2, ChevronDown } from 'lucide-react';
 
 const API = 'http://localhost:3001';
 
@@ -36,9 +37,9 @@ const TIPO_LABELS: Record<string, string> = {
 };
 
 const TIPO_COLORS: Record<string, string> = {
-    admin: 'bg-amber-100 text-amber-700 border-amber-300',
-    promotor: 'bg-violet-100 text-violet-700 border-violet-300',
-    representante: 'bg-blue-100 text-blue-700 border-blue-300',
+    admin: 'bg-amber-500/20 text-amber-500 border-amber-500/30',
+    promotor: 'bg-violet-500/20 text-violet-500 border-violet-500/30',
+    representante: 'bg-blue-500/20 text-blue-500 border-blue-500/30',
 };
 
 export default function Profile() {
@@ -50,6 +51,9 @@ export default function Profile() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [loadingCep, setLoadingCep] = useState(false);
+    const [showAddress, setShowAddress] = useState(false);
+    const [showContact, setShowContact] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const [form, setForm] = useState({
         full_name: '', cpf_cnpj: '', telefone: '',
@@ -160,32 +164,33 @@ export default function Profile() {
     };
 
     if (loading) return (
-        <div className="flex h-screen items-center justify-center bg-slate-50">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        <div className="flex h-screen items-center justify-center bg-background">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50">
+        <div className="min-h-screen bg-background">
             {/* Header */}
-            <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
+            <div className="bg-card/30 backdrop-blur border-b border-border/40 px-6 py-4 flex items-center justify-between sticky top-0 z-10 transition-colors">
                 <div className="flex items-center gap-3">
-                    <button onClick={() => navigate('/')} className="text-slate-500 hover:text-slate-700 transition-colors">
+                    <button onClick={() => navigate('/')} className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-lg hover:bg-secondary/60">
                         <ArrowLeft className="w-5 h-5" />
                     </button>
                     <div>
-                        <h1 className="text-base font-bold text-slate-800">Meu Perfil</h1>
-                        <p className="text-xs text-slate-500">Gerencie suas informações pessoais</p>
+                        <h1 className="text-base font-bold text-foreground">Meu Perfil</h1>
+                        <p className="text-xs text-muted-foreground">Gerencie suas informações pessoais</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                    <ThemeToggle />
                     {profile && (
                         <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${TIPO_COLORS[profile.tipo] || TIPO_COLORS.representante}`}>
                             {TIPO_LABELS[profile.tipo] || profile.tipo}
                         </span>
                     )}
                     {profile?.role === 'admin' && (
-                        <button onClick={() => navigate('/admin')} className="text-xs px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 font-semibold hover:bg-amber-200 transition-colors flex items-center gap-1.5">
+                        <button onClick={() => navigate('/admin')} className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 hover:bg-amber-500/20 transition-colors flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500/50">
                             <ShieldCheck className="w-3.5 h-3.5" /> Painel Admin
                         </button>
                     )}
@@ -193,55 +198,55 @@ export default function Profile() {
             </div>
 
             <div className="max-w-3xl mx-auto p-6 space-y-6">
-                <form onSubmit={handleSave} className="space-y-5">
+                <form onSubmit={handleSave} className="space-y-6">
 
                     {/* Photo + Identity */}
-                    <Card className="border-slate-200 shadow-sm bg-white">
+                    <Card className="border-border/40 shadow-sm bg-card/50 backdrop-blur">
                         <CardContent className="pt-6">
                             <div className="flex items-start gap-6">
                                 {/* Photo */}
                                 <div className="shrink-0">
                                     <div
-                                        className="w-24 h-24 rounded-2xl bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center cursor-pointer relative overflow-hidden group shadow-lg"
+                                        className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center cursor-pointer relative overflow-hidden group ring-1 ring-primary/20"
                                         onClick={() => fileInputRef.current?.click()}
                                     >
                                         {form.photo ? (
                                             <img src={form.photo} alt="Foto" className="w-full h-full object-cover" />
                                         ) : (
-                                            <User className="w-10 h-10 text-white" />
+                                            <User className="w-10 h-10 text-primary-foreground" />
                                         )}
-                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                             <Camera className="w-6 h-6 text-white" />
                                         </div>
                                     </div>
                                     <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-                                    <p className="text-[10px] text-slate-400 text-center mt-2">Máx. 2MB</p>
+                                    <p className="text-[10px] text-muted-foreground text-center mt-2">Máx. 2MB</p>
                                 </div>
 
                                 {/* Identity */}
-                                <div className="flex-1 space-y-3">
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Código / Login</label>
-                                        <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-lg border border-slate-200">
-                                            <Lock className="w-3.5 h-3.5 text-slate-400" />
-                                            <span className="text-sm font-mono font-bold text-slate-700">{profile?.username}</span>
-                                            <span className="text-[10px] text-slate-400 ml-auto">(não editável)</span>
+                                <div className="flex-1 space-y-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Código / Login</label>
+                                        <div className="flex items-center gap-2 px-3 py-2.5 bg-secondary/50 rounded-lg border border-border/40">
+                                            <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+                                            <span className="text-sm font-mono font-bold text-foreground">{profile?.username}</span>
+                                            <span className="text-[10px] text-muted-foreground ml-auto">(não editável)</span>
                                         </div>
                                     </div>
                                     {profile?.repCode && (
-                                        <div className="space-y-1">
-                                            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Código do Representante</label>
-                                            <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-lg border border-slate-200">
-                                                <span className="text-sm font-mono font-bold text-indigo-600">{profile.repCode}</span>
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Código do Representante</label>
+                                            <div className="flex items-center gap-2 px-3 py-2.5 bg-primary/5 rounded-lg border border-primary/20">
+                                                <span className="text-sm font-mono font-bold text-primary">{profile.repCode}</span>
                                             </div>
                                         </div>
                                     )}
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Nome Completo / Empresa *</label>
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Nome Completo / Empresa *</label>
                                         <div className="relative">
-                                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                             <Input
-                                                className="pl-9 border-slate-300"
+                                                className="pl-9 bg-secondary border-border/40 focus-visible:ring-primary/50 text-foreground"
                                                 placeholder="Seu nome ou razão social"
                                                 value={form.full_name}
                                                 onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
@@ -254,123 +259,154 @@ export default function Profile() {
                     </Card>
 
                     {/* Contact + documents */}
-                    <Card className="border-slate-200 shadow-sm bg-white">
-                        <CardHeader className="pb-3">
-                            <CardTitle className="flex items-center gap-2 text-sm text-slate-700">
-                                <FileText className="w-4 h-4 text-indigo-500" /> Identificação e Contato
+                    <Card className="border-border/40 shadow-sm bg-card/50 backdrop-blur overflow-hidden">
+                        <div
+                            className="pb-3 pt-6 px-6 cursor-pointer hover:bg-secondary/30 transition-colors flex items-center justify-between group"
+                            onClick={() => setShowContact(!showContact)}
+                        >
+                            <CardTitle className="flex items-center gap-2 text-sm text-foreground">
+                                <FileText className="w-4 h-4 text-primary" /> Identificação e Contato
                             </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-slate-500">CPF / CNPJ</label>
-                                    <Input
-                                        placeholder="000.000.000-00"
-                                        value={form.cpf_cnpj}
-                                        onChange={e => setForm(f => ({ ...f, cpf_cnpj: e.target.value }))}
-                                        className="border-slate-300"
-                                    />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-slate-500">Telefone</label>
-                                    <div className="relative">
-                                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                                        <Input
-                                            className="pl-9 border-slate-300"
-                                            placeholder="(00) 00000-0000"
-                                            value={form.telefone}
-                                            onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))}
-                                        />
+                            <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${showContact ? 'rotate-180' : ''}`} />
+                        </div>
+
+                        <div className={`grid transition-all duration-200 ease-in-out ${showContact ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                            <div className="overflow-hidden">
+                                <CardContent className="space-y-4 pt-3 border-t border-border/20">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">CPF / CNPJ</label>
+                                            <Input
+                                                placeholder="000.000.000-00"
+                                                value={form.cpf_cnpj}
+                                                onChange={e => setForm(f => ({ ...f, cpf_cnpj: e.target.value }))}
+                                                className="bg-secondary border-border/40 text-foreground focus-visible:ring-primary/50"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">Telefone</label>
+                                            <div className="relative">
+                                                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                                <Input
+                                                    className="pl-9 bg-secondary border-border/40 text-foreground focus-visible:ring-primary/50"
+                                                    placeholder="(00) 00000-0000"
+                                                    value={form.telefone}
+                                                    onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))}
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
+                                </CardContent>
                             </div>
-                        </CardContent>
+                        </div>
                     </Card>
 
                     {/* Address */}
-                    <Card className="border-slate-200 shadow-sm bg-white">
-                        <CardHeader className="pb-3">
-                            <CardTitle className="flex items-center gap-2 text-sm text-slate-700">
-                                <MapPin className="w-4 h-4 text-indigo-500" /> Endereço
-                            </CardTitle>
-                            <CardDescription className="text-xs">Digite o CEP para preenchimento automático</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-slate-500">CEP</label>
-                                    <div className="relative">
-                                        <Input
-                                            className="border-slate-300"
-                                            placeholder="00000-000"
-                                            value={form.cep}
-                                            onChange={e => setForm(f => ({ ...f, cep: e.target.value }))}
-                                            onBlur={handleCepBlur}
-                                        />
-                                        {loadingCep && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-indigo-500" />}
+                    <Card className="border-border/40 shadow-sm bg-card/50 backdrop-blur overflow-hidden">
+                        <div
+                            className="pb-3 pt-6 px-6 cursor-pointer hover:bg-secondary/30 transition-colors flex items-center justify-between group"
+                            onClick={() => setShowAddress(!showAddress)}
+                        >
+                            <div>
+                                <CardTitle className="flex items-center gap-2 text-sm text-foreground">
+                                    <MapPin className="w-4 h-4 text-primary" /> Endereço
+                                </CardTitle>
+                                <CardDescription className="text-xs text-muted-foreground mt-1.5">Digite o CEP para preenchimento automático</CardDescription>
+                            </div>
+                            <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${showAddress ? 'rotate-180' : ''}`} />
+                        </div>
+
+                        <div className={`grid transition-all duration-200 ease-in-out ${showAddress ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                            <div className="overflow-hidden">
+                                <CardContent className="space-y-4 pt-3 border-t border-border/20">
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">CEP</label>
+                                            <div className="relative">
+                                                <Input
+                                                    className="bg-secondary border-border/40 text-foreground focus-visible:ring-primary/50 uppercase"
+                                                    placeholder="00000-000"
+                                                    value={form.cep}
+                                                    onChange={e => setForm(f => ({ ...f, cep: e.target.value }))}
+                                                    onBlur={handleCepBlur}
+                                                />
+                                                {loadingCep && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-primary" />}
+                                            </div>
+                                        </div>
+                                        <div className="col-span-2 space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">Logradouro</label>
+                                            <Input className="bg-secondary border-border/40 text-foreground focus-visible:ring-primary/50" placeholder="Rua, Avenida…" value={form.logradouro} onChange={e => setForm(f => ({ ...f, logradouro: e.target.value }))} />
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="col-span-2 space-y-1.5">
-                                    <label className="text-xs font-medium text-slate-500">Logradouro</label>
-                                    <Input className="border-slate-300" placeholder="Rua, Avenida…" value={form.logradouro} onChange={e => setForm(f => ({ ...f, logradouro: e.target.value }))} />
-                                </div>
+                                    <div className="grid grid-cols-4 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">Número</label>
+                                            <Input className="bg-secondary border-border/40 text-foreground focus-visible:ring-primary/50" placeholder="Nº" value={form.numero} onChange={e => setForm(f => ({ ...f, numero: e.target.value }))} />
+                                        </div>
+                                        <div className="col-span-3 space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">Complemento</label>
+                                            <Input className="bg-secondary border-border/40 text-foreground focus-visible:ring-primary/50" placeholder="Apto, Bloco…" value={form.complemento} onChange={e => setForm(f => ({ ...f, complemento: e.target.value }))} />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">Bairro</label>
+                                            <Input className="bg-secondary border-border/40 text-foreground focus-visible:ring-primary/50" value={form.bairro_end} onChange={e => setForm(f => ({ ...f, bairro_end: e.target.value }))} />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">Cidade</label>
+                                            <Input className="bg-secondary border-border/40 text-foreground focus-visible:ring-primary/50" value={form.cidade} onChange={e => setForm(f => ({ ...f, cidade: e.target.value }))} />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">Estado</label>
+                                            <Input className="bg-secondary border-border/40 text-foreground focus-visible:ring-primary/50" placeholder="UF" maxLength={2} value={form.estado_end} onChange={e => setForm(f => ({ ...f, estado_end: e.target.value.toUpperCase() }))} />
+                                        </div>
+                                    </div>
+                                </CardContent>
                             </div>
-                            <div className="grid grid-cols-4 gap-3">
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-slate-500">Número</label>
-                                    <Input className="border-slate-300" placeholder="Nº" value={form.numero} onChange={e => setForm(f => ({ ...f, numero: e.target.value }))} />
-                                </div>
-                                <div className="col-span-3 space-y-1.5">
-                                    <label className="text-xs font-medium text-slate-500">Complemento</label>
-                                    <Input className="border-slate-300" placeholder="Apto, Bloco…" value={form.complemento} onChange={e => setForm(f => ({ ...f, complemento: e.target.value }))} />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-slate-500">Bairro</label>
-                                    <Input className="border-slate-300" value={form.bairro_end} onChange={e => setForm(f => ({ ...f, bairro_end: e.target.value }))} />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-slate-500">Cidade</label>
-                                    <Input className="border-slate-300" value={form.cidade} onChange={e => setForm(f => ({ ...f, cidade: e.target.value }))} />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-slate-500">Estado</label>
-                                    <Input className="border-slate-300" placeholder="UF" maxLength={2} value={form.estado_end} onChange={e => setForm(f => ({ ...f, estado_end: e.target.value.toUpperCase() }))} />
-                                </div>
-                            </div>
-                        </CardContent>
+                        </div>
                     </Card>
 
                     {/* Password */}
-                    <Card className="border-slate-200 shadow-sm bg-white">
-                        <CardHeader className="pb-3">
-                            <CardTitle className="flex items-center gap-2 text-sm text-slate-700">
-                                <Lock className="w-4 h-4 text-indigo-500" /> Alterar Senha
-                            </CardTitle>
-                            <CardDescription className="text-xs">Deixe em branco para manter a senha atual</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-slate-500">Nova Senha</label>
-                                    <Input type="password" placeholder="••••••••" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} className="border-slate-300" />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-slate-500">Confirmar Senha</label>
-                                    <Input type="password" placeholder="••••••••" value={form.confirm_password} onChange={e => setForm(f => ({ ...f, confirm_password: e.target.value }))} className="border-slate-300" />
-                                </div>
+                    <Card className="border-border/40 shadow-sm bg-card/50 backdrop-blur overflow-hidden">
+                        <div
+                            className="pb-3 pt-6 px-6 cursor-pointer hover:bg-secondary/30 transition-colors flex items-center justify-between group"
+                            onClick={() => setShowPassword(!showPassword)}
+                        >
+                            <div>
+                                <CardTitle className="flex items-center gap-2 text-sm text-foreground">
+                                    <Lock className="w-4 h-4 text-primary" /> Alterar Senha
+                                </CardTitle>
+                                <CardDescription className="text-xs text-muted-foreground mt-1.5">Deixe em branco para manter a senha atual</CardDescription>
                             </div>
-                        </CardContent>
+                            <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${showPassword ? 'rotate-180' : ''}`} />
+                        </div>
+
+                        <div className={`grid transition-all duration-200 ease-in-out ${showPassword ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                            <div className="overflow-hidden">
+                                <CardContent className="space-y-4 pt-3 border-t border-border/20">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">Nova Senha</label>
+                                            <Input type="password" placeholder="••••••••" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} className="bg-secondary border-border/40 text-foreground focus-visible:ring-primary/50" />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">Confirmar Senha</label>
+                                            <Input type="password" placeholder="••••••••" value={form.confirm_password} onChange={e => setForm(f => ({ ...f, confirm_password: e.target.value }))} className="bg-secondary border-border/40 text-foreground focus-visible:ring-primary/50" />
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </div>
+                        </div>
                     </Card>
 
-                    <div className="flex gap-3 pb-8">
-                        <Button type="submit" disabled={saving} className="flex-1 gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-200">
-                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    <div className="flex gap-4 pb-12 pt-4">
+                        <Button type="submit" disabled={saving} className="flex-1 gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold h-11">
+                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-5 h-5" />}
                             Salvar Alterações
                         </Button>
-                        <Button type="button" variant="outline" onClick={() => navigate('/')} className="border-slate-300 text-slate-600">
-                            <ArrowLeft className="w-4 h-4" />
+                        <Button type="button" variant="outline" onClick={() => navigate('/')} className="h-11 px-6 border-border/40 text-muted-foreground hover:text-foreground">
+                            <ArrowLeft className="w-5 h-5" /> Voltar
                         </Button>
                     </div>
                 </form>
