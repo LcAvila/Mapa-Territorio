@@ -1,6 +1,7 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User } from "lucide-react";
+import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { exportTerritoriesToExcel } from "@/utils/export-utils";
 import { UF_DATA } from "@/data/uf-codes";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,46 @@ export default function MapHeader({
   searchQuery, onSearchChange, isAuthenticated, role, logout
 }: MapHeaderProps) {
   const navigate = useNavigate();
+  const { repCode } = useAuth();
   const [exporting, setExporting] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // ── Notifications Logic ──
+  const [notifications, setNotifications] = useState<any[]>(() => {
+    try { return JSON.parse(localStorage.getItem('admin_notifications') || '[]'); } catch { return []; }
+  });
+
+  // Filter messages for this rep: targetAll is true OR targetReps includes repCode
+  const myNotifications = React.useMemo(() => {
+    if (!repCode) return [];
+    return notifications
+      .filter(n => n.targetAll || (n.targetReps && n.targetReps.includes(repCode)))
+      .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+  }, [notifications, repCode]);
+
+  const unreadCount = myNotifications.filter(n => !n.readBy.includes(repCode)).length;
+
+  const markAsRead = (id: string) => {
+    if (!repCode) return;
+    const updated = notifications.map(n => {
+      if (n.id === id && !n.readBy.includes(repCode)) {
+        return { ...n, readBy: [...n.readBy, repCode] };
+      }
+      return n;
+    });
+    setNotifications(updated);
+    localStorage.setItem('admin_notifications', JSON.stringify(updated));
+  };
+
+  // Refresh notifications periodically or when storage changes
+  React.useEffect(() => {
+    const handleStorage = () => {
+      try { setNotifications(JSON.parse(localStorage.getItem('admin_notifications') || '[]')); } catch { }
+    };
+    window.addEventListener('storage', handleStorage);
+    const interval = setInterval(handleStorage, 5000); // Poll every 5s just in case
+    return () => { window.removeEventListener('storage', handleStorage); clearInterval(interval); };
+  }, []);
 
   const handleExport = async () => {
     setExporting(true);
@@ -120,7 +160,7 @@ export default function MapHeader({
         </button>
       )}
 
-      {/* Auth / Admin Buttons */}
+      {/* Auth / Admin / Notifications Buttons */}
       <div className="flex items-center gap-2 ml-auto lg:ml-0">
         {!isAuthenticated ? (
           <Button variant="outline" size="sm" onClick={() => navigate('/login')} className="gap-2 border-primary/20 hover:bg-primary/10">
@@ -128,16 +168,66 @@ export default function MapHeader({
           </Button>
         ) : (
           <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-1 border border-border/50">
+
+            {/* Notification Bell (Only for reps) */}
+            {role === 'user' && repCode && (
+              <div className="relative">
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-background relative" title="Notificações" onClick={() => setShowNotifications(!showNotifications)}>
+                  <Bell className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-background" />
+                  )}
+                </Button>
+
+                {/* Notifications Dropdown */}
+                {showNotifications && (
+                  <div className="absolute right-0 top-10 w-80 bg-popover border border-border rounded-xl shadow-lg shadow-black/5 z-50 overflow-hidden flex flex-col">
+                    <div className="px-4 py-3 border-b border-border/50 bg-muted/30 flex items-center justify-between pointer-events-none">
+                      <span className="text-sm font-semibold">Notificações</span>
+                      {unreadCount > 0 && <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">{unreadCount} novas</span>}
+                    </div>
+                    <div className="max-h-80 overflow-y-auto p-1 pointer-events-auto">
+                      {myNotifications.length === 0 ? (
+                        <div className="p-6 text-center text-muted-foreground">
+                          <Bell className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                          <p className="text-sm">Nenhuma notificação</p>
+                        </div>
+                      ) : (
+                        myNotifications.map(n => {
+                          const isUnread = !n.readBy.includes(repCode);
+                          return (
+                            <button key={n.id} onClick={() => markAsRead(n.id)} className={`w-full text-left p-3 rounded-lg transition-colors hover:bg-muted/50 ${isUnread ? 'bg-primary/5' : ''}`}>
+                              <div className="flex justify-between items-start gap-2 mb-1">
+                                <span className={`text-sm ${isUnread ? 'font-semibold text-foreground' : 'font-medium text-muted-foreground'}`}>{n.title}</span>
+                                {isUnread && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-1.5" />}
+                              </div>
+                              <p className={`text-xs ${isUnread ? 'text-muted-foreground' : 'text-muted-foreground/70'} line-clamp-2`}>{n.message}</p>
+                              <span className="text-[10px] text-muted-foreground/60 mt-2 block">
+                                {new Date(n.sentAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Admin link */}
             {role === 'admin' && (
               <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="gap-2 hover:bg-background h-8 px-2">
                 <Settings className="w-4 h-4 text-primary" />
                 <span className="hidden sm:inline">Admin</span>
               </Button>
             )}
+            {/* Profile link */}
             <Button variant="ghost" size="sm" onClick={() => navigate('/perfil')} className="gap-2 hover:bg-background h-8 px-2" title="Meu Perfil">
               <User className="w-4 h-4 text-indigo-500" />
               <span className="hidden sm:inline text-xs">Perfil</span>
             </Button>
+            {/* Logout link */}
             <Button variant="ghost" size="sm" onClick={() => { logout(); toast.info('Sessão encerrada'); }}
               className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive">
               <LogOut className="w-4 h-4" />

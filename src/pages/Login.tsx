@@ -65,11 +65,15 @@ export default function Login() {
                     <div className="login-card-header">
                         <div className="login-logo">
                             <div className="login-logo-icon">
-                                <Map className="w-7 h-7" />
+                                {localStorage.getItem('brand_logo') ? (
+                                    <img src={localStorage.getItem('brand_logo')!} alt="Logo" className="w-10 h-10 object-contain" />
+                                ) : (
+                                    <Map className="w-7 h-7" />
+                                )}
                             </div>
-                            <div className="login-radar-dot" />
+                            {!localStorage.getItem('brand_logo') && <div className="login-radar-dot" />}
                         </div>
-                        <h1 className="login-title">Mapa Território</h1>
+                        <h1 className="login-title">{localStorage.getItem('brand_name') || 'Mapa Território'}</h1>
                         <p className="login-subtitle">Sistema de Gestão de Territórios Comerciais</p>
                         <div className="login-title-line" />
                     </div>
