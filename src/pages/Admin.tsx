@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -10,13 +10,14 @@ import {
   Search, Pencil, Save, Users, ShieldCheck, User, HandHeart, CheckCircle2, XCircle,
   Clock, LayoutDashboard, Bell, ScrollText, UsersRound, Briefcase, Send, Eye, EyeOff,
   Building2, Filter, RefreshCw, ChevronRight, MessageSquare, Globe, Activity,
-  TrendingUp, AlertCircle, BadgeCheck, Palette, Upload, ImageOff
+  TrendingUp, AlertCircle, BadgeCheck, Palette, Upload, ImageOff, Download, Truck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { REP_COLOR_PALETTE, getNextColorIndex } from '@/data/representatives';
 import { UF_DATA } from '@/data/uf-codes';
+import { RotasPanel } from '../components/admin/RotasPanel';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 interface Representative { code: string; name: string; fullName: string; isVago: boolean; colorIndex: number; }
@@ -114,9 +115,13 @@ export default function Admin() {
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [interests, setInterests] = useState<InterestRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
-  type TabId = 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal';
-  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+  type TabId = 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas';
+  
+  const { role } = useAuth();
+  
+  const [activeTab, setActiveTab] = useState<TabId>(role === 'supervisor' ? 'rotas' : 'dashboard');
 
   // ── Brand / Personalização ────────────────────────────────────────────────
   const [brandLogo, setBrandLogo] = useState<string>(() => localStorage.getItem('brand_logo') || '');
@@ -234,6 +239,31 @@ export default function Admin() {
     } catch { toast.error('Erro ao carregar dados'); }
     finally { setLoading(false); }
   };
+  
+  const handleDownloadLogisticsPlan = async () => {
+    try {
+      setIsGeneratingPlan(true);
+      toast.info('Gerando planilha lógistica. Isso pode demorar alguns segundos...');
+      const res = await fetch(`${API}/api/generate-plan`, { headers: authHeaders });
+      if (!res.ok) throw new Error('Falha ao gerar o arquivo');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Planilha_Logistica.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+      toast.success('Download da planilha concluído!');
+    } catch (error) {
+      toast.error('Erro ao gerar/baixar a planilha logística.');
+      console.error(error);
+    } finally {
+      setIsGeneratingPlan(false);
+    }
+  };
+
   useEffect(() => { fetchAll(); }, []);
 
   useEffect(() => {
@@ -417,16 +447,17 @@ export default function Admin() {
 
   const pendingInterests = interests.filter(i => i.status === 'pending').length;
 
-  const navItems: { id: TabId; label: string; icon: React.ElementType; count?: number; badge?: boolean }[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'users', label: 'Usuários', icon: UserPlus, count: users.length },
-    { id: 'reps', label: 'Representantes', icon: Briefcase, count: reps.length },
-    { id: 'territories', label: 'Territórios', icon: MapPin, count: territories.length },
-    { id: 'groups', label: 'Grupos', icon: UsersRound, count: groups.length },
-    { id: 'notifications', label: 'Notificações', icon: Bell, count: notifications.length },
-    { id: 'audit', label: 'Auditoria', icon: ScrollText, count: auditLogs.length },
-    { id: 'interests', label: 'Interesses', icon: HandHeart, count: pendingInterests, badge: pendingInterests > 0 },
-    { id: 'personal', label: 'Personalização', icon: Palette },
+  const navItems: { id: TabId; label: string; icon: React.ElementType; count?: number; badge?: boolean; restrict?: string[] }[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, restrict: ['admin'] },
+    { id: 'users', label: 'Usuários', icon: UserPlus, count: users.length, restrict: ['admin'] },
+    { id: 'reps', label: 'Representantes', icon: Briefcase, count: reps.length, restrict: ['admin'] },
+    { id: 'territories', label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin'] },
+    { id: 'groups', label: 'Grupos', icon: UsersRound, count: groups.length, restrict: ['admin'] },
+    { id: 'notifications', label: 'Notificações', icon: Bell, count: notifications.length, restrict: ['admin'] },
+    { id: 'rotas', label: 'Rotas', icon: Truck, restrict: ['admin', 'supervisor'] },
+    { id: 'audit', label: 'Auditoria', icon: ScrollText, count: auditLogs.length, restrict: ['admin'] },
+    { id: 'interests', label: 'Interesses', icon: HandHeart, count: pendingInterests, badge: pendingInterests > 0, restrict: ['admin'] },
+    { id: 'personal', label: 'Personalização', icon: Palette, restrict: ['admin'] },
   ];
 
   return (<>
@@ -452,6 +483,9 @@ export default function Admin() {
 
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           {navItems.map(item => {
+            // Role restriction implementation
+            if (item.restrict && !item.restrict.includes(role || '')) return null;
+
             const Icon = item.icon; const active = activeTab === item.id;
             return (
               <button key={item.id} onClick={() => setActiveTab(item.id)}
@@ -491,6 +525,9 @@ export default function Admin() {
             <button onClick={fetchAll} className="p-2 rounded-lg hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-all" title="Recarregar dados">
               <RefreshCw className="w-4 h-4" />
             </button>
+            <Button onClick={handleDownloadLogisticsPlan} disabled={isGeneratingPlan} variant="outline" className="gap-2 shrink-0 border-primary/30 hover:bg-primary/5 text-primary">
+              {isGeneratingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} {isGeneratingPlan ? 'Gerando...' : 'Gerar Plano Logístico'}
+            </Button>
             {pendingInterests > 0 && <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-1.5"><AlertCircle className="w-3.5 h-3.5 text-amber-400" /><span className="text-xs font-semibold text-amber-400">{pendingInterests} pendente(s)</span></div>}
           </div>
         </header>
@@ -598,10 +635,10 @@ export default function Admin() {
                         <div className="space-y-1.5">
                           <label className="text-xs font-medium text-muted-foreground">Papel *</label>
                           <div className="flex gap-1.5 h-9">
-                            {(['user', 'admin'] as const).map(r => (
+                            {(['user', 'supervisor'] as const).map(r => (
                               <button key={r} type="button" onClick={() => setNewUser({ ...newUser, role: r })}
                                 className={`flex-1 rounded-md text-[11px] font-semibold border transition-all flex items-center justify-center gap-1 ${newUser.role === r ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground'}`}>
-                                {r === 'admin' ? <ShieldCheck className="w-3 h-3" /> : <User className="w-3 h-3" />}{r === 'admin' ? 'Admin' : 'User'}
+                                {r === 'supervisor' ? <ShieldCheck className="w-3 h-3" /> : <User className="w-3 h-3" />}{r === 'supervisor' ? 'Supervisor' : 'User'}
                               </button>
                             ))}
                           </div>
@@ -662,8 +699,8 @@ export default function Admin() {
                                     <p className="text-[10px] text-muted-foreground">ID #{u.id}</p>
                                   </TableCell>
                                   <TableCell>
-                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 w-fit ${u.role === 'admin' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                                      {u.role === 'admin' ? <ShieldCheck className="w-3 h-3" /> : <User className="w-3 h-3" />}{u.role === 'admin' ? 'Admin' : 'User'}
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 w-fit ${u.role === 'admin' ? 'bg-amber-500/20 text-amber-400' : u.role === 'supervisor' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                                      {u.role === 'admin' ? <ShieldCheck className="w-3 h-3" /> : u.role === 'supervisor' ? <Briefcase className="w-3 h-3" /> : <User className="w-3 h-3" />}{u.role.charAt(0).toUpperCase() + u.role.slice(1)}
                                     </span>
                                   </TableCell>
                                   <TableCell className="text-xs text-muted-foreground">{u.repCode ? (() => { const r = reps.find(r => r.code === u.repCode); return r ? `${r.code} — ${r.name}` : u.repCode; })() : '—'}</TableCell>
@@ -681,12 +718,19 @@ export default function Admin() {
                                 {editingUserId === u.id && (
                                   <TableRow className="bg-primary/5 border-border/30">
                                     <TableCell colSpan={4} className="py-3 px-6">
-                                      <div className="grid grid-cols-2 gap-2">
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                         <div className="space-y-1"><label className="text-[10px] text-muted-foreground">Username</label><Input value={editUserForm.username} onChange={e => setEditUserForm(f => ({ ...f, username: e.target.value }))} className="h-8 text-xs" /></div>
                                         <div className="space-y-1"><label className="text-[10px] text-muted-foreground">Nova Senha</label>
                                           <div className="relative"><Input type={showEditPwd ? 'text' : 'password'} value={editUserForm.password} onChange={e => setEditUserForm(f => ({ ...f, password: e.target.value }))} className="h-8 text-xs pr-8" placeholder="Deixe em branco" />
                                             <button type="button" tabIndex={-1} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowEditPwd(v => !v)}>{showEditPwd ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}</button>
                                           </div>
+                                        </div>
+                                        <div className="space-y-1"><label className="text-[10px] text-muted-foreground">Papel</label>
+                                          <select className="w-full h-8 text-xs px-2 bg-background border border-input rounded-md focus:outline-none focus:ring-1 focus:ring-primary" value={editUserForm.role} onChange={e => setEditUserForm(f => ({ ...f, role: e.target.value }))}>
+                                            <option value="user">User</option>
+                                            <option value="supervisor">Supervisor</option>
+                                            <option value="admin">Admin</option>
+                                          </select>
                                         </div>
                                       </div>
                                       <div className="flex gap-2 mt-2">
@@ -1043,6 +1087,11 @@ export default function Admin() {
                 </CardContent>
               </Card>
             </div>
+          )}
+
+          {/* ══ ROTAS ══ */}
+          {activeTab === 'rotas' && (
+            <RotasPanel />
           )}
 
         </main>

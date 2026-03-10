@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const { exec } = require('child_process');
+const path = require('path');
 const db = require('./database.cjs');
 
 const app = express();
@@ -35,10 +37,10 @@ app.post('/api/login', (req, res) => {
     const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
     if (user && bcrypt.compareSync(password, user.password)) {
         const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role, repCode: user.repCode, tipo: user.tipo },
+            { id: user.id, username: user.username, role: user.role, repCode: user.repCode, tipo: user.tipo, estado_end: user.estado_end },
             SECRET_KEY
         );
-        res.json({ token, role: user.role, tipo: user.tipo, repCode: user.repCode });
+        res.json({ token, role: user.role, tipo: user.tipo, repCode: user.repCode, estado_end: user.estado_end });
     } else {
         res.status(401).json({ message: 'Usuário ou senha inválidos' });
     }
@@ -118,7 +120,7 @@ app.get('/api/users', authenticate, requireAdmin, (req, res) => {
 app.post('/api/users', authenticate, requireAdmin, (req, res) => {
     const { username, password, role, tipo, repCode, full_name, cpf_cnpj, telefone, cep, logradouro, numero, complemento, bairro_end, cidade, estado_end } = req.body;
     if (!username || !password || !role) return res.status(400).json({ message: 'Username, senha e papel são obrigatórios' });
-    if (!['admin', 'user'].includes(role)) return res.status(400).json({ message: 'Papel inválido' });
+    if (!['admin', 'user', 'supervisor'].includes(role)) return res.status(400).json({ message: 'Papel inválido' });
     if (db.prepare('SELECT id FROM users WHERE username = ?').get(username)) return res.status(409).json({ message: 'Username já existe' });
 
     const hashed = bcrypt.hashSync(password, 10);
@@ -239,6 +241,28 @@ app.post('/api/territories/reallocate', authenticate, requireAdmin, (req, res) =
     db.prepare('DELETE FROM territories WHERE municipio=? AND uf=? AND modo=?').run(municipio, uf, modo);
     db.prepare('INSERT INTO territories (municipio, uf, repCode, modo) VALUES (?, ?, ?, ?)').run(municipio, uf, repCode, modo);
     res.json({ success: true });
+});
+
+// ─── LOGISTICS SCRIPT ────────────────────────────────────────────────────────
+
+app.get('/api/generate-plan', authenticate, requireAdmin, (req, res) => {
+    const scriptPath = path.join(__dirname, 'generateLogisticsPlan.js');
+    const outputPath = path.join(__dirname, 'Planilha Logistica - Saida.xlsx');
+
+    exec(`node "${scriptPath}"`, (error, stdout, stderr) => {
+        if (error) {
+            console.error("Error generating plan:", error);
+            return res.status(500).json({ message: 'Erro ao gerar o plano logístico' });
+        }
+        res.download(outputPath, 'Planilha_Logistica.xlsx', (err) => {
+            if (err) {
+                console.error("Error downloading file:", err);
+                if (!res.headersSent) {
+                    res.status(500).json({ message: 'Erro ao enviar o arquivo' });
+                }
+            }
+        });
+    });
 });
 
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

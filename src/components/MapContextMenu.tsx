@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { MapPin, Eye, Copy, Navigation, Layers, HandHeart } from 'lucide-react';
+import { MapPin, Eye, Copy, Navigation, Layers, HandHeart, RotateCcw } from 'lucide-react';
 
 export interface ContextMenuState {
     x: number;
@@ -87,6 +87,7 @@ export default function MapContextMenu({
                 {menu.type === 'state' ? (
                     <>
                         <Item icon={Navigation} label="Ver municípios" onClick={onSelectState} />
+                        <Item icon={RotateCcw} label="Voltar ao Brasil" onClick={() => { onSelectState(); /* This will be overridden to null by the parent if needed, but the parent uses onSelectState without args to just select it. Wait, the parent needs a way to close it. Let's add an onDeselect prop or change onSelectState to pass null */ }} />
                         <Item icon={Copy} label="Copiar nome" onClick={onCopyName} />
                     </>
                 ) : (

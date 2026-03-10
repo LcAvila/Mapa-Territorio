@@ -11,6 +11,7 @@ import {
   useStatesGeoJSON, useMunicipiosGeoJSON, useMunicipioNames,
   useNeighborhoodsGeoJSON
 } from "@/hooks/use-geo-data";
+import { useAuth } from "@/contexts/AuthContext";
 import { getUFByCode, getUFBySigla } from "@/data/uf-codes";
 import { getMunicipioResponsaveis } from "@/data/territories";
 import { getRepColor, getRepByCode, Representative } from "@/data/representatives";
@@ -41,6 +42,16 @@ function MapController({ center, zoom }: { center: [number, number]; zoom: numbe
     if (isFirst.current) { isFirst.current = false; map.setView(center, zoom); }
     else map.flyTo(center, zoom, { duration: 1.5 });
   }, [map, center[0], center[1], zoom]);
+  return null;
+}
+
+// ─── Map event handler for global clicks (deselect on background click) ────
+function MapEventHandler({ onBackgroundClick }: { onBackgroundClick: () => void }) {
+  const map = useMap();
+  useEffect(() => {
+    map.on("click", onBackgroundClick);
+    return () => { map.off("click", onBackgroundClick); };
+  }, [map, onBackgroundClick]);
   return null;
 }
 
@@ -88,6 +99,7 @@ export default function BrazilMap({
   municipioCodeForBairros, onDeactivateBairros, selectedMunicipioName,
   onContextMenuState, onContextMenuMunicipio,
 }: BrazilMapProps) {
+  const { role, estado_end } = useAuth();
   const { data: statesGeo } = useStatesGeoJSON();
   const { data: apiReps = [] } = useApiRepresentatives();
   const { data: apiTerritories = [] } = useApiTerritories();
@@ -104,7 +116,7 @@ export default function BrazilMap({
   const selectedMunicipioGeo = useCallback(() => {
     if (!municipiosGeo || !selectedMunicipioName || !municipioNames) return null;
     const entry = Object.entries(municipioNames).find(
-      ([, name]) => name.toLowerCase() === selectedMunicipioName.toLowerCase()
+      ([, name]) => (name as string).toLowerCase() === selectedMunicipioName.toLowerCase()
     );
     if (!entry) return null;
     const [codArea] = entry;
@@ -173,8 +185,12 @@ export default function BrazilMap({
     (layer as L.Path).on({
       mouseover: (e) => { e.target.setStyle({ fillOpacity: 0.3, weight: 2.5 }); e.target.bindTooltip(uf.nome, { sticky: true }).openTooltip(); },
       mouseout: (e) => { e.target.setStyle(stateStyle(feature)); e.target.closeTooltip(); },
-      click: () => onSelectUF(uf.sigla),
+      click: (e: any) => {
+        L.DomEvent.stopPropagation(e);
+        onSelectUF(uf.sigla);
+      },
       contextmenu: (e: any) => {
+        L.DomEvent.stopPropagation(e);
         e.originalEvent.preventDefault();
         onContextMenuState?.(uf.nome, uf.sigla, e.originalEvent.clientX, e.originalEvent.clientY);
       },
@@ -186,16 +202,32 @@ export default function BrazilMap({
     const codArea = feature?.properties?.codarea;
     const name = municipioNames?.[codArea] || `Município ${codArea}`;
     const reps = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
-    const repNames = reps.map(c => { const r = getRepByCode(c, apiReps); return r ? `${r.code} - ${r.name}` : c; });
-    const tooltipHtml = reps.length > 0
-      ? `<strong>${name}</strong><br/>${repNames.join("<br/>")}`
-      : `<strong>${name}</strong><br/><em>Sem responsável</em>`;
+    
+    // Role-based restrictions mapping
+    let tooltipHtml = '';
+    if (role === 'user' && estado_end && selectedUF !== estado_end) {
+        if (reps.length > 0) {
+            const hasVago = reps.some(c => getRepByCode(c, apiReps)?.isVago);
+            tooltipHtml = `<strong>${name}</strong><br/>${hasVago ? '<em>Vago</em>' : '<em>Ocupado</em>'}`;
+        } else {
+            tooltipHtml = `<strong>${name}</strong><br/><em>Sem responsável</em>`;
+        }
+    } else {
+        const repNames = reps.map(c => { const r = getRepByCode(c, apiReps); return r ? `${r.code} - ${r.name}` : c; });
+        tooltipHtml = reps.length > 0
+          ? `<strong>${name}</strong><br/>${repNames.join("<br/>")}`
+          : `<strong>${name}</strong><br/><em>Sem responsável</em>`;
+    }
 
     (layer as L.Path).on({
       mouseover: (e) => { e.target.setStyle({ fillOpacity: 0.8, weight: 3 }); e.target.bindTooltip(tooltipHtml, { sticky: true }).openTooltip(); e.target.bringToFront(); },
       mouseout: (e) => { e.target.setStyle(municipioStyle(feature)); e.target.closeTooltip(); },
-      click: () => onSelectMunicipio(name, selectedUF),
+      click: (e: any) => {
+        L.DomEvent.stopPropagation(e);
+        onSelectMunicipio(name, selectedUF);
+      },
       contextmenu: (e: any) => {
+        L.DomEvent.stopPropagation(e);
         e.originalEvent.preventDefault();
         onContextMenuMunicipio?.(name, selectedUF, e.originalEvent.clientX, e.originalEvent.clientY);
       },
@@ -234,6 +266,7 @@ export default function BrazilMap({
       >
         <AttributionControl prefix={false} />
         <MapController center={center} zoom={zoom} />
+        <MapEventHandler onBackgroundClick={() => selectedUF && onSelectUF("")} />
 
         {/* Auto-zoom to municipality when selected */}
         {munGeo && <ZoomToMunicipio geoJson={munGeo} />}

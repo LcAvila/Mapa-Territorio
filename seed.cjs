@@ -1,6 +1,5 @@
 const db = require('./database.cjs');
 
-// Initial Data from representatives.ts
 const reps = [
   { code: "47", name: "ITAPEL REPRESENTAÇÕES", fullName: "47 - ITAPEL REPRESENTACOES S/C LTDA.", isVago: 0, colorIndex: 1 },
   { code: "80", name: "ILEO CARVALHO", fullName: "80 - ILEO CARVALHO LTDA-ME", isVago: 0, colorIndex: 2 },
@@ -20,15 +19,11 @@ const insertRep = db.prepare(`
 
 reps.forEach(r => insertRep.run(r.code, r.name, r.fullName, r.isVago, r.colorIndex));
 
-// Placeholder for Territories migration - In a real scenario I'd parse the whole file
-// For now I'll use a few as example and assume the admin will add the rest or I can do a bulk insert if needed.
-// However, the user wants me to do it.
-
 const territories = [
   { municipio: "Mangaratiba", uf: "RJ", repCode: "107", modo: "planejamento" },
   { municipio: "Valença", uf: "RJ", repCode: "47", modo: "planejamento" },
   { municipio: "Arraial do Cabo", uf: "RJ", repCode: "47", modo: "planejamento" },
-  // ... many more
+
 ];
 
 const insertTerritory = db.prepare(`

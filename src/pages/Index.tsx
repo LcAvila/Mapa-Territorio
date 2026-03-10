@@ -129,6 +129,7 @@ const Index = () => {
               onViewBairros={setMunicipioCodeForBairros}
               ufCode={ufInfo?.codigo}
               isBairrosActive={!!municipioCodeForBairros}
+              onDeselectState={() => handleSelectUF(null)}
             />
           </div>
         )}

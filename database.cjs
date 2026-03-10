@@ -28,7 +28,7 @@ db.exec(`
     cidade TEXT,
     estado_end TEXT,
     photo TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE TABLE IF NOT EXISTS representatives (
@@ -69,7 +69,7 @@ db.exec(`
     uf TEXT NOT NULL,
     modo TEXT,
     observacoes TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 `);
 
@@ -89,7 +89,7 @@ safeAlter('ALTER TABLE users ADD COLUMN bairro_end TEXT');
 safeAlter('ALTER TABLE users ADD COLUMN cidade TEXT');
 safeAlter('ALTER TABLE users ADD COLUMN estado_end TEXT');
 safeAlter('ALTER TABLE users ADD COLUMN photo TEXT');
-safeAlter("ALTER TABLE users ADD COLUMN created_at TEXT DEFAULT (datetime('now'))");
+safeAlter("ALTER TABLE users ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP");
 
 // Seed Admin User
 const adminPassword = bcrypt.hashSync('admin123', 10);

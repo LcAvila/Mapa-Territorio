@@ -3,6 +3,7 @@ import { getRepColor, getRepByCode } from "@/data/representatives";
 import { getMunicipioResponsaveis } from "@/data/territories";
 import { useMunicipioInfo } from "@/hooks/use-geo-data";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 import type { Representative } from "@/data/representatives";
 import type { TerritoryAssignment } from "@/data/territories";
 
@@ -14,6 +15,7 @@ interface DetailPanelProps {
   onViewBairros?: (code: number | null) => void;
   ufCode?: number;
   isBairrosActive?: boolean;
+  onDeselectState?: () => void;
 }
 
 function useApiData() {
@@ -38,7 +40,8 @@ function useApiData() {
   return { reps: repsQ.data || [], territories: terrQ.data || [] };
 }
 
-export default function DetailPanel({ municipio, uf, modo, onClose, onViewBairros, ufCode, isBairrosActive }: DetailPanelProps) {
+export default function DetailPanel({ municipio, uf, modo, onClose, onViewBairros, ufCode, isBairrosActive, onDeselectState }: DetailPanelProps) {
+  const { role, estado_end } = useAuth();
   const { data: municipiosInfo, isLoading: loadingInfo } = useMunicipioInfo(ufCode || null);
   const { reps: apiReps, territories: apiTerritories } = useApiData();
 
@@ -59,9 +62,16 @@ export default function DetailPanel({ municipio, uf, modo, onClose, onViewBairro
           <h2 className="font-semibold text-foreground">{municipio}</h2>
           <p className="text-xs text-muted-foreground">{uf} · {modo === "planejamento" ? "Planejamento" : "Atendimento"}</p>
         </div>
-        <button onClick={onClose} className="p-1 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex gap-1">
+          {onDeselectState && (
+            <button onClick={onDeselectState} title="Voltar ao Brasil" className="p-1 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          )}
+          <button onClick={onClose} title="Fechar painel" className="p-1 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Responsáveis */}
@@ -72,6 +82,20 @@ export default function DetailPanel({ municipio, uf, modo, onClose, onViewBairro
 
         {repCodes.length === 0 ? (
           <p className="text-sm text-muted-foreground italic">Sem responsável atribuído</p>
+        ) : (role === "user" && estado_end && uf !== estado_end) ? (
+          <div className="space-y-2">
+            {repCodes.some(code => getRepByCode(code, apiReps)?.isVago) ? (
+              <div className="flex items-center gap-3 p-2 rounded-md bg-secondary/50 border border-destructive/20">
+                <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ border: "2px dashed hsl(0, 70%, 50%)" }} />
+                <div><p className="text-sm font-medium text-destructive">Território Vago</p></div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 p-2 rounded-md bg-secondary/50">
+                <span className="w-3 h-3 rounded-sm flex-shrink-0 bg-primary/60" />
+                <div><p className="text-sm font-medium text-foreground">Território Ocupado</p></div>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="space-y-2">
             {repCodes.map((code, i) => {

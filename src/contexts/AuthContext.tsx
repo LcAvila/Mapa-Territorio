@@ -6,7 +6,8 @@ interface AuthContextType {
     userId: number | null;
     repCode: string | null;
     tipo: string | null;
-    login: (token: string, role: string, tipo?: string, repCode?: string) => void;
+    estado_end: string | null;
+    login: (token: string, role: string, tipo?: string, repCode?: string, estado_end?: string) => void;
     logout: () => void;
     isAuthenticated: boolean;
 }
@@ -22,8 +23,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     const [repCode, setRepCode] = useState<string | null>(localStorage.getItem('repCode'));
     const [tipo, setTipo] = useState<string | null>(localStorage.getItem('tipo'));
+    const [estado_end, setEstadoEnd] = useState<string | null>(localStorage.getItem('estado_end'));
 
-    const login = (newToken: string, newRole: string, newTipo?: string, newRepCode?: string) => {
+    const login = (newToken: string, newRole: string, newTipo?: string, newRepCode?: string, newEstadoEnd?: string) => {
         // Decode JWT to extract userId
         let uid: number | null = null;
         try {
@@ -38,21 +40,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         else localStorage.removeItem('repCode');
         if (newTipo) localStorage.setItem('tipo', newTipo);
         else localStorage.removeItem('tipo');
+        if (newEstadoEnd) localStorage.setItem('estado_end', newEstadoEnd);
+        else localStorage.removeItem('estado_end');
 
         setToken(newToken);
         setRole(newRole);
         setUserId(uid);
         setRepCode(newRepCode || null);
         setTipo(newTipo || null);
+        setEstadoEnd(newEstadoEnd || null);
     };
 
     const logout = () => {
-        ['token', 'role', 'userId', 'repCode', 'tipo'].forEach(k => localStorage.removeItem(k));
-        setToken(null); setRole(null); setUserId(null); setRepCode(null); setTipo(null);
+        ['token', 'role', 'userId', 'repCode', 'tipo', 'estado_end'].forEach(k => localStorage.removeItem(k));
+        setToken(null); setRole(null); setUserId(null); setRepCode(null); setTipo(null); setEstadoEnd(null);
     };
 
     return (
-        <AuthContext.Provider value={{ token, role, userId, repCode, tipo, login, logout, isAuthenticated: !!token }}>
+        <AuthContext.Provider value={{ token, role, userId, repCode, tipo, estado_end, login, logout, isAuthenticated: !!token }}>
             {children}
         </AuthContext.Provider>
     );

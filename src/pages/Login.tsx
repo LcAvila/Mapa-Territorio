@@ -23,9 +23,10 @@ export default function Login() {
             });
             const data = await response.json();
             if (response.ok) {
-                login(data.token, data.role, data.tipo, data.repCode);
+                login(data.token, data.role, data.tipo, data.repCode, data.estado_end);
                 toast.success('Bem-vindo ao sistema!');
-                navigate(data.role === 'admin' ? '/admin' : '/');
+                if (data.role === 'admin' || data.role === 'supervisor') navigate('/admin');
+                else navigate('/');
             } else {
                 toast.error(data.message || 'Credenciais inválidas');
             }

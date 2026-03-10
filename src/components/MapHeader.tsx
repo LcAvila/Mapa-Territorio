@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell } from "lucide-react";
+import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { exportTerritoriesToExcel } from "@/utils/export-utils";
 import { UF_DATA } from "@/data/uf-codes";
@@ -218,12 +218,14 @@ export default function MapHeader({
               </div>
             )}
 
-            {/* Admin link */}
-            {role === 'admin' && (
-              <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="gap-2 hover:bg-background h-8 px-2">
-                <Settings className="w-4 h-4 text-primary" />
-                <span className="hidden sm:inline">Admin</span>
-              </Button>
+            {/* Admin and Supervisor links */}
+            {(role === 'admin' || role === 'supervisor') && (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="gap-2 hover:bg-background h-8 px-2" title="Painel Admin">
+                  {role === 'admin' ? <Settings className="w-4 h-4 text-primary" /> : <Truck className="w-4 h-4 text-emerald-500" />}
+                  <span className="hidden sm:inline">{role === 'admin' ? 'Admin' : 'Painel'}</span>
+                </Button>
+              </>
             )}
             {/* Profile link */}
             <Button variant="ghost" size="sm" onClick={() => navigate('/perfil')} className="gap-2 hover:bg-background h-8 px-2" title="Meu Perfil">
