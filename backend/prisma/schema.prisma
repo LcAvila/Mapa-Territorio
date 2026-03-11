@@ -27,6 +27,13 @@ model User {
   repCode     String?  
   created_at  DateTime @default(now())
 
+  // Relações como supervisor
+  alocacoes         AlocacaoSupervisor[]
+  visitasLogistica  DistanciasLogistica[]
+  planejamentos     PlanejamentoVisitas[]
+  blocosViagem      BlocosViagem[]
+  historicosVisitas HistoricoVisitas[]
+
   @@map("users")
 }
 
@@ -83,4 +90,154 @@ model InterestRequest {
   created_at  DateTime @default(now())
 
   @@map("interest_requests")
+}
+
+// -----------------------------------------------------
+// MÓDULO ROTEIRIZAÇÃO COMERCIAL
+// -----------------------------------------------------
+
+model Cliente {
+  id_cliente        Int       @id @default(autoincrement())
+  codigo_cliente    String?   @unique
+  nome_cliente      String
+  nome_abreviado    String?
+  regiao            String?
+  uf                String?
+  cidade            String?
+  bairro            String?
+  cep               String?
+  endereco_completo String?
+  cnpj              String?
+  latitude          Float?
+  longitude         Float?
+  status_ativo      Boolean   @default(true)
+  data_cadastro     DateTime  @default(now())
+  data_atualizacao  DateTime  @updatedAt
+
+  // Relações
+  alocacoes         AlocacaoSupervisor[]
+  classificacoes    ClassificacaoCliente[]
+  planejamentos     PlanejamentoVisitas[]
+  distancias        DistanciasLogistica[]
+  historicos        HistoricoVisitas[]
+
+  @@map("clientes")
+}
+
+// Em vez de "Supervisores", usamos a tabela "User" (role: supervisor/admin) para centralizar a autenticação.
+
+model AlocacaoSupervisor {
+  id_alocacao   Int      @id @default(autoincrement())
+  id_cliente    Int
+  id_supervisor Int
+  data_inicio   DateTime
+  data_fim      DateTime?
+
+  cliente       Cliente  @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
+  supervisor    User     @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
+
+  @@unique([id_cliente, id_supervisor, data_inicio], name: "unique_alocacao")
+  @@map("alocacao_supervisor")
+}
+
+model ClassificacaoCliente {
+  id_classificacao   Int      @id @default(autoincrement())
+  id_cliente         Int
+  classificacao      String?  // 'Estratégico', 'Forte', 'Médio', 'Pontual'
+  data_classificacao DateTime
+  responsavel        String?
+  observacoes        String?
+
+  cliente            Cliente  @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
+
+  @@map("classificacao_cliente")
+}
+
+model PlanejamentoVisitas {
+  id_visita            Int      @id @default(autoincrement())
+  id_cliente           Int
+  id_supervisor        Int
+  semana               String?  // 'Semana 1', 'Semana 2', 'Semana 3', 'Semana 4'
+  data_visita_prevista DateTime?
+  prioridade           String?  // 'Alta', 'Média', 'Normal'
+  status               String?  @default("Planejado") // 'Planejado', 'Concluído', 'Pendente', 'Cancelado'
+  observacoes          String?
+
+  cliente              Cliente  @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
+  supervisor           User     @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
+
+  @@map("planejamento_visitas")
+}
+
+model DistanciasLogistica {
+  id_distancia         Int      @id @default(autoincrement())
+  id_cliente           Int
+  id_supervisor        Int
+  distancia_km         Float?
+  modo_transporte      String?  // 'Carro', 'Avião', 'Carro+Avião'
+  tempo_estimado_horas Float?
+  data_calculo         DateTime @default(now())
+
+  cliente              Cliente  @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
+  supervisor           User     @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
+
+  @@map("distancias_logistica")
+}
+
+model BlocosViagem {
+  id_bloco       Int      @id @default(autoincrement())
+  codigo_bloco   String?  @unique
+  id_supervisor  Int
+  uf             String?
+  semana         String?  // 'Semana 1', 'Semana 2', 'Semana 3', 'Semana 4'
+  total_clientes Int?
+  estrategicos   Int?
+  km_estimado    Float?
+  prioridade     String?  // 'Alta', 'Média', 'Normal'
+  data_criacao   DateTime?
+
+  supervisor     User     @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
+
+  @@map("blocos_viagem")
+}
+
+model ClustersCidades {
+  id_cluster          Int      @id @default(autoincrement())
+  uf                  String?
+  cidade              String?
+  tipo_cluster        String?  // 'Grande', 'Médio', 'Pequeno', 'Isolado'
+  total_clientes      Int?
+  densidade           Float?   // clientes por dia possível
+  supervisor_principal String?
+  latitude            Float?   // Prisma ñ tem Point geográfico default, adaptado.
+  longitude           Float?
+  data_analise        DateTime @default(now())
+
+  @@map("clusters_cidades")
+}
+
+model HistoricoVisitas {
+  id_historico    Int      @id @default(autoincrement())
+  id_cliente      Int
+  id_supervisor   Int
+  data_visita     DateTime?
+  resultado       String?  // 'Venda', 'Proposta', 'Sem Interesse', 'Não Encontrado'
+  valor_negocio   Float?
+  proximo_contato DateTime?
+  observacoes     String?
+
+  cliente         Cliente  @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
+  supervisor      User     @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
+
+  @@map("historico_visitas")
+}
+
+model ConfigSistema {
+  id_config        Int      @id @default(autoincrement())
+  parametro        String   @unique
+  valor            String?
+  descricao        String?
+  data_atualizacao DateTime @updatedAt
+
+  @@map("config_sistema")
 }
