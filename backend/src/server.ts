@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.routes';
 import adminRoutes from './routes/admin.routes';
 import interestRoutes from './routes/interest.routes';
 import planilhaRoutes from './routes/planilha.routes';
+import clientesRoutes from './routes/clientes.routes';
 import { prisma } from './prisma';
 
 const app = express();
@@ -18,6 +19,7 @@ app.use('/api', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', interestRoutes);
 app.use('/api', planilhaRoutes);
+app.use('/api/clientes', clientesRoutes);
 
 async function bootstrap() {
     // Garantir que existe o usuário 'admin' do Prisma igual tinha no SQLite.
