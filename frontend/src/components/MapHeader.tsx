@@ -2,8 +2,18 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { exportTerritoriesToExcel } from "@/utils/export-utils";
 import { UF_DATA } from "@/data/uf-codes";
+
+interface AdminNotification {
+  id: string;
+  title: string;
+  message: string;
+  targetAll: boolean;
+  targetReps: string[];
+  sentAt: string;
+  readBy: string[];
+}
+
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { ThemeToggle } from "./ThemeToggle";
@@ -26,11 +36,10 @@ export default function MapHeader({
 }: MapHeaderProps) {
   const navigate = useNavigate();
   const { repCode } = useAuth();
-  const [exporting, setExporting] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
   // ── Notifications Logic ──
-  const [notifications, setNotifications] = useState<any[]>(() => {
+  const [notifications, setNotifications] = useState<AdminNotification[]>(() => {
     try { return JSON.parse(localStorage.getItem('admin_notifications') || '[]'); } catch { return []; }
   });
 
@@ -59,24 +68,12 @@ export default function MapHeader({
   // Refresh notifications periodically or when storage changes
   React.useEffect(() => {
     const handleStorage = () => {
-      try { setNotifications(JSON.parse(localStorage.getItem('admin_notifications') || '[]')); } catch { }
+      try { setNotifications(JSON.parse(localStorage.getItem('admin_notifications') || '[]')); } catch { /* ignore */ }
     };
     window.addEventListener('storage', handleStorage);
     const interval = setInterval(handleStorage, 5000); // Poll every 5s just in case
     return () => { window.removeEventListener('storage', handleStorage); clearInterval(interval); };
   }, []);
-
-  const handleExport = async () => {
-    setExporting(true);
-    try {
-      await exportTerritoriesToExcel();
-      toast.success("Relatório exportado com sucesso!");
-    } catch (err: any) {
-      toast.error(err?.message || "Erro ao exportar relatório");
-    } finally {
-      setExporting(false);
-    }
-  };
 
   return (
     <header className="bg-card border-b border-border px-4 py-3 flex items-center gap-4 flex-wrap">
@@ -124,19 +121,6 @@ export default function MapHeader({
           Atendimento
         </button>
       </div>
-
-      {/* Export Button */}
-      <button
-        onClick={handleExport}
-        disabled={exporting}
-        className="flex items-center gap-2 px-3 py-1.5 bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium rounded-md border border-border transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-        title="Exportar todos os territórios para Excel"
-      >
-        {exporting
-          ? <Loader2 className="w-4 h-4 text-primary animate-spin" />
-          : <FileDown className="w-4 h-4 text-primary" />}
-        <span>{exporting ? "Exportando..." : "Exportar"}</span>
-      </button>
 
       {/* Search */}
       <div className="relative flex-1 min-w-[200px] max-w-[320px] ml-auto">

@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          Int      @id @default(autoincrement())
+  username    String   @unique
+  password    String
+  role        String   @default("user") // admin, supervisor, user
+  tipo        String   @default("representante")
+  full_name   String?
+  cpf_cnpj    String?
+  telefone    String?
+  cep         String?
+  logradouro  String?
+  numero      String?
+  complemento String?
+  bairro_end  String?
+  cidade      String?
+  estado_end  String?
+  photo       String?
+  repCode     String?  
+  created_at  DateTime @default(now())
+
+  @@map("users")
+}
+
+model Representative {
+  code        String      @id
+  name        String?
+  fullName    String?
+  isVago      Int         @default(0) 
+  colorIndex  Int         @default(0)
+  
+  territories Territory[]
+  bairros     Bairro[]
+
+  @@map("representatives")
+}
+
+model Territory {
+  id          Int             @id @default(autoincrement())
+  municipio   String?
+  uf          String?
+  modo        String?
+  
+  repCode     String?
+  rep         Representative? @relation(fields: [repCode], references: [code])
+
+  @@map("territories")
+}
+
+model Bairro {
+  id          Int             @id @default(autoincrement())
+  bairro      String?
+  regiao      String?
+  municipio   String?
+  uf          String?
+  modo        String?
+  
+  repCode     String?
+  rep         Representative? @relation(fields: [repCode], references: [code])
+
+  @@map("bairros")
+}
+
+model InterestRequest {
+  id          Int      @id @default(autoincrement())
+  nome        String
+  email       String?
+  telefone    String?
+  empresa     String?
+  municipio   String
+  uf          String
+  modo        String?
+  observacoes String?
+  status      String   @default("pending")
+  created_at  DateTime @default(now())
+
+  @@map("interest_requests")
+}

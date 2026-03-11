@@ -2,8 +2,10 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const db = require('./database.cjs');
 
 const app = express();
@@ -11,7 +13,11 @@ const PORT = process.env.PORT || 3001;
 const SECRET_KEY = 'super-secret-key';
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' })); // allow base64 photos
+app.use(express.json({ limit: '50mb' })); // allow bas64 photos e planilhas maiores
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Configuração do Multer para armazenamento temporário
+const upload = multer({ dest: path.join(__dirname, 'uploads/') });
 
 // Auth Middleware
 const authenticate = (req, res, next) => {
@@ -262,6 +268,58 @@ app.get('/api/generate-plan', authenticate, requireAdmin, (req, res) => {
                 }
             }
         });
+    });
+});
+
+// ─── SCRIPT PYTHON PLANILHA (ROTAS) ──────────────────────────────────────────
+
+app.post('/api/upload-planilha', authenticate, requireAdmin, upload.single('file'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado.' });
+    }
+
+    const filePath = req.file.path;
+    const pythonScript = path.join(__dirname, 'process_planilha.py');
+
+    // Mudar para comando 'python' (pode ser python3 dependendo do OS)
+    const pythonProcess = spawn('python', [pythonScript, filePath]);
+
+    let dataString = '';
+    let errorString = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+        dataString += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+        errorString += data.toString();
+    });
+
+    pythonProcess.on('close', (code) => {
+        // Limpar arquivo logo que processado
+        fs.unlink(filePath, (err) => {
+            if (err) console.error("Erro ao deletar planiha temporária:", err);
+        });
+
+        if (code !== 0) {
+            console.error(`Erro no processo Python (code ${code}):`, errorString);
+            return res.status(500).json({ success: false, message: 'Erro ao processar a planilha.', error: errorString });
+        }
+
+        try {
+            // Pode haver multiplos prints se warnings do python aconteceram, o ultimo print deve ser o JSON
+            const lines = dataString.trim().split('\n');
+            const jsonLine = lines[lines.length - 1]; 
+            const result = JSON.parse(jsonLine);
+
+            if (!result.success) {
+                return res.status(500).json(result);
+            }
+            res.json(result);
+        } catch (e) {
+            console.error('Erro ao fazer o parse do retorno Python:', dataString);
+            res.status(500).json({ success: false, message: 'Retorno inválido do processador de planilhas.' });
+        }
     });
 });
 

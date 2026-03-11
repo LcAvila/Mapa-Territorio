@@ -10,14 +10,23 @@ import {
   Search, Pencil, Save, Users, ShieldCheck, User, HandHeart, CheckCircle2, XCircle,
   Clock, LayoutDashboard, Bell, ScrollText, UsersRound, Briefcase, Send, Eye, EyeOff,
   Building2, Filter, RefreshCw, ChevronRight, MessageSquare, Globe, Activity,
-  TrendingUp, AlertCircle, BadgeCheck, Palette, Upload, ImageOff, Download, Truck
+  TrendingUp, AlertCircle, BadgeCheck, Palette, Upload, ImageOff, Download, Truck, Settings,
+  Database, Layers, Grid3X3, Calendar, FileSpreadsheet
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { REP_COLOR_PALETTE, getNextColorIndex } from '@/data/representatives';
 import { UF_DATA } from '@/data/uf-codes';
-import { RotasPanel } from '../components/admin/RotasPanel';
+
+import { BaseClientePanel } from '../components/admin/rotas/BaseClientePanel';
+import { ClustersPanel } from '../components/admin/rotas/ClustersPanel';
+import { BlocosPanel } from '../components/admin/rotas/BlocosPanel';
+import { RoteirosPanel } from '../components/admin/rotas/RoteirosPanel';
+import { AgendaPanel } from '../components/admin/rotas/AgendaPanel';
+import { DensidadePanel } from '../components/admin/rotas/DensidadePanel';
+import { LeituraPlanilhaPanel } from '../components/admin/rotas/LeituraPlanilhaPanel';
+import { RotasProvider } from '../contexts/RotasContext';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 interface Representative { code: string; name: string; fullName: string; isVago: boolean; colorIndex: number; }
@@ -35,7 +44,7 @@ const IBGE = 'https://servicodados.ibge.gov.br/api/v1/localidades';
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 const LS = {
   get: <T,>(key: string, def: T): T => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch { return def; } },
-  set: <T,>(key: string, val: T) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch { } },
+  set: <T,>(key: string, val: T) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch { /* ignore */ } },
 };
 
 // ─── CPF / CNPJ mask ─────────────────────────────────────────────────────────
@@ -117,11 +126,12 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
-  type TabId = 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas';
+  type TabId = 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha';
   
   const { role } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<TabId>(role === 'supervisor' ? 'rotas' : 'dashboard');
+  const [activeTab, setActiveTab] = useState<TabId>(role === 'supervisor' ? 'baserotas' : 'dashboard');
+  const [expandedMenus, setExpandedMenus] = useState<string[]>(['settings', 'rotas_menu']);
 
   // ── Brand / Personalização ────────────────────────────────────────────────
   const [brandLogo, setBrandLogo] = useState<string>(() => localStorage.getItem('brand_logo') || '');
@@ -264,6 +274,7 @@ export default function Admin() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchAll(); }, []);
 
   useEffect(() => {
@@ -271,7 +282,7 @@ export default function Admin() {
     const uf = UF_DATA.find(u => u.sigla === selectedUF); if (!uf) return;
     setLoadingMunicipios(true); setSelectedMunicipio(''); setSelectedMunicipioName('');
     fetch(`${IBGE}/estados/${uf.codigo}/municipios`).then(r => r.json())
-      .then(d => setMunicipios(d.sort((a: any, b: any) => a.nome.localeCompare(b.nome))))
+      .then(d => setMunicipios(d.sort((a: { nome: string }, b: { nome: string }) => a.nome.localeCompare(b.nome))))
       .catch(() => toast.error('Erro ao carregar municípios')).finally(() => setLoadingMunicipios(false));
   }, [selectedUF]);
 
@@ -281,7 +292,7 @@ export default function Admin() {
     Promise.all([
       fetch(`${IBGE}/municipios/${selectedMunicipio}/subdistritos`).then(r => r.ok ? r.json() : []),
       fetch(`${IBGE}/municipios/${selectedMunicipio}/distritos`).then(r => r.ok ? r.json() : []),
-    ]).then(([s, d]) => { const all = [...s, ...d].sort((a: any, b: any) => a.nome.localeCompare(b.nome)); setSubdistritos(all); })
+    ]).then(([s, d]) => { const all = [...s, ...d].sort((a: { nome: string }, b: { nome: string }) => a.nome.localeCompare(b.nome)); setSubdistritos(all); })
       .catch(() => toast.error('Erro ao carregar bairros')).finally(() => setLoadingSubdistritos(false));
   }, [selectedMunicipio, includeBairro]);
 
@@ -447,17 +458,27 @@ export default function Admin() {
 
   const pendingInterests = interests.filter(i => i.status === 'pending').length;
 
-  const navItems: { id: TabId; label: string; icon: React.ElementType; count?: number; badge?: boolean; restrict?: string[] }[] = [
+  const navItems: { id: TabId | 'settings' | 'rotas_menu'; label: string; icon: React.ElementType; count?: number; badge?: boolean; restrict?: string[]; subItems?: { id: TabId; label: string; icon: React.ElementType; count?: number; }[] }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, restrict: ['admin'] },
-    { id: 'users', label: 'Usuários', icon: UserPlus, count: users.length, restrict: ['admin'] },
     { id: 'reps', label: 'Representantes', icon: Briefcase, count: reps.length, restrict: ['admin'] },
     { id: 'territories', label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin'] },
-    { id: 'groups', label: 'Grupos', icon: UsersRound, count: groups.length, restrict: ['admin'] },
-    { id: 'notifications', label: 'Notificações', icon: Bell, count: notifications.length, restrict: ['admin'] },
-    { id: 'rotas', label: 'Rotas', icon: Truck, restrict: ['admin', 'supervisor'] },
-    { id: 'audit', label: 'Auditoria', icon: ScrollText, count: auditLogs.length, restrict: ['admin'] },
+    { id: 'rotas_menu', label: 'Rotas', icon: Truck, restrict: ['admin', 'supervisor'], subItems: [
+        { id: 'leituraplanilha', label: 'Leitura Excel', icon: FileSpreadsheet },
+        { id: 'baserotas', label: 'Base Cliente', icon: Database },
+        { id: 'clusters', label: 'Clusters', icon: Layers },
+        { id: 'blocos', label: 'Blocos', icon: Grid3X3 },
+        { id: 'roteiros', label: 'Roteiros', icon: Map },
+        { id: 'agenda', label: 'Agenda', icon: Calendar },
+        { id: 'densidade', label: 'Densidade', icon: Activity },
+    ]},
     { id: 'interests', label: 'Interesses', icon: HandHeart, count: pendingInterests, badge: pendingInterests > 0, restrict: ['admin'] },
-    { id: 'personal', label: 'Personalização', icon: Palette, restrict: ['admin'] },
+    { id: 'notifications', label: 'Enviar Alerta', icon: Bell, count: notifications.length, restrict: ['admin'] },
+    { id: 'settings', label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
+        { id: 'users', label: 'Usuários', icon: UserPlus, count: users.length },
+        { id: 'groups', label: 'Grupos', icon: UsersRound, count: groups.length },
+        { id: 'personal', label: 'Personalização', icon: Palette },
+        { id: 'audit', label: 'Auditoria', icon: ScrollText, count: auditLogs.length },
+    ]}
   ];
 
   return (<>
@@ -481,21 +502,53 @@ export default function Admin() {
           </div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {navItems.map(item => {
             // Role restriction implementation
             if (item.restrict && !item.restrict.includes(role || '')) return null;
 
-            const Icon = item.icon; const active = activeTab === item.id;
+            const Icon = item.icon; 
+            const active = activeTab === item.id || item.subItems?.some(s => s.id === activeTab);
+            const isExpanded = expandedMenus.includes(item.id);
+
             return (
-              <button key={item.id} onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all group ${active ? 'bg-primary/15 text-primary shadow-sm ring-1 ring-primary/20' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'}`}>
-                <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`} />
-                <span className="flex-1 text-sm font-medium">{item.label}</span>
-                {item.count !== undefined && (
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${active ? 'bg-primary/20 text-primary' : item.badge ? 'bg-amber-500/20 text-amber-400' : 'bg-muted text-muted-foreground'}`}>{item.count}</span>
+              <div key={item.id} className="space-y-0.5">
+                <button onClick={() => {
+                  if (item.subItems) {
+                    setExpandedMenus(prev => prev.includes(item.id) ? prev.filter(m => m !== item.id) : [...prev, item.id]);
+                  } else {
+                    setActiveTab(item.id as TabId);
+                  }
+                }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all group ${active && !item.subItems ? 'bg-primary/15 text-primary shadow-sm ring-1 ring-primary/20' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'}`}>
+                  <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`} />
+                  <span className={`flex-1 text-sm font-medium ${active && item.subItems ? 'text-foreground' : ''}`}>{item.label}</span>
+                  {item.count !== undefined && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${active && !item.subItems ? 'bg-primary/20 text-primary' : item.badge ? 'bg-amber-500/20 text-amber-400' : 'bg-muted text-muted-foreground'}`}>{item.count}</span>
+                  )}
+                  {item.subItems && (
+                    <ChevronDown className={`w-4 h-4 shrink-0 transition-transform text-muted-foreground group-hover:text-foreground ${isExpanded ? 'rotate-180' : ''}`} />
+                  )}
+                </button>
+                {item.subItems && isExpanded && (
+                  <div className="pl-9 space-y-0.5 mt-1 border-l-2 border-border/40 ml-4 py-1">
+                    {item.subItems.map(sub => {
+                      const SubIcon = sub.icon;
+                      const subActive = activeTab === sub.id;
+                      return (
+                        <button key={sub.id} onClick={() => setActiveTab(sub.id)}
+                          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all group ${subActive ? 'bg-primary/15 text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'}`}>
+                          <SubIcon className={`w-3.5 h-3.5 shrink-0 ${subActive ? 'text-primary' : 'text-muted-foreground/70 group-hover:text-foreground'}`} />
+                          <span className="flex-1 text-sm font-medium">{sub.label}</span>
+                          {sub.count !== undefined && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${subActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>{sub.count}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
-              </button>
+              </div>
             );
           })}
         </nav>
@@ -1089,9 +1142,17 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ══ ROTAS ══ */}
-          {activeTab === 'rotas' && (
-            <RotasPanel />
+          {/* ══ ROTAS (com contexto) ══ */}
+          {['baserotas', 'clusters', 'blocos', 'roteiros', 'agenda', 'densidade', 'leituraplanilha'].includes(activeTab) && (
+            <RotasProvider>
+              {activeTab === 'baserotas' && <BaseClientePanel />}
+              {activeTab === 'clusters' && <ClustersPanel />}
+              {activeTab === 'blocos' && <BlocosPanel />}
+              {activeTab === 'roteiros' && <RoteirosPanel />}
+              {activeTab === 'agenda' && <AgendaPanel />}
+              {activeTab === 'densidade' && <DensidadePanel />}
+              {activeTab === 'leituraplanilha' && <LeituraPlanilhaPanel />}
+            </RotasProvider>
           )}
 
         </main>
