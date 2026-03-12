@@ -27,6 +27,7 @@ import { AgendaPanel } from '../components/admin/rotas/AgendaPanel';
 import { DensidadePanel } from '../components/admin/rotas/DensidadePanel';
 import { LeituraPlanilhaPanel } from '../components/admin/rotas/LeituraPlanilhaPanel';
 import { RotasProvider } from '../contexts/RotasContext';
+import MiniMapBrasil from '../components/admin/MiniMapBrasil';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 interface Representative { code: string; name: string; fullName: string; isVago: boolean; colorIndex: number; }
@@ -174,6 +175,12 @@ export default function Admin() {
   const saveGroups = (g: Group[]) => { setGroups(g); LS.set('admin_groups', g); };
   const saveNotifications = (n: Notification[]) => { setNotifications(n); LS.set('admin_notifications', n); };
   const saveAuditLogs = (a: AuditLog[]) => { setAuditLogs(a); LS.set('admin_audit', a); };
+
+  // ── Dashboard filters ─────────────────────────────────────────────────────
+  const [dashFilterRep, setDashFilterRep] = useState('');
+  const [dashFilterUF, setDashFilterUF] = useState('');
+  const [dashFilterModo, setDashFilterModo] = useState('');
+  const [dashSearch, setDashSearch] = useState('');
 
   const addAudit = useCallback((action: string, entity: string, entityId: string, details: string, extra?: Partial<AuditLog>) => {
     const entry: AuditLog = { id: Date.now().toString(), action, entity, entityId, details, performedBy: 'admin', timestamp: new Date().toISOString(), ...extra };
@@ -666,55 +673,352 @@ export default function Admin() {
         <main className="admin-content">
 
           {/* ══ DASHBOARD ══ */}
-          {activeTab === 'dashboard' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                  { label: 'Usuários', value: users.length, icon: Users, iconBg: '#EFF6FF', iconColor: '#3B82F6', tab: 'users' as TabId },
-                  { label: 'Representantes', value: reps.length, icon: Briefcase, iconBg: '#F5F3FF', iconColor: '#8B5CF6', tab: 'reps' as TabId },
-                  { label: 'Territórios', value: territories.length, icon: MapPin, iconBg: '#F0FDF4', iconColor: '#22C55E', tab: 'territories' as TabId },
-                  { label: 'Pendentes', value: pendingInterests, icon: HandHeart, iconBg: 'hsl(43 58% 52% / 0.12)', iconColor: 'hsl(43 58% 38%)', tab: 'interests' as TabId },
-                  { label: 'Grupos', value: groups.length, icon: UsersRound, iconBg: '#ECFEFF', iconColor: '#06B6D4', tab: 'groups' as TabId },
-                  { label: 'Notificações', value: notifications.length, icon: Bell, iconBg: '#FFF1F2', iconColor: '#F43F5E', tab: 'notifications' as TabId },
-                  { label: 'Logs Auditoria', value: auditLogs.length, icon: ScrollText, iconBg: '#FFF7ED', iconColor: '#F97316', tab: 'audit' as TabId },
-                  { label: 'Interesses', value: interests.length, icon: Activity, iconBg: '#EEF2FF', iconColor: '#6366F1', tab: 'interests' as TabId },
-                ].map(s => (
-                  <button key={s.label} onClick={() => setActiveTab(s.tab)} className="admin-stat-card text-left">
-                    <div className="admin-stat-card-icon" style={{ background: s.iconBg }}>
-                      <s.icon style={{ width: 18, height: 18, color: s.iconColor }} />
-                    </div>
-                    <p className="admin-stat-card-value">{s.value}</p>
-                    <p className="admin-stat-card-label">{s.label}</p>
-                  </button>
-                ))}
-              </div>
+          {activeTab === 'dashboard' && (() => {
+            // ── Derived / filtered data ──────────────────────────────────────
+            const filteredTerrs = territories.filter(t => {
+              if (dashFilterRep && t.repCode !== dashFilterRep) return false;
+              if (dashFilterUF && t.uf !== dashFilterUF) return false;
+              if (dashFilterModo && t.modo !== dashFilterModo) return false;
+              if (dashSearch) {
+                const q = dashSearch.toLowerCase();
+                const repName = reps.find(r => r.code === t.repCode)?.name?.toLowerCase() || '';
+                if (!t.municipio.toLowerCase().includes(q) && !t.uf.toLowerCase().includes(q) && !repName.includes(q)) return false;
+              }
+              return true;
+            });
 
-              <div className="admin-card">
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid hsl(var(--admin-card-border))', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <ScrollText style={{ width: 15, height: 15, color: 'hsl(var(--admin-sidebar-accent))' }} />
-                  <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>Atividade Recente</span>
-                </div>
-                  {auditLogs.length === 0 ? (
-                    <div className="py-10 text-center text-muted-foreground"><Activity className="w-8 h-8 mx-auto mb-2 opacity-20" /><p className="text-sm">Nenhuma atividade registrada</p></div>
-                  ) : (
-                    <div className="divide-y divide-border/30">
-                      {auditLogs.slice(0, 8).map(log => (
-                        <div key={log.id} className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/20">
-                          <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: 'hsl(var(--admin-sidebar-accent) / 0.1)' }}>
-                            <BadgeCheck style={{ width: 13, height: 13, color: 'hsl(var(--admin-sidebar-accent))' }} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate">{log.details}</p>
-                            <p className="text-[10px] text-muted-foreground">{auditActionLabel[log.action] || log.action}</p>
-                          </div>
-                          <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">{new Date(log.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
+            // Group by UF
+            const byUF: Record<string, typeof filteredTerrs> = {};
+            for (const t of filteredTerrs) {
+              if (!byUF[t.uf]) byUF[t.uf] = [];
+              byUF[t.uf].push(t);
+            }
+            const ufEntries = Object.entries(byUF).sort((a, b) => b[1].length - a[1].length);
+
+            // Unique UFs and reps for dropdowns
+            const allUFs = [...new Set(territories.map(t => t.uf))].sort();
+            const activeReps = reps.filter(r => !r.isVago);
+
+            const clearFilters = () => { setDashFilterRep(''); setDashFilterUF(''); setDashFilterModo(''); setDashSearch(''); };
+            const hasFilters = dashFilterRep || dashFilterUF || dashFilterModo || dashSearch;
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20, height: '100%' }}>
+
+                {/* ── FILTER BAR ── */}
+                <div className="admin-card" style={{ padding: '14px 20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    {/* Search */}
+                    <div style={{ position: 'relative', flex: '1 1 160px', minWidth: 140 }}>
+                      <Search style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: 'hsl(var(--muted-foreground))' }} />
+                      <input
+                        value={dashSearch}
+                        onChange={e => setDashSearch(e.target.value)}
+                        placeholder="Buscar município, UF ou rep..."
+                        style={{
+                          width: '100%', paddingLeft: 32, paddingRight: 12, height: 36,
+                          border: '1.5px solid hsl(var(--border))', borderRadius: 8,
+                          background: 'hsl(var(--background))', color: 'hsl(var(--foreground))',
+                          fontSize: '0.8rem', outline: 'none',
+                        }}
+                      />
+                    </div>
+
+                    {/* Rep dropdown */}
+                    <select
+                      value={dashFilterRep}
+                      onChange={e => setDashFilterRep(e.target.value)}
+                      style={{
+                        height: 36, padding: '0 12px', borderRadius: 8, fontSize: '0.8rem', flex: '1 1 140px',
+                        border: '1.5px solid hsl(var(--border))', background: 'hsl(var(--background))',
+                        color: 'hsl(var(--foreground))', outline: 'none', cursor: 'pointer',
+                      }}
+                    >
+                      <option value="">Todos Representantes</option>
+                      {activeReps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
+                    </select>
+
+                    {/* UF dropdown */}
+                    <select
+                      value={dashFilterUF}
+                      onChange={e => setDashFilterUF(e.target.value)}
+                      style={{
+                        height: 36, padding: '0 12px', borderRadius: 8, fontSize: '0.8rem', flex: '1 1 110px',
+                        border: '1.5px solid hsl(var(--border))', background: 'hsl(var(--background))',
+                        color: 'hsl(var(--foreground))', outline: 'none', cursor: 'pointer',
+                      }}
+                    >
+                      <option value="">Todos os Estados</option>
+                      {allUFs.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                    </select>
+
+                    {/* Modo buttons */}
+                    <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1.5px solid hsl(var(--border))' }}>
+                      {['', 'planejamento', 'atendimento'].map((m, i) => (
+                        <button
+                          key={m}
+                          onClick={() => setDashFilterModo(m)}
+                          style={{
+                            height: 36, padding: '0 14px', fontSize: '0.75rem', fontWeight: 600,
+                            background: dashFilterModo === m ? 'hsl(var(--admin-sidebar-bg))' : 'hsl(var(--background))',
+                            color: dashFilterModo === m ? 'hsl(var(--admin-sidebar-accent))' : 'hsl(var(--muted-foreground))',
+                            border: 'none', borderLeft: i > 0 ? '1.5px solid hsl(var(--border))' : 'none',
+                            cursor: 'pointer', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {m === '' ? 'Todos' : m === 'planejamento' ? 'Planejamento' : 'Atendimento'}
+                        </button>
                       ))}
                     </div>
-                  )}
+
+                    {/* Clear */}
+                    {hasFilters && (
+                      <button
+                        onClick={clearFilters}
+                        style={{
+                          height: 36, padding: '0 14px', borderRadius: 8, fontSize: '0.8rem',
+                          border: '1.5px solid hsl(var(--destructive) / 0.4)', color: 'hsl(var(--destructive))',
+                          background: 'hsl(var(--destructive) / 0.06)', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6,
+                        }}
+                      >
+                        <X style={{ width: 13, height: 13 }} /> Limpar
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Stat pills */}
+                  <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+                    {[
+                      { label: 'Territórios', value: filteredTerrs.length, color: '#22C55E', bg: '#F0FDF4' },
+                      { label: 'Estados', value: ufEntries.length, color: '#3B82F6', bg: '#EFF6FF' },
+                      { label: 'Representantes', value: new Set(filteredTerrs.map(t => t.repCode)).size, color: '#8B5CF6', bg: '#F5F3FF' },
+                      { label: 'Pendentes', value: pendingInterests, color: '#F59E0B', bg: '#FFFBEB' },
+                      { label: 'Usuários', value: users.length, color: '#06B6D4', bg: '#ECFEFF' },
+                    ].map(s => (
+                      <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 14px', borderRadius: 20, background: s.bg, border: `1.5px solid ${s.color}22` }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.9rem', color: s.color }}>{s.value}</span>
+                        <span style={{ fontSize: '0.72rem', color: '#666', fontWeight: 500 }}>{s.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── 2-COLUMN: Results + Map ── */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 20, flex: 1, minHeight: 0 }}>
+
+                  {/* LEFT: Territory result cards */}
+                  <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {ufEntries.length === 0 ? (
+                      <div className="admin-card" style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--muted-foreground))' }}>
+                        <MapPin style={{ width: 32, height: 32, margin: '0 auto 8px', opacity: 0.2 }} />
+                        <p style={{ fontSize: '0.9rem' }}>Nenhum território encontrado</p>
+                      </div>
+                    ) : ufEntries.map(([uf, terrs]) => {
+                      const uniqueReps = [...new Set(terrs.map(t => t.repCode))];
+                      const modos = [...new Set(terrs.map(t => t.modo))];
+                      return (
+                        <div key={uf} className="admin-card" style={{ padding: 0, overflow: 'hidden' }}>
+                          {/* UF header */}
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: 12,
+                            padding: '12px 18px', background: 'hsl(var(--admin-sidebar-bg) / 0.04)',
+                            borderBottom: '1px solid hsl(var(--admin-card-border))',
+                          }}>
+                            <div style={{
+                              width: 42, height: 42, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              background: 'hsl(var(--admin-sidebar-bg))', color: 'hsl(var(--admin-sidebar-accent))',
+                              fontWeight: 900, fontSize: '0.95rem', letterSpacing: '0.05em', flexShrink: 0,
+                            }}>
+                              {uf}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 2 }}>
+                                {terrs.length} município(s) — {uniqueReps.length} rep(s)
+                              </p>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {modos.map(m => (
+                                  <span key={m} style={{
+                                    fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: 10, letterSpacing: '0.03em',
+                                    background: m === 'planejamento' ? 'hsl(var(--admin-sidebar-accent) / 0.13)' : 'hsl(200 70% 50% / 0.12)',
+                                    color: m === 'planejamento' ? 'hsl(var(--admin-sidebar-accent))' : 'hsl(200 70% 40%)',
+                                    border: `1px solid ${m === 'planejamento' ? 'hsl(var(--admin-sidebar-accent) / 0.25)' : 'hsl(200 70% 50% / 0.2)'}`,
+                                    textTransform: 'uppercase',
+                                  }}>
+                                    {m}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            {/* Rep avatars */}
+                            <div style={{ display: 'flex', gap: -4 }}>
+                              {uniqueReps.slice(0, 4).map((code, idx) => {
+                                const rep = reps.find(r => r.code === code);
+                                const color = rep && !rep.isVago ? REP_COLOR_PALETTE[rep.colorIndex] : 'hsl(0 0% 40%)';
+                                return (
+                                  <div key={code} title={rep?.name || code} style={{
+                                    width: 28, height: 28, borderRadius: '50%', background: color,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    color: '#fff', fontSize: '0.65rem', fontWeight: 800,
+                                    border: '2px solid hsl(var(--admin-card-bg))',
+                                    marginLeft: idx > 0 ? -8 : 0, zIndex: 4 - idx,
+                                    position: 'relative',
+                                  }}>
+                                    {code.substring(0, 2).toUpperCase()}
+                                  </div>
+                                );
+                              })}
+                              {uniqueReps.length > 4 && (
+                                <div style={{
+                                  width: 28, height: 28, borderRadius: '50%', background: 'hsl(var(--muted))',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  color: 'hsl(var(--muted-foreground))', fontSize: '0.6rem', fontWeight: 700,
+                                  border: '2px solid hsl(var(--admin-card-bg))', marginLeft: -8, position: 'relative',
+                                }}>
+                                  +{uniqueReps.length - 4}
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => { setDashFilterUF(uf === dashFilterUF ? '' : uf); }}
+                              style={{
+                                padding: '4px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer',
+                                background: dashFilterUF === uf ? 'hsl(var(--admin-sidebar-accent))' : 'hsl(var(--admin-sidebar-bg))',
+                                color: dashFilterUF === uf ? 'hsl(var(--admin-sidebar-bg))' : 'hsl(var(--admin-sidebar-accent))',
+                                border: '1.5px solid hsl(var(--admin-sidebar-accent) / 0.4)',
+                              }}
+                            >
+                              {dashFilterUF === uf ? 'Limpar' : 'Filtrar'}
+                            </button>
+                          </div>
+
+                          {/* Municipality rows (collapsed by default, show top 5) */}
+                          <div>
+                            {terrs.slice(0, 5).map(t => {
+                              const rep = reps.find(r => r.code === t.repCode);
+                              const color = rep && !rep.isVago ? REP_COLOR_PALETTE[rep.colorIndex] : 'hsl(0 0% 40%)';
+                              return (
+                                <div key={t.id} style={{
+                                  display: 'flex', alignItems: 'center', gap: 12,
+                                  padding: '9px 18px', borderBottom: '1px solid hsl(var(--admin-card-border))',
+                                }}>
+                                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                                  <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: 500 }}>{t.municipio}</span>
+                                  <span style={{ fontSize: '0.72rem', color: 'hsl(var(--muted-foreground))' }}>{rep?.name || t.repCode}</span>
+                                  <span style={{
+                                    fontSize: '0.65rem', fontWeight: 700, padding: '1px 7px', borderRadius: 8,
+                                    background: t.modo === 'planejamento' ? 'hsl(43 90% 55% / 0.12)' : 'hsl(200 70% 50% / 0.1)',
+                                    color: t.modo === 'planejamento' ? 'hsl(43 90% 38%)' : 'hsl(200 70% 38%)',
+                                    textTransform: 'uppercase',
+                                  }}>
+                                    {t.modo === 'planejamento' ? 'PL' : 'AT'}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                            {terrs.length > 5 && (
+                              <div style={{ padding: '8px 18px', fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))', fontStyle: 'italic' }}>
+                                + {terrs.length - 5} município(s) não exibido(s) — use filtro para ver todos
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* RIGHT: Mini map + legends */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {/* Map card */}
+                    <div className="admin-card" style={{ padding: 0, overflow: 'hidden' }}>
+                      <div style={{ padding: '12px 16px', borderBottom: '1px solid hsl(var(--admin-card-border))', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Map style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
+                        <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>Mapa de Cobertura</span>
+                        {dashFilterUF && (
+                          <span style={{ marginLeft: 'auto', fontSize: '0.7rem', fontWeight: 700, color: 'hsl(var(--admin-sidebar-accent))' }}>
+                            Filtrado: {dashFilterUF}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ padding: '8px 8px 4px', background: 'hsl(var(--admin-sidebar-bg) / 0.03)' }}>
+                        <MiniMapBrasil
+                          territories={territories}
+                          reps={reps}
+                          filterUF={dashFilterUF}
+                          filterRep={dashFilterRep}
+                          onClickUF={uf => setDashFilterUF(prev => prev === uf ? '' : uf)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Rep legend */}
+                    <div className="admin-card" style={{ padding: 0, overflow: 'hidden', flex: 1 }}>
+                      <div style={{ padding: '12px 16px', borderBottom: '1px solid hsl(var(--admin-card-border))', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Briefcase style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
+                        <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>Representantes</span>
+                      </div>
+                      <div style={{ padding: '8px 0' , maxHeight: 200, overflowY: 'auto' }}>
+                        {activeReps.length === 0 ? (
+                          <p style={{ padding: '12px 16px', fontSize: '0.78rem', color: 'hsl(var(--muted-foreground))' }}>
+                            Nenhum representante cadastrado
+                          </p>
+                        ) : activeReps.map(rep => {
+                          const color = REP_COLOR_PALETTE[rep.colorIndex] || 'hsl(220 15% 40%)';
+                          const count = territories.filter(t => t.repCode === rep.code).length;
+                          const isActive = dashFilterRep === rep.code;
+                          return (
+                            <button
+                              key={rep.code}
+                              onClick={() => setDashFilterRep(prev => prev === rep.code ? '' : rep.code)}
+                              style={{
+                                width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                                padding: '7px 16px', border: 'none', cursor: 'pointer', textAlign: 'left',
+                                background: isActive ? `${color}18` : 'transparent',
+                                transition: 'background 0.15s',
+                              }}
+                            >
+                              <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0, border: isActive ? `2px solid ${color}` : 'none' }} />
+                              <span style={{ flex: 1, fontSize: '0.78rem', fontWeight: isActive ? 700 : 500 }}>{rep.name}</span>
+                              <span style={{
+                                fontSize: '0.68rem', fontWeight: 700, padding: '1px 8px', borderRadius: 10,
+                                background: `${color}22`, color,
+                              }}>
+                                {count}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Quick stats */}
+                    <div className="admin-card" style={{ padding: '12px 16px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        {[
+                          { l: 'Usuários', v: users.length, t: 'users' as TabId, c: '#3B82F6' },
+                          { l: 'Interesses', v: interests.length, t: 'interests' as TabId, c: '#6366F1' },
+                          { l: 'Grupos', v: groups.length, t: 'groups' as TabId, c: '#06B6D4' },
+                          { l: 'Notificações', v: notifications.length, t: 'notifications' as TabId, c: '#F43F5E' },
+                        ].map(s => (
+                          <button
+                            key={s.l}
+                            onClick={() => setActiveTab(s.t)}
+                            style={{
+                              padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${s.c}22`,
+                              background: `${s.c}0A`, cursor: 'pointer', textAlign: 'left',
+                            }}
+                          >
+                            <p style={{ fontWeight: 800, fontSize: '1.2rem', color: s.c }}>{s.v}</p>
+                            <p style={{ fontSize: '0.7rem', color: 'hsl(var(--muted-foreground))', marginTop: 2 }}>{s.l}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
+
 
           {/* ══ USUÁRIOS ══ */}
           {activeTab === 'users' && (
