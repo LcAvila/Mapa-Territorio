@@ -613,10 +613,6 @@ export default function Admin() {
             <LogOut style={{ width: 15, height: 15, flexShrink: 0 }} />
             <span>Sair do sistema</span>
           </button>
-          <button className="admin-sidebar-footer-btn" onClick={() => navigate('/')}>
-            <Map style={{ width: 15, height: 15, flexShrink: 0 }} />
-            <span>Ver Mapa</span>
-          </button>
         </div>
       </aside>
 
@@ -641,16 +637,22 @@ export default function Admin() {
             <button className="admin-header-icon-btn" onClick={fetchAll} title="Recarregar dados">
               <RefreshCw style={{ width: 15, height: 15 }} />
             </button>
-            <button
-              className="admin-header-action-btn"
-              onClick={handleDownloadLogisticsPlan}
-              disabled={isGeneratingPlan}
-            >
-              {isGeneratingPlan
-                ? <Loader2 style={{ width: 15, height: 15 }} className="animate-spin" />
-                : <Download style={{ width: 15, height: 15 }} />
-              }
-              {isGeneratingPlan ? 'Gerando...' : 'Gerar Plano Logístico'}
+            {['baserotas', 'clusters', 'blocos', 'roteiros', 'agenda', 'densidade', 'leituraplanilha'].includes(activeTab) && (
+              <button
+                className="admin-header-action-btn"
+                onClick={handleDownloadLogisticsPlan}
+                disabled={isGeneratingPlan}
+              >
+                {isGeneratingPlan
+                  ? <Loader2 style={{ width: 15, height: 15 }} className="animate-spin" />
+                  : <Download style={{ width: 15, height: 15 }} />
+                }
+                {isGeneratingPlan ? 'Gerando...' : 'Gerar Plano Logístico'}
+              </button>
+            )}
+            <button className="admin-header-action-btn" onClick={() => navigate('/')}>
+              <Map style={{ width: 15, height: 15 }} />
+              Ver Mapa
             </button>
             {pendingInterests > 0 && (
               <div className="admin-pending-badge">
