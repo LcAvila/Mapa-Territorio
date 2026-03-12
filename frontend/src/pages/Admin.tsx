@@ -115,7 +115,7 @@ function MultiRepSelect({ reps, value, onChange }: { reps: Representative[]; val
 }
 
 export default function Admin() {
-  const { token, logout, repCode: myRepCode } = useAuth();
+  const { token, logout, repCode: myRepCode, userId } = useAuth();
   const navigate = useNavigate();
 
   // ── Core API data ──────────────────────────────────────────────────────────
@@ -465,15 +465,21 @@ export default function Admin() {
   };
 
   if (loading) return (
-    <div className="flex h-screen items-center justify-center bg-background">
+    <div className="admin-layout items-center justify-center">
       <div className="flex flex-col items-center gap-4">
-        <Loader2 className="animate-spin w-10 h-10 text-primary" />
-        <p className="text-sm text-muted-foreground">Carregando painel administrativo...</p>
+        <Loader2 className="animate-spin w-10 h-10" style={{ color: 'hsl(var(--admin-sidebar-accent))' }} />
+        <p className="text-sm" style={{ color: 'hsl(var(--muted-foreground))' }}>Carregando painel administrativo...</p>
       </div>
     </div>
   );
 
   const pendingInterests = interests.filter(i => i.status === 'pending').length;
+
+  // Current user info for sidebar profile
+  const currentUser = users.find(u => u.id === userId);
+  const displayName = currentUser?.full_name || currentUser?.fullName || currentUser?.username || 'Admin';
+  const displayEmail = currentUser?.username || '';
+  const displayPhoto = currentUser?.photo || '';
 
   const navItems: { id: TabId | 'settings' | 'rotas_menu'; label: string; icon: React.ElementType; count?: number; badge?: boolean; restrict?: string[]; subItems?: { id: TabId; label: string; icon: React.ElementType; count?: number; }[] }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, restrict: ['admin'] },
@@ -498,67 +504,98 @@ export default function Admin() {
     ]}
   ];
 
+  // Find active tab label for header
+  const findActiveLabel = () => {
+    for (const item of navItems) {
+      if (item.id === activeTab) return { label: item.label, icon: item.icon };
+      if (item.subItems) {
+        const sub = item.subItems.find(s => s.id === activeTab);
+        if (sub) return { label: sub.label, icon: sub.icon };
+      }
+    }
+    return null;
+  };
+  const activeNavInfo = findActiveLabel();
+
   return (<>
     <ConfirmDialog open={confirmDialog.open} title={confirmDialog.title} description={confirmDialog.description} confirmLabel="Confirmar" onConfirm={confirmDialog.onConfirm} onCancel={closeConfirm} />
 
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="admin-layout">
 
-      {/* ── SIDEBAR ── */}
-      <aside className="w-64 shrink-0 flex flex-col border-r border-border/40 bg-card/60 backdrop-blur">
-        <div className="h-16 px-5 flex items-center gap-3 border-b border-border/40 bg-gradient-to-r from-primary/10 to-transparent">
-          {brandLogo ? (
-            <img src={brandLogo} alt="Logo" className="w-8 h-8 rounded-lg object-contain shrink-0 ring-1 ring-primary/30" />
-          ) : (
-            <div className="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center shrink-0 ring-1 ring-primary/30">
-              <Map className="w-4 h-4 text-primary" />
-            </div>
-          )}
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-foreground leading-none">{brandName}</p>
-            <p className="text-[10px] text-primary/70 mt-0.5 font-semibold uppercase tracking-widest">Painel Admin</p>
+      {/* ══ SIDEBAR ══ */}
+      <aside className="admin-sidebar">
+
+
+        {/* User Profile */}
+        <div className="admin-sidebar-profile">
+          <div className="admin-sidebar-avatar">
+            {displayPhoto
+              ? <img src={displayPhoto} alt={displayName} />
+              : <User style={{ width: 28, height: 28 }} />
+            }
           </div>
+          <p className="admin-sidebar-username">{displayName.toUpperCase()}</p>
+          {displayEmail && <p className="admin-sidebar-email">{displayEmail}</p>}
         </div>
 
-        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        {/* Navigation */}
+        <nav className="admin-sidebar-nav">
           {navItems.map(item => {
-            // Role restriction implementation
             if (item.restrict && !item.restrict.includes(role || '')) return null;
 
-            const Icon = item.icon; 
-            const active = activeTab === item.id || item.subItems?.some(s => s.id === activeTab);
+            const Icon = item.icon;
+            const isParentActive = item.subItems?.some(s => s.id === activeTab);
+            const isDirectActive = !item.subItems && activeTab === item.id;
             const isExpanded = expandedMenus.includes(item.id);
 
+            const itemClass = [
+              'admin-nav-item',
+              isDirectActive ? 'active' : '',
+              isParentActive ? 'parent-active' : '',
+            ].filter(Boolean).join(' ');
+
             return (
-              <div key={item.id} className="space-y-0.5">
-                <button onClick={() => {
-                  if (item.subItems) {
-                    setExpandedMenus(prev => prev.includes(item.id) ? prev.filter(m => m !== item.id) : [...prev, item.id]);
-                  } else {
-                    setActiveTab(item.id as TabId);
-                  }
-                }}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all group ${active && !item.subItems ? 'bg-primary/15 text-primary shadow-sm ring-1 ring-primary/20' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'}`}>
-                  <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`} />
-                  <span className={`flex-1 text-sm font-medium ${active && item.subItems ? 'text-foreground' : ''}`}>{item.label}</span>
+              <div key={item.id}>
+                <button
+                  className={itemClass}
+                  onClick={() => {
+                    if (item.subItems) {
+                      setExpandedMenus(prev =>
+                        prev.includes(item.id) ? prev.filter(m => m !== item.id) : [...prev, item.id]
+                      );
+                    } else {
+                      setActiveTab(item.id as TabId);
+                    }
+                  }}
+                >
+                  <Icon className="nav-icon" />
+                  <span className="nav-label">{item.label}</span>
                   {item.count !== undefined && (
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${active && !item.subItems ? 'bg-primary/20 text-primary' : item.badge ? 'bg-amber-500/20 text-amber-400' : 'bg-muted text-muted-foreground'}`}>{item.count}</span>
+                    <span className={`admin-nav-badge${item.badge ? ' danger' : ''}`}>{item.count}</span>
                   )}
                   {item.subItems && (
-                    <ChevronDown className={`w-4 h-4 shrink-0 transition-transform text-muted-foreground group-hover:text-foreground ${isExpanded ? 'rotate-180' : ''}`} />
+                    <ChevronDown
+                      style={{ width: 14, height: 14, flexShrink: 0, opacity: 0.6 }}
+                      className={`admin-chevron${isExpanded ? ' open' : ''}`}
+                    />
                   )}
                 </button>
+
                 {item.subItems && isExpanded && (
-                  <div className="pl-9 space-y-0.5 mt-1 border-l-2 border-border/40 ml-4 py-1">
+                  <div className="admin-nav-subitems">
                     {item.subItems.map(sub => {
                       const SubIcon = sub.icon;
                       const subActive = activeTab === sub.id;
                       return (
-                        <button key={sub.id} onClick={() => setActiveTab(sub.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all group ${subActive ? 'bg-primary/15 text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'}`}>
-                          <SubIcon className={`w-3.5 h-3.5 shrink-0 ${subActive ? 'text-primary' : 'text-muted-foreground/70 group-hover:text-foreground'}`} />
-                          <span className="flex-1 text-sm font-medium">{sub.label}</span>
+                        <button
+                          key={sub.id}
+                          className={`admin-nav-subitem${subActive ? ' active' : ''}`}
+                          onClick={() => setActiveTab(sub.id)}
+                        >
+                          <SubIcon className="nav-icon" />
+                          <span style={{ flex: 1 }}>{sub.label}</span>
                           {sub.count !== undefined && (
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${subActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>{sub.count}</span>
+                            <span className="admin-nav-badge">{sub.count}</span>
                           )}
                         </button>
                       );
@@ -570,78 +607,99 @@ export default function Admin() {
           })}
         </nav>
 
-        <div className="p-3 border-t border-border/40 space-y-1">
-          <button onClick={() => { logout(); navigate('/login'); }} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all text-sm">
-            <LogOut className="w-4 h-4 shrink-0" /><span>Sair do sistema</span>
+        {/* Footer buttons */}
+        <div className="admin-sidebar-footer">
+          <button className="admin-sidebar-footer-btn danger" onClick={() => { logout(); navigate('/login'); }}>
+            <LogOut style={{ width: 15, height: 15, flexShrink: 0 }} />
+            <span>Sair do sistema</span>
           </button>
-          <button onClick={() => navigate('/')} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all text-sm">
-            <Map className="w-4 h-4 shrink-0" /><span>Ver Mapa</span>
+          <button className="admin-sidebar-footer-btn" onClick={() => navigate('/')}>
+            <Map style={{ width: 15, height: 15, flexShrink: 0 }} />
+            <span>Ver Mapa</span>
           </button>
         </div>
       </aside>
 
-      {/* ── MAIN ── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 px-6 flex items-center justify-between border-b border-border/40 bg-card/30 shrink-0">
-          <div className="flex items-center gap-3">
-            {navItems.find(n => n.id === activeTab) && React.createElement(navItems.find(n => n.id === activeTab)!.icon, { className: 'w-5 h-5 text-primary' })}
+      {/* ══ MAIN ══ */}
+      <div className="admin-main">
+
+        {/* Top Header */}
+        <header className="admin-header">
+          <div className="admin-header-left">
+            {activeNavInfo && (
+              <div className="admin-header-icon">
+                {React.createElement(activeNavInfo.icon, { style: { width: 17, height: 17 } })}
+              </div>
+            )}
             <div>
-              <h1 className="text-base font-semibold text-foreground">{navItems.find(n => n.id === activeTab)?.label}</h1>
-              <p className="text-xs text-muted-foreground">Painel Administrativo</p>
+              <h1 className="admin-header-title">{activeNavInfo?.label ?? 'Painel'}</h1>
+              <p className="admin-header-sub">Painel Administrativo</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="admin-header-right">
             <ThemeToggle />
-            <button onClick={fetchAll} className="p-2 rounded-lg hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-all" title="Recarregar dados">
-              <RefreshCw className="w-4 h-4" />
+            <button className="admin-header-icon-btn" onClick={fetchAll} title="Recarregar dados">
+              <RefreshCw style={{ width: 15, height: 15 }} />
             </button>
-            <Button onClick={handleDownloadLogisticsPlan} disabled={isGeneratingPlan} variant="outline" className="gap-2 shrink-0 border-primary/30 hover:bg-primary/5 text-primary">
-              {isGeneratingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} {isGeneratingPlan ? 'Gerando...' : 'Gerar Plano Logístico'}
-            </Button>
-            {pendingInterests > 0 && <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-1.5"><AlertCircle className="w-3.5 h-3.5 text-amber-400" /><span className="text-xs font-semibold text-amber-400">{pendingInterests} pendente(s)</span></div>}
+            <button
+              className="admin-header-action-btn"
+              onClick={handleDownloadLogisticsPlan}
+              disabled={isGeneratingPlan}
+            >
+              {isGeneratingPlan
+                ? <Loader2 style={{ width: 15, height: 15 }} className="animate-spin" />
+                : <Download style={{ width: 15, height: 15 }} />
+              }
+              {isGeneratingPlan ? 'Gerando...' : 'Gerar Plano Logístico'}
+            </button>
+            {pendingInterests > 0 && (
+              <div className="admin-pending-badge">
+                <AlertCircle style={{ width: 13, height: 13 }} />
+                <span>{pendingInterests} pendente(s)</span>
+              </div>
+            )}
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="admin-content">
 
           {/* ══ DASHBOARD ══ */}
           {activeTab === 'dashboard' && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                  { label: 'Usuários', value: users.length, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10', tab: 'users' as TabId },
-                  { label: 'Representantes', value: reps.length, icon: Briefcase, color: 'text-purple-400', bg: 'bg-purple-500/10', tab: 'reps' as TabId },
-                  { label: 'Territórios', value: territories.length, icon: MapPin, color: 'text-green-400', bg: 'bg-green-500/10', tab: 'territories' as TabId },
-                  { label: 'Pendentes', value: pendingInterests, icon: HandHeart, color: 'text-amber-400', bg: 'bg-amber-500/10', tab: 'interests' as TabId },
-                  { label: 'Grupos', value: groups.length, icon: UsersRound, color: 'text-cyan-400', bg: 'bg-cyan-500/10', tab: 'groups' as TabId },
-                  { label: 'Notificações', value: notifications.length, icon: Bell, color: 'text-pink-400', bg: 'bg-pink-500/10', tab: 'notifications' as TabId },
-                  { label: 'Logs Auditoria', value: auditLogs.length, icon: ScrollText, color: 'text-orange-400', bg: 'bg-orange-500/10', tab: 'audit' as TabId },
-                  { label: 'Interesses', value: interests.length, icon: Activity, color: 'text-indigo-400', bg: 'bg-indigo-500/10', tab: 'interests' as TabId },
+                  { label: 'Usuários', value: users.length, icon: Users, iconBg: '#EFF6FF', iconColor: '#3B82F6', tab: 'users' as TabId },
+                  { label: 'Representantes', value: reps.length, icon: Briefcase, iconBg: '#F5F3FF', iconColor: '#8B5CF6', tab: 'reps' as TabId },
+                  { label: 'Territórios', value: territories.length, icon: MapPin, iconBg: '#F0FDF4', iconColor: '#22C55E', tab: 'territories' as TabId },
+                  { label: 'Pendentes', value: pendingInterests, icon: HandHeart, iconBg: 'hsl(43 58% 52% / 0.12)', iconColor: 'hsl(43 58% 38%)', tab: 'interests' as TabId },
+                  { label: 'Grupos', value: groups.length, icon: UsersRound, iconBg: '#ECFEFF', iconColor: '#06B6D4', tab: 'groups' as TabId },
+                  { label: 'Notificações', value: notifications.length, icon: Bell, iconBg: '#FFF1F2', iconColor: '#F43F5E', tab: 'notifications' as TabId },
+                  { label: 'Logs Auditoria', value: auditLogs.length, icon: ScrollText, iconBg: '#FFF7ED', iconColor: '#F97316', tab: 'audit' as TabId },
+                  { label: 'Interesses', value: interests.length, icon: Activity, iconBg: '#EEF2FF', iconColor: '#6366F1', tab: 'interests' as TabId },
                 ].map(s => (
-                  <button key={s.label} onClick={() => setActiveTab(s.tab)}
-                    className="bg-card border border-border/40 rounded-xl p-4 text-left hover:border-primary/30 hover:bg-card/80 transition-all group">
-                    <div className={`w-9 h-9 ${s.bg} rounded-lg flex items-center justify-center mb-3`}>
-                      <s.icon className={`w-5 h-5 ${s.color}`} />
+                  <button key={s.label} onClick={() => setActiveTab(s.tab)} className="admin-stat-card text-left">
+                    <div className="admin-stat-card-icon" style={{ background: s.iconBg }}>
+                      <s.icon style={{ width: 18, height: 18, color: s.iconColor }} />
                     </div>
-                    <p className="text-2xl font-bold text-foreground">{s.value}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+                    <p className="admin-stat-card-value">{s.value}</p>
+                    <p className="admin-stat-card-label">{s.label}</p>
                   </button>
                 ))}
               </div>
 
-              <Card className="border-border/40">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm flex items-center gap-2"><ScrollText className="w-4 h-4 text-primary" />Atividade Recente</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
+              <div className="admin-card">
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid hsl(var(--admin-card-border))', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <ScrollText style={{ width: 15, height: 15, color: 'hsl(var(--admin-sidebar-accent))' }} />
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>Atividade Recente</span>
+                </div>
                   {auditLogs.length === 0 ? (
                     <div className="py-10 text-center text-muted-foreground"><Activity className="w-8 h-8 mx-auto mb-2 opacity-20" /><p className="text-sm">Nenhuma atividade registrada</p></div>
                   ) : (
                     <div className="divide-y divide-border/30">
                       {auditLogs.slice(0, 8).map(log => (
                         <div key={log.id} className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/20">
-                          <div className="w-7 h-7 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-                            <BadgeCheck className="w-3.5 h-3.5 text-primary" />
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: 'hsl(var(--admin-sidebar-accent) / 0.1)' }}>
+                            <BadgeCheck style={{ width: 13, height: 13, color: 'hsl(var(--admin-sidebar-accent))' }} />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-foreground truncate">{log.details}</p>
@@ -652,8 +710,7 @@ export default function Admin() {
                       ))}
                     </div>
                   )}
-                </CardContent>
-              </Card>
+              </div>
             </div>
           )}
 
