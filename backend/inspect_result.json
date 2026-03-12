@@ -1,0 +1,47 @@
+[
+  [
+    "cod-rep",
+    "nome-abrev",
+    "nome",
+    "e-mail",
+    "ind-situacao",
+    "total-Clientes-ultimo-semestre",
+    "total-clientes"
+  ],
+  [
+    10,
+    "HERNANI",
+    "HERNANI J.T.MACHADO REP-ME",
+    "hernani.machado@uol.com.br",
+    1,
+    64,
+    297
+  ],
+  [
+    12,
+    "J.GUILHERME",
+    "J.GUILHERME REPRESENTACOES LTDA",
+    "jguilhermerepresentacoes@gmail.com",
+    1,
+    122,
+    509
+  ],
+  [
+    29,
+    "SCHLEU",
+    "SCHLEU SERRA REPRESENTACOES LTDA",
+    "erwinschleu@hotmail.com",
+    1,
+    151,
+    939
+  ],
+  [
+    30,
+    "T.LOUREIRO",
+    "T.LOUREIRO REPRESENTACOES LTDA",
+    "sloureiro@n3.com.br",
+    1,
+    67,
+    184
+  ]
+]

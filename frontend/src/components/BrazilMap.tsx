@@ -28,6 +28,7 @@ interface BrazilMapProps {
   municipioCodeForBairros?: number | null;
   onDeactivateBairros?: () => void;
   selectedMunicipioName?: string | null;
+  showClientes: boolean;
   onContextMenuState?: (nome: string, uf: string, x: number, y: number) => void;
   onContextMenuMunicipio?: (nome: string, uf: string, x: number, y: number) => void;
 }
@@ -92,17 +93,33 @@ function useApiTerritories() {
   });
 }
 
+function useApiClientes() {
+  const { token } = useAuth();
+  return useQuery<any[]>({
+    queryKey: ["api", "clientes"],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/api/clientes`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return res.ok ? res.json() : [];
+    },
+    enabled: !!token,
+    staleTime: 60_000,
+  });
+}
+
 // ─── Main BrazilMap Component ─────────────────────────────────────────────────
 export default function BrazilMap({
   selectedUF, modo, filtroRepresentante, mostrarVagos,
   onSelectUF, onSelectMunicipio, searchQuery,
-  municipioCodeForBairros, onDeactivateBairros, selectedMunicipioName,
+  municipioCodeForBairros, onDeactivateBairros, selectedMunicipioName, showClientes,
   onContextMenuState, onContextMenuMunicipio,
 }: BrazilMapProps) {
   const { role, estado_end } = useAuth();
   const { data: statesGeo } = useStatesGeoJSON();
   const { data: apiReps = [] } = useApiRepresentatives();
   const { data: apiTerritories = [] } = useApiTerritories();
+  const { data: apiClientes = [] } = useApiClientes();
 
   const ufInfo = selectedUF ? getUFBySigla(selectedUF) : null;
   const { data: municipiosGeo } = useMunicipiosGeoJSON(ufInfo?.codigo ?? null);
@@ -253,6 +270,11 @@ export default function BrazilMap({
 
   const munGeo = selectedMunicipioGeo();
 
+  // Filter clients to show only on the currently selected state to prevent clutter
+  const visibleClientes = showClientes && apiClientes 
+    ? apiClientes.filter(c => selectedUF && c.uf === selectedUF && c.latitude && c.longitude)
+    : [];
+
   return (
     <div className="w-full h-full relative">
       <MapContainer
@@ -365,6 +387,31 @@ export default function BrazilMap({
             )}
           </>
         )}
+
+        {/* ── Client Pins ── */}
+        {showClientes && visibleClientes.map((cliente) => (
+          <CircleMarker
+            key={`cliente-${cliente.id_cliente}`}
+            center={[cliente.latitude, cliente.longitude]}
+            radius={5}
+            pathOptions={{
+              fillColor: "hsl(190, 90%, 50%)",
+              color: "hsl(190, 90%, 20%)",
+              weight: 1.5,
+              opacity: 1,
+              fillOpacity: 0.8
+            }}
+          >
+            <LeafletTooltip direction="top" className="custom-tooltip">
+              <div className="text-sm">
+                <strong>{cliente.nome_cliente}</strong>
+                {cliente.nome_abreviado && <p className="text-xs text-muted-foreground">{cliente.nome_abreviado}</p>}
+                {cliente.endereco_completo && <p className="text-[10px] mt-1 text-muted-foreground max-w-[200px] whitespace-normal">{cliente.endereco_completo}</p>}
+                {cliente.bairro && <p className="text-[10px] text-muted-foreground">Bairro: {cliente.bairro}</p>}
+              </div>
+            </LeafletTooltip>
+          </CircleMarker>
+        ))}
       </MapContainer>
 
       {/* Deactivate button */}

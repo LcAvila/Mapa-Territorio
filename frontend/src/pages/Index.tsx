@@ -18,8 +18,9 @@ const Index = () => {
   const [filtroRepresentante, setFiltroRepresentante] = useState<string | null>(null);
   const [mostrarVagos, setMostrarVagos] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedMunicipio, setSelectedMunicipio] = useState<{ nome: string; uf: string } | null>(null);
+  const [selectedMunicipio, setSelectedMunicipio] = useState<{ nome: string; uf: string; id?: number } | null>(null);
   const [municipioCodeForBairros, setMunicipioCodeForBairros] = useState<number | null>(null);
+  const [showClientes, setShowClientes] = useState(false);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -33,9 +34,26 @@ const Index = () => {
     setMunicipioCodeForBairros(null);
   }, []);
 
-  const handleSelectMunicipio = useCallback((nome: string, uf: string) => {
+  const handleSelectMunicipio = useCallback(async (nome: string, uf: string) => {
     setSelectedMunicipio({ nome, uf });
-    setMunicipioCodeForBairros(null);
+    
+    // Automatically load neighborhoods for the selected municipality
+    const ufInfo = getUFBySigla(uf);
+    if (!ufInfo) return;
+    
+    try {
+      const res = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${ufInfo.codigo}/municipios`);
+      if (res.ok) {
+        const data: { id: number; nome: string }[] = await res.json();
+        const mun = data.find(m => m.nome.toLowerCase() === nome.toLowerCase());
+        if (mun) {
+          setMunicipioCodeForBairros(mun.id);
+          setSelectedMunicipio({ nome, uf, id: mun.id });
+        }
+      }
+    } catch {
+      // Failed to load neighborhoods silently
+    }
   }, []);
 
   const handleContextMenuState = useCallback((nome: string, uf: string, x: number, y: number) => {
@@ -86,6 +104,8 @@ const Index = () => {
         isAuthenticated={isAuthenticated}
         role={role}
         logout={logout}
+        showClientes={showClientes}
+        onToggleClientes={() => setShowClientes(!showClientes)}
       />
 
       <div className="flex-1 relative overflow-hidden">
@@ -99,8 +119,12 @@ const Index = () => {
           onSelectMunicipio={handleSelectMunicipio}
           searchQuery={searchQuery}
           municipioCodeForBairros={municipioCodeForBairros}
-          onDeactivateBairros={() => setMunicipioCodeForBairros(null)}
+          onDeactivateBairros={() => {
+            setMunicipioCodeForBairros(null);
+            setSelectedMunicipio(null);
+          }}
           selectedMunicipioName={selectedMunicipio?.nome}
+          showClientes={showClientes}
           onContextMenuState={handleContextMenuState}
           onContextMenuMunicipio={handleContextMenuMunicipio}
         />

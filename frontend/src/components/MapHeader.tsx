@@ -28,11 +28,14 @@ interface MapHeaderProps {
   isAuthenticated: boolean;
   role: string | null;
   logout: () => void;
+  showClientes: boolean;
+  onToggleClientes: () => void;
 }
 
 export default function MapHeader({
   selectedUF, onSelectUF, modo, onSetModo,
-  searchQuery, onSearchChange, isAuthenticated, role, logout
+  searchQuery, onSearchChange, isAuthenticated, role, logout,
+  showClientes, onToggleClientes
 }: MapHeaderProps) {
   const navigate = useNavigate();
   const { repCode } = useAuth();
@@ -138,11 +141,25 @@ export default function MapHeader({
       {selectedUF && (
         <button
           onClick={() => onSelectUF(null)}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mr-2"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           Voltar ao Brasil
         </button>
+      )}
+
+      {/* Toggle Clientes Button */}
+      {isAuthenticated && selectedUF && (
+         <Button 
+           variant={showClientes ? "default" : "outline"} 
+           size="sm" 
+           onClick={onToggleClientes}
+           className={`gap-1.5 transition-all mr-2 ${showClientes ? "bg-cyan-600 hover:bg-cyan-700 text-white" : ""}`}
+           title="Ativar/Desativar exibição de clientes no mapa"
+         >
+           <User className="w-4 h-4" />
+           <span className="hidden sm:inline">{showClientes ? "Ocultar Clientes" : "Mostrar Clientes"}</span>
+         </Button>
       )}
 
       {/* Auth / Admin / Notifications Buttons */}
