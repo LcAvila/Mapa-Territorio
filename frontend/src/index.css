@@ -157,15 +157,15 @@
     --login-card-border: 168 50% 40% / 0.22;
     --login-input-bg: 220 20% 8% / 0.8;
 
-    /* ── Admin Panel (dark mode keeps same sidebar — always dark green) ── */
-    --admin-sidebar-bg: 155 33% 17%;
-    --admin-sidebar-bg-end: 155 38% 13%;
-    --admin-sidebar-accent: 43 58% 50%;
-    --admin-sidebar-accent-hover: 43 65% 60%;
-    --admin-sidebar-text: 120 10% 88%;
-    --admin-sidebar-muted: 155 15% 50%;
-    --admin-sidebar-item-hover: 155 30% 23%;
-    --admin-sidebar-border: 155 25% 24%;
+    /* ── Admin Panel (dark mode) ── */
+    --admin-sidebar-bg: 220 20% 8%;
+    --admin-sidebar-bg-end: 220 18% 11%;
+    --admin-sidebar-accent: 155 45% 38%;
+    --admin-sidebar-accent-hover: 155 40% 48%;
+    --admin-sidebar-text: 210 15% 80%;
+    --admin-sidebar-muted: 215 12% 55%;
+    --admin-sidebar-item-hover: 220 15% 18%;
+    --admin-sidebar-border: 220 15% 20%;
     --admin-content-bg: 220 18% 11%;
     --admin-header-bg: 220 18% 13%;
     --admin-card-bg: 220 18% 14%;
