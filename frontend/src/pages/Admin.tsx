@@ -11,8 +11,10 @@ import {
   Clock, LayoutDashboard, Bell, ScrollText, UsersRound, Briefcase, Send, Eye, EyeOff,
   Building2, Filter, RefreshCw, ChevronRight, MessageSquare, Globe, Activity,
   TrendingUp, AlertCircle, BadgeCheck, Palette, Upload, ImageOff, Download, Truck, Settings,
-  Database, Layers, Grid3X3, Calendar, FileSpreadsheet, Camera
+  Database, Layers, Grid3X3, Calendar, FileSpreadsheet, Camera, Percent, Mail, Phone, MapPinned
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -30,7 +32,22 @@ import { RotasProvider } from '../contexts/RotasContext';
 import MiniMapBrasil from '../components/admin/MiniMapBrasil';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
-interface Representative { code: string; name: string; fullName: string; isVago: boolean; colorIndex: number; }
+interface Representative { 
+  code: string; 
+  name: string; 
+  fullName: string; 
+  isVago: boolean; 
+  colorIndex: number; 
+  email?: string;
+  contato?: string;
+  endereco?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
+  cep?: string;
+  comissao?: number;
+  _count?: { clientes: number; territories: number; };
+}
 interface Territory { id: number; municipio: string; uf: string; repCode: string; modo: string; }
 interface SystemUser { id: number; username: string; role: string; repCode: string | null; fullName?: string; full_name?: string; document?: string; cpf_cnpj?: string; documentType?: 'cpf' | 'cnpj'; companyName?: string; age?: number; email?: string; photo?: string; }
 interface InterestRequest { id: number; nome: string; email: string | null; telefone: string | null; empresa: string | null; municipio: string; uf: string; modo: string | null; observacoes: string | null; status: 'pending' | 'accepted' | 'rejected'; created_at: string; }
@@ -195,8 +212,14 @@ export default function Admin() {
 
   // ── Reps form ──────────────────────────────────────────────────────────────
   const [editingCode, setEditingCode] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', fullName: '', isVago: false });
-  const [newRep, setNewRep] = useState({ code: '', name: '', fullName: '', isVago: false });
+  const [editForm, setEditForm] = useState({ 
+    name: '', fullName: '', isVago: false, email: '', contato: '', 
+    endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: '' 
+  });
+  const [newRep, setNewRep] = useState({ 
+    code: '', name: '', fullName: '', isVago: false, email: '', contato: '', 
+    endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: '' 
+  });
 
   // ── Users form (enhanced) ─────────────────────────────────────────────────
   const [newUser, setNewUser] = useState({ fullName: '', email: '', password: '', confirmPassword: '', role: 'user', repCode: '', documentType: 'cpf' as 'cpf' | 'cnpj', document: '', companyName: '', age: '', photo: '' });
@@ -257,8 +280,8 @@ export default function Admin() {
     setLoading(true);
     try {
       const [rR, tR, uR, iR] = await Promise.all([
-        fetch(`${API}/api/admin/reps`),
-        fetch(`${API}/api/admin/territories`),
+        fetch(`${API}/api/admin/reps`, { headers: authHeaders }),
+        fetch(`${API}/api/admin/territories`, { headers: authHeaders }),
         fetch(`${API}/api/admin/users`, { headers: authHeaders }),
         fetch(`${API}/api/interest`, { headers: authHeaders }),
       ]);
@@ -329,8 +352,24 @@ export default function Admin() {
     e.preventDefault();
     if (!newRep.code.trim() || !newRep.name.trim()) { toast.error('Código e nome obrigatórios'); return; }
     const colorIndex = newRep.isVago ? 0 : getNextColorIndex(reps);
-    const res = await fetch(`${API}/api/admin/reps`, { method: 'POST', headers: authHeaders, body: JSON.stringify({ ...newRep, fullName: newRep.fullName || newRep.name, colorIndex }) });
-    if (res.ok) { toast.success(`Representante ${newRep.code} cadastrado!`); addAudit('create_rep', 'Representante', newRep.code, `Criou rep ${newRep.code} — ${newRep.name}`); setNewRep({ code: '', name: '', fullName: '', isVago: false }); fetchAll(); }
+    const res = await fetch(`${API}/api/admin/reps`, { 
+      method: 'POST', 
+      headers: authHeaders, 
+      body: JSON.stringify({ 
+        ...newRep, 
+        fullName: newRep.fullName || newRep.name, 
+        colorIndex 
+      }) 
+    });
+    if (res.ok) { 
+      toast.success(`Representante ${newRep.code} cadastrado!`); 
+      addAudit('create_rep', 'Representante', newRep.code, `Criou rep ${newRep.code} — ${newRep.name}`); 
+      setNewRep({ 
+        code: '', name: '', fullName: '', isVago: false, email: '', contato: '', 
+        endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: '' 
+      }); 
+      fetchAll(); 
+    }
     else { const err = await res.json(); toast.error(err.message || 'Erro'); }
   };
 
@@ -345,8 +384,20 @@ export default function Admin() {
 
   const handleUpdateRep = async (code: string) => {
     if (!editForm.name.trim()) { toast.error('Nome obrigatório'); return; }
-    const res = await fetch(`${API}/api/admin/reps/${code}`, { method: 'PUT', headers: authHeaders, body: JSON.stringify(editForm) });
-    if (res.ok) { toast.success('Atualizado!'); addAudit('update_rep', 'Representante', code, `Editou rep ${code}`); setEditingCode(null); fetchAll(); }
+    const res = await fetch(`${API}/api/admin/reps/${code}`, { 
+      method: 'PUT', 
+      headers: authHeaders, 
+      body: JSON.stringify({
+        ...editForm,
+        fullName: editForm.fullName || editForm.name
+      }) 
+    });
+    if (res.ok) { 
+      toast.success('Atualizado!'); 
+      addAudit('update_rep', 'Representante', code, `Editou rep ${code}`); 
+      setEditingCode(null); 
+      fetchAll(); 
+    }
     else toast.error('Erro ao atualizar');
   };
 
@@ -490,11 +541,11 @@ export default function Admin() {
 
   const navItems: { id: TabId | 'settings' | 'rotas_menu'; label: string; icon: React.ElementType; count?: number; badge?: boolean; restrict?: string[]; subItems?: { id: TabId; label: string; icon: React.ElementType; count?: number; }[] }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, restrict: ['admin'] },
-    { id: 'reps', label: 'Representantes', icon: Briefcase, count: reps.length, restrict: ['admin'] },
-    { id: 'territories', label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin'] },
+    { id: 'reps', label: 'Representantes', icon: Briefcase, count: reps.length, restrict: ['admin', 'supervisor'] },
+    { id: 'baserotas', label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor'] },
+    { id: 'territories', label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin', 'supervisor'] },
     { id: 'rotas_menu', label: 'Rotas', icon: Truck, restrict: ['admin', 'supervisor'], subItems: [
         { id: 'leituraplanilha', label: 'Leitura Excel', icon: FileSpreadsheet },
-        { id: 'baserotas', label: 'Base Cliente', icon: Database },
         { id: 'clusters', label: 'Clusters', icon: Layers },
         { id: 'blocos', label: 'Blocos', icon: Grid3X3 },
         { id: 'roteiros', label: 'Roteiros', icon: Map },
@@ -1227,65 +1278,251 @@ export default function Admin() {
 
           {/* ══ REPRESENTANTES ══ */}
           {activeTab === 'reps' && (
-            <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
-              <div className="xl:col-span-2">
-                <Card className="border-border/40">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="flex items-center gap-2 text-sm"><div className="w-7 h-7 bg-primary/15 rounded-md flex items-center justify-center"><Briefcase className="w-3.5 h-3.5 text-primary" /></div>Novo Representante</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <form onSubmit={handleCreateRep} className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Código *</label><Input placeholder="Ex: REP001" value={newRep.code} onChange={e => setNewRep({ ...newRep, code: e.target.value })} required /></div>
-                        <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Nome Curto *</label><Input placeholder="Ex: AVILA" value={newRep.name} onChange={e => setNewRep({ ...newRep, name: e.target.value })} required /></div>
-                      </div>
-                      <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Nome da Representação</label><Input placeholder="Nome completo ou razão social" value={newRep.fullName} onChange={e => setNewRep({ ...newRep, fullName: e.target.value })} /></div>
-                      <label className="flex items-center gap-2.5 text-sm text-muted-foreground cursor-pointer select-none p-3 rounded-lg border border-border/50 hover:bg-secondary/30 transition-colors">
-                        <input type="checkbox" checked={newRep.isVago} onChange={e => setNewRep({ ...newRep, isVago: e.target.checked })} className="rounded" />
-                        <div><p className="text-xs font-medium text-foreground">Marcar como Vago</p><p className="text-[10px] text-muted-foreground">Territórios sem representante ativo</p></div>
-                      </label>
-                      <Button className="w-full gap-2" type="submit"><Plus className="w-4 h-4" />Cadastrar Representante</Button>
-                    </form>
-                  </CardContent>
-                </Card>
-              </div>
-              <div className="xl:col-span-3">
-                <Card className="border-border/40">
-                  <CardHeader className="pb-3"><div className="flex items-center justify-between"><CardTitle className="text-sm">Representantes Cadastrados</CardTitle><span className="text-xs text-muted-foreground bg-secondary/50 px-2.5 py-1 rounded-full">{reps.length} total</span></div></CardHeader>
-                  <CardContent className="p-0">
-                    {reps.length === 0 ? (<div className="py-16 text-center text-muted-foreground"><Briefcase className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Nenhum representante</p></div>) : (
-                      <div className="overflow-hidden rounded-b-lg"><Table>
-                        <TableHeader><TableRow className="hover:bg-transparent border-border/40"><TableHead className="w-8 pl-4"></TableHead><TableHead className="w-20">Código</TableHead><TableHead>Nome</TableHead><TableHead className="w-14 text-center">Terr.</TableHead><TableHead className="w-20 pr-4"></TableHead></TableRow></TableHeader>
-                        <TableBody>{reps.map(rep => (
-                          <React.Fragment key={rep.code}>
-                            <TableRow className={`border-border/30 ${editingCode === rep.code ? 'bg-primary/5' : 'hover:bg-secondary/30'}`}>
-                              <TableCell className="pl-4"><div className="w-3 h-3 rounded-full" style={{ background: rep.isVago ? '#555' : (REP_COLOR_PALETTE[rep.colorIndex] || '#888') }} /></TableCell>
-                              <TableCell className="font-mono text-xs font-bold text-primary">{rep.code}</TableCell>
-                              <TableCell><p className="text-xs font-medium">{rep.name}</p>{rep.isVago && <span className="text-[10px] text-orange-400 font-semibold">VAGO</span>}</TableCell>
-                              <TableCell className="text-center text-xs text-muted-foreground">{territories.filter(t => t.repCode === rep.code).length}</TableCell>
-                              <TableCell className="pr-4"><div className="flex gap-1 justify-end">
-                                <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-primary/10 hover:text-primary" onClick={() => editingCode === rep.code ? setEditingCode(null) : (setEditingCode(rep.code), setEditForm({ name: rep.name, fullName: rep.fullName, isVago: rep.isVago }))}>{editingCode === rep.code ? <X className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}</Button>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteRep(rep.code, rep.name)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                              </div></TableCell>
-                            </TableRow>
-                            {editingCode === rep.code && (<TableRow className="bg-primary/5 border-border/30"><TableCell colSpan={5} className="py-3 px-6">
-                              <div className="space-y-2">
-                                <p className="text-[10px] font-bold text-primary uppercase tracking-widest">Editando {rep.code}</p>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div className="space-y-1"><label className="text-[10px] text-muted-foreground">Nome Curto</label><Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className="h-8 text-xs" /></div>
-                                  <div className="space-y-1"><label className="text-[10px] text-muted-foreground">Nome Completo</label><Input value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} className="h-8 text-xs" /></div>
-                                </div>
-                                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer"><input type="checkbox" checked={editForm.isVago} onChange={e => setEditForm(f => ({ ...f, isVago: e.target.checked }))} />Marcar como Vago</label>
-                                <div className="flex gap-2"><Button size="sm" className="gap-1.5 h-7 text-xs" onClick={() => handleUpdateRep(rep.code)}><Save className="w-3 h-3" />Salvar</Button><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingCode(null)}>Cancelar</Button></div>
-                              </div>
-                            </TableCell></TableRow>)}
-                          </React.Fragment>
-                        ))}</TableBody>
-                      </Table></div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+            <div className="space-y-4">
+              <Card className="border-border/40">
+                <CardHeader className="pb-3 px-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Briefcase className="w-5 h-5 text-primary" />
+                        Representantes
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground mt-1">Gerencie a equipe de representantes e suas informações de contato.</p>
+                    </div>
+                    
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button className="gap-2">
+                          <Plus className="w-4 h-4" />
+                          Cadastrar Representante
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2">
+                            <UserPlus className="w-5 h-5 text-primary" />
+                            Novo Representante
+                          </DialogTitle>
+                        </DialogHeader>
+                        <form onSubmit={(e) => { handleCreateRep(e); document.body.click(); }} className="space-y-4 pt-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5"><Label className="text-xs font-medium">Código *</Label><Input placeholder="Ex: REP001" value={newRep.code} onChange={e => setNewRep({ ...newRep, code: e.target.value })} required /></div>
+                            <div className="space-y-1.5"><Label className="text-xs font-medium">Nome Curto *</Label><Input placeholder="Ex: AVILA" value={newRep.name} onChange={e => setNewRep({ ...newRep, name: e.target.value })} required /></div>
+                          </div>
+                          <div className="space-y-1.5"><Label className="text-xs font-medium">Razão Social / Nome Completo</Label><Input placeholder="Nome completo ou razão social" value={newRep.fullName} onChange={e => setNewRep({ ...newRep, fullName: e.target.value })} /></div>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5"><Label className="text-xs font-medium">E-mail</Label><Input type="email" placeholder="email@exemplo.com" value={newRep.email} onChange={e => setNewRep({ ...newRep, email: e.target.value })} /></div>
+                            <div className="space-y-1.5"><Label className="text-xs font-medium">Contato / Telefone</Label><Input placeholder="(00) 00000-0000" value={newRep.contato} onChange={e => setNewRep({ ...newRep, contato: e.target.value })} /></div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="col-span-2 space-y-1.5"><Label className="text-xs font-medium">Endereço</Label><Input placeholder="Rua, número, etc." value={newRep.endereco} onChange={e => setNewRep({ ...newRep, endereco: e.target.value })} /></div>
+                            <div className="space-y-1.5"><Label className="text-xs font-medium">CEP</Label><Input placeholder="00000-000" value={newRep.cep} onChange={e => setNewRep({ ...newRep, cep: e.target.value })} /></div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-1.5"><Label className="text-xs font-medium">Bairro</Label><Input placeholder="Bairro" value={newRep.bairro} onChange={e => setNewRep({ ...newRep, bairro: e.target.value })} /></div>
+                            <div className="space-y-1.5"><Label className="text-xs font-medium">Cidade</Label><Input placeholder="Cidade" value={newRep.cidade} onChange={e => setNewRep({ ...newRep, cidade: e.target.value })} /></div>
+                            <div className="space-y-1.5"><Label className="text-xs font-medium">UF</Label><Input placeholder="UF" value={newRep.uf} onChange={e => setNewRep({ ...newRep, uf: e.target.value?.toUpperCase() })} maxLength={2} /></div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5"><Label className="text-xs font-medium">% Comissão</Label><div className="relative"><Percent className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" /><Input type="number" step="0.01" className="pl-9" placeholder="0.00" value={newRep.comissao} onChange={e => setNewRep({ ...newRep, comissao: e.target.value })} /></div></div>
+                            <div className="flex items-end pb-1">
+                              <label className="flex items-center gap-2.5 text-sm text-muted-foreground cursor-pointer select-none p-2 rounded-lg border border-border/50 hover:bg-secondary/30 transition-colors w-full">
+                                <input type="checkbox" checked={newRep.isVago} onChange={e => setNewRep({ ...newRep, isVago: e.target.checked })} className="rounded" />
+                                <div><p className="text-xs font-medium text-foreground">Marcar como Vago</p></div>
+                              </label>
+                            </div>
+                          </div>
+
+                          <Button className="w-full gap-2 mt-2" type="submit"><Plus className="w-4 h-4" />Cadastrar Representante</Button>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {reps.length === 0 ? (
+                    <div className="py-24 text-center text-muted-foreground">
+                      <Briefcase className="w-12 h-12 mx-auto mb-4 opacity-10" />
+                      <p className="text-sm">Nenhum representante cadastrado</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent border-border/40">
+                            <TableHead className="w-12 pl-6"></TableHead>
+                            <TableHead className="w-24">Código</TableHead>
+                            <TableHead>Representante</TableHead>
+                            <TableHead>Contato</TableHead>
+                            <TableHead>Localização</TableHead>
+                            <TableHead className="w-24 text-center">Comissão</TableHead>
+                            <TableHead className="w-24 text-center">Clientes</TableHead>
+                            <TableHead className="w-24 text-center">Territórios</TableHead>
+                            <TableHead className="w-20 pr-6 text-right">Ações</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {reps.map(rep => (
+                            <React.Fragment key={rep.code}>
+                              <TableRow className={`border-border/30 ${editingCode === rep.code ? 'bg-primary/5' : 'hover:bg-secondary/30 transition-colors'}`}>
+                                <TableCell className="pl-6">
+                                  <div className="w-3.5 h-3.5 rounded-full shadow-sm" style={{ background: rep.isVago ? '#555' : (REP_COLOR_PALETTE[rep.colorIndex] || '#888') }} />
+                                </TableCell>
+                                <TableCell className="font-mono text-xs font-bold text-primary">{rep.code}</TableCell>
+                                <TableCell>
+                                  <div className="max-w-[200px]">
+                                    <p className="text-xs font-semibold truncate">{rep.name}</p>
+                                    <p className="text-[10px] text-muted-foreground truncate">{rep.fullName || '—'}</p>
+                                    {rep.isVago && <span className="text-[9px] bg-orange-500/10 text-orange-500 px-1 rounded font-bold uppercase tracking-tighter">VAGO</span>}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="space-y-0.5">
+                                    {rep.email && <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Mail className="w-3 h-3 text-primary/60" />{rep.email}</div>}
+                                    {rep.contato && <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Phone className="w-3 h-3 text-primary/60" />{rep.contato}</div>}
+                                    {!rep.email && !rep.contato && <span className="text-[10px] text-muted-foreground/40 italic">Sem contato</span>}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {rep.cidade ? (
+                                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                      <MapPinned className="w-3 h-3 text-primary/60" />
+                                      <span>{rep.cidade}{rep.uf ? `/${rep.uf}` : ''}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-muted-foreground/40 italic">Não informada</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {rep.comissao !== null && rep.comissao !== undefined ? (
+                                    <span className="text-xs font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full">{rep.comissao}%</span>
+                                  ) : '—'}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <span className="text-xs font-bold text-emerald-600">{rep._count?.clientes || 0}</span>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <span className="text-xs font-medium text-muted-foreground">{rep._count?.territories || 0}</span>
+                                </TableCell>
+                                <TableCell className="pr-6">
+                                  <div className="flex gap-1 justify-end">
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-8 w-8 hover:bg-primary/10 hover:text-primary transition-colors" 
+                                      onClick={() => editingCode === rep.code ? setEditingCode(null) : (setEditingCode(rep.code), setEditForm({ 
+                                        name: rep.name, 
+                                        fullName: rep.fullName || '', 
+                                        isVago: !!rep.isVago,
+                                        email: rep.email || '',
+                                        contato: rep.contato || '',
+                                        endereco: rep.endereco || '',
+                                        bairro: rep.bairro || '',
+                                        cidade: rep.cidade || '',
+                                        uf: rep.uf || '',
+                                        cep: rep.cep || '',
+                                        comissao: rep.comissao?.toString() || ''
+                                      }))}
+                                    >
+                                      {editingCode === rep.code ? <X className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
+                                    </Button>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive transition-colors" 
+                                      onClick={() => handleDeleteRep(rep.code, rep.name)}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                              
+                              {editingCode === rep.code && (
+                                <TableRow className="bg-primary/5 border-border/30">
+                                  <TableCell colSpan={9} className="py-6 px-8">
+                                    <div className="space-y-4 max-w-4xl animate-in fade-in slide-in-from-top-1 duration-200">
+                                      <div className="flex items-center justify-between">
+                                        <h4 className="text-xs font-bold text-primary uppercase tracking-widest flex items-center gap-2">
+                                          <Pencil className="w-3 h-3" />
+                                          Editando Representante: {rep.code}
+                                        </h4>
+                                        <div className="flex gap-2">
+                                          <Button size="sm" className="gap-1.5 h-8 text-xs font-semibold" onClick={() => handleUpdateRep(rep.code)}>
+                                            <Save className="w-3.5 h-3.5" /> Salvar Alterações
+                                          </Button>
+                                          <Button size="sm" variant="ghost" className="h-8 text-xs font-semibold" onClick={() => setEditingCode(null)}>
+                                            Cancelar
+                                          </Button>
+                                        </div>
+                                      </div>
+
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="space-y-1.5">
+                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Nome Curto</Label>
+                                          <Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className="h-9 text-xs bg-background" />
+                                        </div>
+                                        <div className="md:col-span-2 space-y-1.5">
+                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Razão Social / Nome Completo</Label>
+                                          <Input value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} className="h-9 text-xs bg-background" />
+                                        </div>
+                                      </div>
+
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="space-y-1.5">
+                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Email</Label>
+                                          <Input value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} className="h-9 text-xs bg-background" />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Contato</Label>
+                                          <Input value={editForm.contato} onChange={e => setEditForm(f => ({ ...f, contato: e.target.value }))} className="h-9 text-xs bg-background" />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Comissão %</Label>
+                                          <Input type="number" step="0.01" value={editForm.comissao} onChange={e => setEditForm(f => ({ ...f, comissao: e.target.value }))} className="h-9 text-xs bg-background" />
+                                        </div>
+                                      </div>
+
+                                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                        <div className="md:col-span-2 space-y-1.5">
+                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Endereço</Label>
+                                          <Input value={editForm.endereco} onChange={e => setEditForm(f => ({ ...f, endereco: e.target.value }))} className="h-9 text-xs bg-background" />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Bairro</Label>
+                                          <Input value={editForm.bairro} onChange={e => setEditForm(f => ({ ...f, bairro: e.target.value }))} className="h-9 text-xs bg-background" />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Cidade/UF</Label>
+                                          <div className="flex gap-1">
+                                            <Input value={editForm.cidade} onChange={e => setEditForm(f => ({ ...f, cidade: e.target.value }))} className="h-9 text-xs bg-background flex-1" />
+                                            <Input value={editForm.uf} onChange={e => setEditForm(f => ({ ...f, uf: e.target.value?.toUpperCase() }))} className="h-9 text-xs bg-background w-12 text-center" maxLength={2} />
+                                          </div>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="flex items-center gap-4">
+                                        <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground transition-colors selection:bg-transparent">
+                                          <input type="checkbox" checked={editForm.isVago} onChange={e => setEditForm(f => ({ ...f, isVago: e.target.checked }))} className="rounded border-border" />
+                                          Marcar como Vago (Territórios sem representante ativo)
+                                        </label>
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           )}
 
@@ -1562,10 +1799,12 @@ export default function Admin() {
             </div>
           )}
 
+          {/* ══ BASE CLIENTE (Standalone) ══ */}
+          {activeTab === 'baserotas' && <BaseClientePanel onSwitchToReps={() => setActiveTab('reps')} />}
+
           {/* ══ ROTAS (com contexto) ══ */}
-          {['baserotas', 'clusters', 'blocos', 'roteiros', 'agenda', 'densidade', 'leituraplanilha'].includes(activeTab) && (
+          {['clusters', 'blocos', 'roteiros', 'agenda', 'densidade', 'leituraplanilha'].includes(activeTab) && (
             <RotasProvider>
-              {activeTab === 'baserotas' && <BaseClientePanel />}
               {activeTab === 'clusters' && <ClustersPanel />}
               {activeTab === 'blocos' && <BlocosPanel />}
               {activeTab === 'roteiros' && <RoteirosPanel />}

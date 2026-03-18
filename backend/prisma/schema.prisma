@@ -41,11 +41,20 @@ model Representative {
   code        String      @id
   name        String?
   fullName    String?
+  email       String?
+  contato     String?
+  endereco    String?
+  bairro      String?
+  cidade      String?
+  uf          String?
+  cep         String?
+  comissao    Float?
   isVago      Int         @default(0) 
   colorIndex  Int         @default(0)
   
   territories Territory[]
   bairros     Bairro[]
+  clientes    Cliente[]
 
   @@map("representatives")
 }
@@ -114,7 +123,16 @@ model Cliente {
   data_cadastro     DateTime  @default(now())
   data_atualizacao  DateTime  @updatedAt
 
+  // Novos campos para roteirização e supervisão
+  supervisorName    String?
+  classificacao     String?
+  semana            String?
+  prioridade        String?
+
   // Relações
+  repCode           String?
+  rep               Representative? @relation(fields: [repCode], references: [code])
+  
   alocacoes         AlocacaoSupervisor[]
   classificacoes    ClassificacaoCliente[]
   planejamentos     PlanejamentoVisitas[]

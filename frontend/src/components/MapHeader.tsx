@@ -21,21 +21,16 @@ import { ThemeToggle } from "./ThemeToggle";
 interface MapHeaderProps {
   selectedUF: string | null;
   onSelectUF: (uf: string | null) => void;
-  modo: "planejamento" | "atendimento";
-  onSetModo: (modo: "planejamento" | "atendimento") => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   isAuthenticated: boolean;
   role: string | null;
   logout: () => void;
-  showClientes: boolean;
-  onToggleClientes: () => void;
 }
 
 export default function MapHeader({
-  selectedUF, onSelectUF, modo, onSetModo,
-  searchQuery, onSearchChange, isAuthenticated, role, logout,
-  showClientes, onToggleClientes
+  selectedUF, onSelectUF, 
+  searchQuery, onSearchChange, isAuthenticated, role, logout
 }: MapHeaderProps) {
   const navigate = useNavigate();
   const { repCode } = useAuth();
@@ -105,62 +100,19 @@ export default function MapHeader({
         <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
       </div>
 
-      {/* Mode Tabs */}
-      <div className="flex bg-secondary rounded-md p-0.5">
-        <button
-          onClick={() => onSetModo("planejamento")}
-          className={`px-3 py-1.5 text-xs font-medium rounded transition-all ${modo === "planejamento"
-            ? "bg-primary text-primary-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"}`}
-        >
-          Planejamento
-        </button>
-        <button
-          onClick={() => onSetModo("atendimento")}
-          className={`px-3 py-1.5 text-xs font-medium rounded transition-all ${modo === "atendimento"
-            ? "bg-primary text-primary-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"}`}
-        >
-          Atendimento
-        </button>
+      {/* Search Bar (Centered) */}
+      <div className="flex-1 flex justify-center max-w-2xl mx-auto order-last sm:order-none w-full sm:w-auto mt-2 sm:mt-0">
+        <div className="relative w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Buscar município, bairro ou representante..."
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="w-full bg-secondary text-foreground text-sm pl-9 pr-3 py-2.5 rounded-md border border-border placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 shadow-sm transition-all"
+          />
+        </div>
       </div>
-
-      {/* Search */}
-      <div className="relative flex-1 min-w-[200px] max-w-[320px] ml-auto">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <input
-          type="text"
-          placeholder="Buscar município, bairro ou representante..."
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full bg-secondary text-foreground text-sm pl-9 pr-3 py-2 rounded-md border border-border placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-        />
-      </div>
-
-      {/* Reset */}
-      {selectedUF && (
-        <button
-          onClick={() => onSelectUF(null)}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mr-2"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          Voltar ao Brasil
-        </button>
-      )}
-
-      {/* Toggle Clientes Button */}
-      {isAuthenticated && selectedUF && (
-         <Button 
-           variant={showClientes ? "default" : "outline"} 
-           size="sm" 
-           onClick={onToggleClientes}
-           className={`gap-1.5 transition-all mr-2 ${showClientes ? "bg-cyan-600 hover:bg-cyan-700 text-white" : ""}`}
-           title="Ativar/Desativar exibição de clientes no mapa"
-         >
-           <User className="w-4 h-4" />
-           <span className="hidden sm:inline">{showClientes ? "Ocultar Clientes" : "Mostrar Clientes"}</span>
-         </Button>
-      )}
 
       {/* Auth / Admin / Notifications Buttons */}
       <div className="flex items-center gap-2 ml-auto lg:ml-0">

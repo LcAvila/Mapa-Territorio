@@ -16,6 +16,8 @@ interface DetailPanelProps {
   ufCode?: number;
   isBairrosActive?: boolean;
   onDeselectState?: () => void;
+  showClientes: boolean;
+  onToggleClientes: () => void;
 }
 
 function useApiData() {
@@ -40,7 +42,10 @@ function useApiData() {
   return { reps: repsQ.data || [], territories: terrQ.data || [] };
 }
 
-export default function DetailPanel({ municipio, uf, modo, onClose, onViewBairros, ufCode, isBairrosActive, onDeselectState }: DetailPanelProps) {
+export default function DetailPanel({ 
+  municipio, uf, modo, onClose, onViewBairros, ufCode, 
+  isBairrosActive, onDeselectState, showClientes, onToggleClientes 
+}: DetailPanelProps) {
   const { role, estado_end } = useAuth();
   const { data: municipiosInfo, isLoading: loadingInfo } = useMunicipioInfo(ufCode || null);
   const { reps: apiReps, territories: apiTerritories } = useApiData();
@@ -125,8 +130,8 @@ export default function DetailPanel({ municipio, uf, modo, onClose, onViewBairro
           </div>
         )}
 
-        {/* Bairros Visualization */}
-        <div className="border-t border-border pt-4 mt-2">
+        {/* Actions (Bairros & Clientes) */}
+        <div className="border-t border-border pt-4 mt-2 space-y-2">
           <button
             onClick={handleViewBairros}
             disabled={loadingInfo || !onViewBairros}
@@ -138,6 +143,18 @@ export default function DetailPanel({ municipio, uf, modo, onClose, onViewBairro
             {loadingInfo ? <Loader2 className="w-4 h-4 animate-spin" /> : isBairrosActive ? <RotateCcw className="w-4 h-4" /> : <MapIcon className="w-4 h-4" />}
             {isBairrosActive ? "Esconder Bairros no Mapa" : "Visualizar Bairros no Mapa"}
           </button>
+
+          <button
+            onClick={onToggleClientes}
+            className={`w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-md text-xs font-semibold transition-all ${showClientes
+              ? "bg-cyan-600 text-white hover:bg-cyan-700 shadow-md"
+              : "bg-secondary text-foreground hover:bg-secondary/80 border border-border"
+              }`}
+          >
+            <X className={`w-4 h-4 transition-transform ${showClientes ? "rotate-45" : "rotate-0 text-cyan-500"}`} />
+            {showClientes ? "Ocultar Clientes no Mapa" : "Mostrar Clientes no Mapa"}
+          </button>
+
           <p className="text-[10px] text-muted-foreground mt-2 text-center">
             {isBairrosActive ? "Divisões municipais ativas." : "* Carrega os limites geográficos (IBGE) para este município."}
           </p>

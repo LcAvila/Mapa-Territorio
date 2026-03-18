@@ -5,7 +5,15 @@ import { authenticate, requireAdmin } from '../middlewares/auth';
 import type { AuthRequest } from '../middlewares/auth';
 
 const router = Router();
-router.use(authenticate, requireAdmin);
+router.use(authenticate);
+
+// Middleware to require admin for write operations
+const requireAdminMiddleware = (req: any, res: any, next: any) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ message: 'Acesso restrito a administradores' });
+  }
+  next();
+};
 
 const PUBLIC_USER_FIELDS = { id: true, username: true, role: true, repCode: true, tipo: true, full_name: true, cpf_cnpj: true, telefone: true, cep: true, logradouro: true, numero: true, complemento: true, bairro_end: true, cidade: true, estado_end: true, photo: true, created_at: true };
 
@@ -15,7 +23,7 @@ router.get('/users', async (req, res) => {
   res.json(users);
 });
 
-router.post('/users', async (req, res) => {
+router.post('/users', requireAdminMiddleware, async (req, res) => {
   const { username, password, role, tipo, full_name, repCode, photo } = req.body;
   const existing = await prisma.user.findUnique({ where: { username } });
   if (existing) return res.status(409).json({ message: 'Username já existe' });
@@ -25,7 +33,7 @@ router.post('/users', async (req, res) => {
   res.status(201).json(user);
 });
 
-router.put('/users/:id', async (req, res) => {
+router.put('/users/:id', requireAdminMiddleware, async (req, res) => {
   const id = Number(req.params.id);
   const { username, password, role, repCode, tipo, full_name, photo } = req.body;
   
@@ -43,7 +51,7 @@ router.put('/users/:id', async (req, res) => {
   res.json(user);
 });
 
-router.delete('/users/:id', async (req, res) => {
+router.delete('/users/:id', requireAdminMiddleware, async (req, res) => {
   const id = Number(req.params.id);
   const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ message: 'Usuário não encontrado' });
@@ -53,22 +61,73 @@ router.delete('/users/:id', async (req, res) => {
 });
 
 // --- REPS ---
+router.post('/reps', requireAdminMiddleware, async (req, res) => {
+  const { code, name, fullName, email, contato, endereco, bairro, cidade, uf, cep, comissao, isVago } = req.body;
+  if (!code) return res.status(400).json({ message: 'Código é obrigatório' });
+  
+  try {
+    const rep = await prisma.representative.create({ 
+      data: { 
+        code, 
+        name, 
+        fullName, 
+        email, 
+        contato, 
+        endereco, 
+        bairro, 
+        cidade, 
+        uf, 
+        cep, 
+        comissao: comissao ? parseFloat(comissao) : null,
+        isVago: isVago ? 1 : 0, 
+        colorIndex: Math.floor(Math.random() * 20) 
+      } 
+    });
+    res.json(rep);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Erro ao criar representante' });
+  }
+});
+
 router.get('/reps', async (req, res) => {
-  const reps = await prisma.representative.findMany({ orderBy: { code: 'asc' } });
+  const reps = await prisma.representative.findMany({ 
+    include: {
+      _count: {
+        select: { clientes: true, territories: true }
+      }
+    },
+    orderBy: { code: 'asc' } 
+  });
   res.json(reps);
 });
 
-router.put('/reps/:code', async (req, res) => {
-  const code = req.params.code;
-  const { name, isVago, colorIndex, fullName } = req.body;
+router.put('/reps/:code', requireAdminMiddleware, async (req, res) => {
+  const { code } = req.params;
+  const { name, fullName, email, contato, endereco, bairro, cidade, uf, cep, comissao, isVago } = req.body;
   
-  const rep = await prisma.representative.upsert({
-    where: { code },
-    update: { name, isVago: isVago ? 1 : 0, colorIndex, fullName },
-    create: { code, name, isVago: isVago ? 1 : 0, colorIndex, fullName }
-  });
-  
-  res.json({ message: 'Representante atualizado', rep });
+  try {
+    const rep = await prisma.representative.update({
+      where: { code },
+      data: { 
+        name, 
+        fullName, 
+        email, 
+        contato, 
+        endereco, 
+        bairro, 
+        cidade, 
+        uf, 
+        cep, 
+        comissao: comissao ? parseFloat(comissao) : null,
+        isVago: isVago ? 1 : 0 
+      }
+    });
+    res.json(rep);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Erro ao atualizar representante' });
+  }
 });
 
 // --- TERRITORIES ---
@@ -77,7 +136,7 @@ router.get('/territories', async (req, res) => {
   res.json(ter);
 });
 
-router.post('/territories/import', async (req, res) => {
+router.post('/territories/import', requireAdminMiddleware, async (req, res) => {
   const { mappings } = req.body;
   if (!Array.isArray(mappings)) return res.status(400).json({ message: 'Formato inválido' });
   
@@ -88,7 +147,7 @@ router.post('/territories/import', async (req, res) => {
   res.json({ message: `${mappings.length} territórios importados.` });
 });
 
-router.post('/bairros/import', async (req, res) => {
+router.post('/bairros/import', requireAdminMiddleware, async (req, res) => {
   const { mappings } = req.body;
   if (!Array.isArray(mappings)) return res.status(400).json({ message: 'Formato inválido' });
   

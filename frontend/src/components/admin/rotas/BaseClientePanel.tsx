@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Database, Filter, Search, Plus, MapPin, Loader2 } from 'lucide-react';
+import { Database, Filter, Search, Plus, MapPin, Loader2, Briefcase } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -20,10 +20,15 @@ interface Cliente {
   bairro: string | null;
   cep: string | null;
   endereco_completo: string | null;
+  repCode: string | null;
+  supervisorName: string | null;
+  classificacao: string | null;
+  semana: string | null;
+  prioridade: string | null;
   status_ativo: boolean;
 }
 
-export function BaseClientePanel() {
+export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => void }) {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,8 +47,14 @@ export function BaseClientePanel() {
     bairro: '',
     cidade: '',
     uf: '',
-    regiao: ''
+    regiao: '',
+    repCode: '',
+    supervisorName: '',
+    classificacao: '',
+    semana: '',
+    prioridade: ''
   });
+  const [reps, setReps] = useState<{ code: string, name: string }[]>([]);
 
   const fetchClientes = async () => {
     try {
@@ -65,9 +76,24 @@ export function BaseClientePanel() {
     }
   };
 
+  const fetchReps = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('http://localhost:3001/api/admin/reps', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) setReps(await res.json());
+    } catch (e) { console.error('Erro ao buscar representantes', e); }
+  };
+
   useEffect(() => {
     fetchClientes();
+    fetchReps();
   }, []);
+
+  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -101,7 +127,8 @@ export function BaseClientePanel() {
       setIsDialogOpen(false);
       setFormData({ // reseta o form
         codigo_cliente: '', nome_cliente: '', nome_abreviado: '', cnpj: '',
-        cep: '', endereco_completo: '', bairro: '', cidade: '', uf: '', regiao: ''
+        cep: '', endereco_completo: '', bairro: '', cidade: '', uf: '', regiao: '',
+        repCode: '', supervisorName: '', classificacao: '', semana: '', prioridade: ''
       });
       fetchClientes(); // Recarrega a base
     } catch (error: any) {
@@ -186,6 +213,71 @@ export function BaseClientePanel() {
                     <Label htmlFor="regiao">Região</Label>
                     <Input id="regiao" name="regiao" value={formData.regiao} onChange={handleInputChange} placeholder="Ex: SUL, NORTE" />
                   </div>
+
+                  <div className="col-span-2 mt-2 border-t pt-4">
+                    <div className="flex items-center gap-2 mb-4 text-sm font-medium text-muted-foreground">
+                      <Briefcase className="w-4 h-4" /> Vínculos e Classificação
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="repCode">Representante</Label>
+                    <div className="flex gap-2">
+                      <select id="repCode" name="repCode" value={formData.repCode} onChange={handleSelectChange as any} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                        <option value="">— Selecione —</option>
+                        {reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
+                      </select>
+                      {onSwitchToReps && (
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          size="icon" 
+                          className="shrink-0" 
+                          title="Cadastrar novo representante"
+                          onClick={onSwitchToReps}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="supervisorName">Supervisor</Label>
+                    <Input id="supervisorName" name="supervisorName" value={formData.supervisorName} onChange={handleInputChange} placeholder="Nome do supervisor" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="classificacao">Classificação</Label>
+                    <select id="classificacao" name="classificacao" value={formData.classificacao} onChange={handleSelectChange as any} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                      <option value="">— Selecione —</option>
+                      <option value="Estratégico">Estratégico</option>
+                      <option value="Forte">Forte</option>
+                      <option value="Médio">Médio</option>
+                      <option value="Pontual">Pontual</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="semana">Semana de Visita</Label>
+                    <select id="semana" name="semana" value={formData.semana} onChange={handleSelectChange as any} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                      <option value="">— Selecione —</option>
+                      <option value="Semana 1">Semana 1</option>
+                      <option value="Semana 2">Semana 2</option>
+                      <option value="Semana 3">Semana 3</option>
+                      <option value="Semana 4">Semana 4</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="prioridade">Prioridade</Label>
+                    <select id="prioridade" name="prioridade" value={formData.prioridade} onChange={handleSelectChange as any} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                      <option value="">— Selecione —</option>
+                      <option value="Alta">Alta</option>
+                      <option value="Média">Média</option>
+                      <option value="Baixa">Baixa</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="flex justify-end pt-4 mt-6 border-t">
                   <div className="flex gap-2">
@@ -234,11 +326,12 @@ export function BaseClientePanel() {
                 <TableHeader className="bg-muted/50 sticky top-0 z-10 font-semibold backdrop-blur-sm">
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="whitespace-nowrap h-10 w-[100px]">Cod.</TableHead>
-                    <TableHead className="whitespace-nowrap h-10 min-w-[300px]">Razão Social / Fantasia</TableHead>
+                    <TableHead className="whitespace-nowrap h-10 min-w-[250px]">Razão Social / Fantasia</TableHead>
                     <TableHead className="whitespace-nowrap h-10">CNPJ</TableHead>
                     <TableHead className="whitespace-nowrap h-10">Cidade / UF</TableHead>
-                    <TableHead className="whitespace-nowrap h-10">Bairro</TableHead>
-                    <TableHead className="whitespace-nowrap h-10">Região</TableHead>
+                    <TableHead className="whitespace-nowrap h-10">Representante</TableHead>
+                    <TableHead className="whitespace-nowrap h-10">Supervisor</TableHead>
+                    <TableHead className="whitespace-nowrap h-10">Classif.</TableHead>
                     <TableHead className="whitespace-nowrap h-10 text-right pr-4">Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -259,8 +352,15 @@ export function BaseClientePanel() {
                              <span className="text-muted-foreground">{row.uf}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-xs py-2 max-w-[150px] truncate" title={row.bairro || undefined}>{row.bairro || '-'}</TableCell>
-                        <TableCell className="text-xs py-2">{row.regiao || '-'}</TableCell>
+                        <TableCell className="text-xs py-2">
+                          <span className="font-semibold">{row.repCode || '-'}</span>
+                        </TableCell>
+                        <TableCell className="text-xs py-2">{row.supervisorName || '-'}</TableCell>
+                        <TableCell className="text-xs py-2">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${row.classificacao === 'Estratégico' ? 'bg-purple-500/10 text-purple-600' : 'bg-blue-500/10 text-blue-600'}`}>
+                            {row.classificacao || '-'}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-xs py-2 text-right pr-4">
                            {row.status_ativo ? (
                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">

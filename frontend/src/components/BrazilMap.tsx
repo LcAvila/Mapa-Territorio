@@ -1,4 +1,5 @@
 import { RotateCcw, Loader } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useCallback, useRef, useState } from "react";
 import {
   MapContainer, TileLayer, GeoJSON, useMap,
@@ -41,7 +42,7 @@ function MapController({ center, zoom }: { center: [number, number]; zoom: numbe
   const isFirst = useRef(true);
   useEffect(() => {
     if (isFirst.current) { isFirst.current = false; map.setView(center, zoom); }
-    else map.flyTo(center, zoom, { duration: 1.5 });
+    else map.flyTo(center, zoom, { duration: 2.5, easeLinearity: 0.25 });
   }, [map, center[0], center[1], zoom]);
   return null;
 }
@@ -64,7 +65,7 @@ function ZoomToMunicipio({ geoJson }: { geoJson: any }) {
     try {
       const layer = L.geoJSON(geoJson);
       const bounds = layer.getBounds();
-      if (bounds.isValid()) map.flyToBounds(bounds, { padding: [40, 40], duration: 1.5, maxZoom: 13 });
+      if (bounds.isValid()) map.flyToBounds(bounds, { padding: [40, 40], duration: 2.0, easeLinearity: 0.5, maxZoom: 13 });
     } catch { /* ignore */ }
   }, [geoJson, map]);
   return null;
@@ -93,12 +94,15 @@ function useApiTerritories() {
   });
 }
 
-function useApiClientes() {
+function useApiClientes(repCode: string | null) {
   const { token } = useAuth();
   return useQuery<any[]>({
-    queryKey: ["api", "clientes"],
+    queryKey: ["api", "clientes", repCode],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/clientes`, {
+      const url = repCode 
+        ? `${API_BASE}/api/clientes?repCode=${repCode}`
+        : `${API_BASE}/api/clientes`;
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return res.ok ? res.json() : [];
@@ -119,7 +123,7 @@ export default function BrazilMap({
   const { data: statesGeo } = useStatesGeoJSON();
   const { data: apiReps = [] } = useApiRepresentatives();
   const { data: apiTerritories = [] } = useApiTerritories();
-  const { data: apiClientes = [] } = useApiClientes();
+  const { data: apiClientes = [] } = useApiClientes(filtroRepresentante);
 
   const ufInfo = selectedUF ? getUFBySigla(selectedUF) : null;
   const { data: municipiosGeo } = useMunicipiosGeoJSON(ufInfo?.codigo ?? null);
@@ -365,6 +369,7 @@ export default function BrazilMap({
                 center={m.center}
                 radius={0}
                 pathOptions={{ opacity: 0, fillOpacity: 0 }}
+                interactive={false}
               >
                 <LeafletTooltip
                   permanent
@@ -378,13 +383,21 @@ export default function BrazilMap({
             ))}
 
             {/* Loading indicator */}
-            {loadingNeighborhoods && (
-              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 9999 }}
-                className="bg-card/90 backdrop-blur-sm border border-border rounded-lg px-4 py-3 flex items-center gap-2 shadow-xl">
-                <Loader className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-sm">Carregando bairros...</span>
-              </div>
-            )}
+            <AnimatePresence>
+              {loadingNeighborhoods && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.3 }}
+                  style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 9999 }}
+                  className="bg-card/90 backdrop-blur-sm border border-border rounded-lg px-4 py-3 flex items-center gap-2 shadow-xl"
+                >
+                  <Loader className="w-4 h-4 animate-spin text-primary" />
+                  <span className="text-sm">Carregando bairros...</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </>
         )}
 
@@ -393,21 +406,40 @@ export default function BrazilMap({
           <CircleMarker
             key={`cliente-${cliente.id_cliente}`}
             center={[cliente.latitude, cliente.longitude]}
-            radius={5}
+            radius={4}
+            className="blinking-dot"
             pathOptions={{
-              fillColor: "hsl(190, 90%, 50%)",
-              color: "hsl(190, 90%, 20%)",
-              weight: 1.5,
+              fillColor: "hsl(190, 100%, 50%)",
+              color: "hsl(190, 100%, 30%)",
+              weight: 2,
               opacity: 1,
-              fillOpacity: 0.8
+              fillOpacity: 0.9
             }}
           >
+            <LeafletTooltip 
+              permanent 
+              direction="right" 
+              className="client-label"
+              offset={[8, 0]}
+            >
+              {cliente.nome_cliente.split(' ')[0]}
+            </LeafletTooltip>
+            
             <LeafletTooltip direction="top" className="custom-tooltip">
-              <div className="text-sm">
-                <strong>{cliente.nome_cliente}</strong>
-                {cliente.nome_abreviado && <p className="text-xs text-muted-foreground">{cliente.nome_abreviado}</p>}
-                {cliente.endereco_completo && <p className="text-[10px] mt-1 text-muted-foreground max-w-[200px] whitespace-normal">{cliente.endereco_completo}</p>}
-                {cliente.bairro && <p className="text-[10px] text-muted-foreground">Bairro: {cliente.bairro}</p>}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-bold text-sm text-primary">{cliente.nome_cliente}</span>
+                  <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded opacity-70">#{cliente.codigo_cliente}</span>
+                </div>
+                {cliente.nome_abreviado && (
+                  <p className="text-xs font-medium text-muted-foreground border-t border-border/50 pt-1">
+                    {cliente.nome_abreviado}
+                  </p>
+                )}
+                <div className="text-[10px] text-muted-foreground bg-muted/30 p-1.5 rounded-md mt-2">
+                  {cliente.endereco_completo && <p className="leading-tight">{cliente.endereco_completo}</p>}
+                  {cliente.bairro && <p className="mt-1 font-semibold uppercase tracking-wider">{cliente.bairro}</p>}
+                </div>
               </div>
             </LeafletTooltip>
           </CircleMarker>
@@ -415,22 +447,39 @@ export default function BrazilMap({
       </MapContainer>
 
       {/* Deactivate button */}
-      {municipioCodeForBairros && onDeactivateBairros && (
-        <div className="absolute top-4 left-4 z-[1000]">
-          <button
-            onClick={onDeactivateBairros}
-            className="flex items-center gap-2 px-3 py-2 bg-card/95 backdrop-blur-sm border border-border text-foreground text-xs font-semibold rounded-md shadow-lg hover:bg-secondary transition-all"
+      <AnimatePresence>
+        {municipioCodeForBairros && onDeactivateBairros && (
+          <motion.div 
+            initial={{ x: -20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: -20, opacity: 0 }}
+            className="absolute top-4 left-4 z-[1000]"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Voltar aos Municípios
-          </button>
-          {markers.length > 0 && (
-            <div className="mt-2 px-3 py-1.5 bg-card/80 backdrop-blur-sm border border-border/50 rounded-md text-[10px] text-muted-foreground">
-              {markers.length} bairro(s) carregado(s)
-            </div>
-          )}
-        </div>
-      )}
+            <button
+              onClick={onDeactivateBairros}
+              className="flex items-center gap-2 px-3 py-2 bg-card/95 backdrop-blur-sm border border-border text-foreground text-xs font-semibold rounded-md shadow-lg hover:bg-secondary transition-all"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Voltar aos Municípios
+            </button>
+            {markers.length > 0 && (
+              <div className="mt-2 px-3 py-1.5 bg-card/80 backdrop-blur-sm border border-border/50 rounded-md text-[10px] text-muted-foreground">
+                {markers.length} bairro(s) carregado(s)
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* Invisible overlay to catch contextmenu on background */}
+      <div 
+        className="absolute inset-0 pointer-events-none z-[500]" 
+        onContextMenu={(e) => {
+          e.preventDefault();
+          // This might be tricky because of Leaflet's own layering.
+          // The best way is typically to handle it on the MapContainer itself.
+        }}
+      />
     </div>
   );
 }

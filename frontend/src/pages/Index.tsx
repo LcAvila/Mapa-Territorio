@@ -97,15 +97,11 @@ const Index = () => {
       <MapHeader
         selectedUF={selectedUF}
         onSelectUF={handleSelectUF}
-        modo={modo}
-        onSetModo={setModo}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         isAuthenticated={isAuthenticated}
         role={role}
         logout={logout}
-        showClientes={showClientes}
-        onToggleClientes={() => setShowClientes(!showClientes)}
       />
 
       <div className="flex-1 relative overflow-hidden">
@@ -154,6 +150,8 @@ const Index = () => {
               ufCode={ufInfo?.codigo}
               isBairrosActive={!!municipioCodeForBairros}
               onDeselectState={() => handleSelectUF(null)}
+              showClientes={showClientes}
+              onToggleClientes={() => setShowClientes(!showClientes)}
             />
           </div>
         )}

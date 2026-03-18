@@ -12,7 +12,14 @@ router.use(authenticate);
 // ---------------------------------------------------------
 router.get('/', async (req, res) => {
   try {
+    const { repCode, supervisorName } = req.query;
+    const where: any = {};
+    
+    if (repCode) where.repCode = repCode.toString();
+    if (supervisorName) where.supervisorName = supervisorName.toString();
+
     const clientes = await prisma.cliente.findMany({
+      where,
       orderBy: { nome_cliente: 'asc' },
     });
     res.json(clientes);
@@ -71,6 +78,11 @@ router.post('/', async (req, res) => {
         endereco_completo,
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
+        repCode: req.body.repCode || null,
+        supervisorName: req.body.supervisorName || null,
+        classificacao: req.body.classificacao || null,
+        semana: req.body.semana || null,
+        prioridade: req.body.prioridade || null,
         status_ativo: true
       }
     });
