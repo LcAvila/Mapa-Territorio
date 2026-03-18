@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck } from "lucide-react";
+import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck, Users, Flame } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { UF_DATA } from "@/data/uf-codes";
 
@@ -26,11 +26,16 @@ interface MapHeaderProps {
   isAuthenticated: boolean;
   role: string | null;
   logout: () => void;
+  showClientes?: boolean;
+  onToggleClientes?: () => void;
+  showHeatmap?: boolean;
+  onToggleHeatmap?: () => void;
 }
 
 export default function MapHeader({
   selectedUF, onSelectUF, 
-  searchQuery, onSearchChange, isAuthenticated, role, logout
+  searchQuery, onSearchChange, isAuthenticated, role, logout,
+  showClientes, onToggleClientes, showHeatmap, onToggleHeatmap
 }: MapHeaderProps) {
   const navigate = useNavigate();
   const { repCode } = useAuth();
@@ -112,6 +117,30 @@ export default function MapHeader({
             className="w-full bg-secondary text-foreground text-sm pl-9 pr-3 py-2.5 rounded-md border border-border placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 shadow-sm transition-all"
           />
         </div>
+      </div>
+
+      {/* Map Layers Toggles */}
+      <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-1 border border-border/50">
+        <Button
+          variant={showClientes ? "default" : "ghost"}
+          size="sm"
+          onClick={onToggleClientes}
+          className={`h-8 gap-2 px-3 ${showClientes ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background'}`}
+          title={showClientes ? "Ocultar Clientes" : "Mostrar Clientes"}
+        >
+          <Users className="w-4 h-4" />
+          <span className="hidden md:inline text-xs font-semibold">Clientes</span>
+        </Button>
+        <Button
+          variant={showHeatmap ? "default" : "ghost"}
+          size="sm"
+          onClick={onToggleHeatmap}
+          className={`h-8 gap-2 px-3 ${showHeatmap ? 'bg-orange-500 text-white shadow-sm hover:bg-orange-600' : 'text-muted-foreground hover:bg-background'}`}
+          title={showHeatmap ? "Ocultar Mapa de Calor" : "Mostrar Mapa de Calor"}
+        >
+          <Flame className="w-4 h-4" />
+          <span className="hidden md:inline text-xs font-semibold">Calor</span>
+        </Button>
       </div>
 
       {/* Auth / Admin / Notifications Buttons */}

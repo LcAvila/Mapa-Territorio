@@ -1,13 +1,15 @@
 import { RotateCcw, Loader } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useEffect, useCallback, useRef, useState } from "react";
+import { useEffect, useCallback, useRef, useState, useMemo } from "react";
 import {
   MapContainer, TileLayer, GeoJSON, useMap,
   AttributionControl, CircleMarker, Tooltip as LeafletTooltip
 } from "react-leaflet";
 import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.heat";
 import { useQuery } from "@tanstack/react-query";
+import { booleanPointInPolygon, point as turfPoint } from "@turf/turf";
 import {
   useStatesGeoJSON, useMunicipiosGeoJSON, useMunicipioNames,
   useNeighborhoodsGeoJSON
@@ -30,6 +32,7 @@ interface BrazilMapProps {
   onDeactivateBairros?: () => void;
   selectedMunicipioName?: string | null;
   showClientes: boolean;
+  showHeatmap: boolean;
   onContextMenuState?: (nome: string, uf: string, x: number, y: number) => void;
   onContextMenuMunicipio?: (nome: string, uf: string, x: number, y: number) => void;
 }
@@ -68,6 +71,23 @@ function ZoomToMunicipio({ geoJson }: { geoJson: any }) {
       if (bounds.isValid()) map.flyToBounds(bounds, { padding: [40, 40], duration: 2.0, easeLinearity: 0.5, maxZoom: 13 });
     } catch { /* ignore */ }
   }, [geoJson, map]);
+  return null;
+}
+
+// ─── Heatmap Layout component ──────────────────────────────────────────────
+function HeatmapLayer({ points }: { points: [number, number, number][] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!points || points.length === 0) return;
+    const heatLayer = (L as any).heatLayer(points, {
+      radius: 20,
+      blur: 15,
+      maxZoom: 10,
+      minOpacity: 0.4,
+      gradient: { 0.4: 'blue', 0.6: 'cyan', 0.7: 'lime', 0.8: 'yellow', 1.0: 'red' }
+    }).addTo(map);
+    return () => { map.removeLayer(heatLayer); };
+  }, [map, points]);
   return null;
 }
 
@@ -116,7 +136,7 @@ function useApiClientes(repCode: string | null) {
 export default function BrazilMap({
   selectedUF, modo, filtroRepresentante, mostrarVagos,
   onSelectUF, onSelectMunicipio, searchQuery,
-  municipioCodeForBairros, onDeactivateBairros, selectedMunicipioName, showClientes,
+  municipioCodeForBairros, onDeactivateBairros, selectedMunicipioName, showClientes, showHeatmap,
   onContextMenuState, onContextMenuMunicipio,
 }: BrazilMapProps) {
   const { role, estado_end } = useAuth();
@@ -274,9 +294,51 @@ export default function BrazilMap({
 
   const munGeo = selectedMunicipioGeo();
 
-  // Filter clients to show only on the currently selected state to prevent clutter
-  const visibleClientes = showClientes && apiClientes 
-    ? apiClientes.filter(c => selectedUF && c.uf === selectedUF && c.latitude && c.longitude)
+  // Filter clients: if UF is selected, show only that UF's clients and ensure they are within the state geometry.
+  // If no UF is selected, show all clients that are within Brazil's boundaries.
+  const visibleClientes = useMemo(() => {
+    if (!(showClientes || showHeatmap) || !apiClientes || !statesGeo) return [];
+
+    let filterGeometry: any = null;
+    if (selectedUF) {
+      const stateFeature = statesGeo.features?.find((f: any) => {
+        const uf = getUFByCode(Number(f?.properties?.codarea));
+        return uf && uf.sigla === selectedUF;
+      });
+      if (stateFeature) filterGeometry = stateFeature.geometry;
+    } else {
+      // For Brazil view, any point in any state is fine
+      filterGeometry = statesGeo; 
+    }
+
+    return apiClientes.filter(c => {
+      if (!c.latitude || !c.longitude) return false;
+      if (selectedUF && c.uf !== selectedUF) return false;
+
+      // Point-in-polygon check
+      try {
+        const pt = turfPoint([c.longitude, c.latitude]);
+        if (filterGeometry) {
+          if (filterGeometry.type === 'FeatureCollection') {
+            return filterGeometry.features.some((f: any) => {
+              try {
+                return f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') && booleanPointInPolygon(pt, f);
+              } catch {
+                return false; 
+              }
+            });
+          }
+          return booleanPointInPolygon(pt, filterGeometry);
+        }
+      } catch (e) {
+        console.warn("Critical check failure for client", c.id_cliente, e);
+      }
+      return false;
+    });
+  }, [showClientes, showHeatmap, apiClientes, statesGeo, selectedUF]);
+
+  const heatmapPoints: [number, number, number][] = showHeatmap 
+    ? visibleClientes.map(c => [c.latitude!, c.longitude!, 1])
     : [];
 
   return (
@@ -401,13 +463,15 @@ export default function BrazilMap({
           </>
         )}
 
+        {/* ── Heatmap Layer ── */}
+        {showHeatmap && <HeatmapLayer points={heatmapPoints} />}
+
         {/* ── Client Pins ── */}
         {showClientes && visibleClientes.map((cliente) => (
           <CircleMarker
             key={`cliente-${cliente.id_cliente}`}
             center={[cliente.latitude, cliente.longitude]}
             radius={4}
-            className="blinking-dot"
             pathOptions={{
               fillColor: "hsl(190, 100%, 50%)",
               color: "hsl(190, 100%, 30%)",
@@ -416,15 +480,6 @@ export default function BrazilMap({
               fillOpacity: 0.9
             }}
           >
-            <LeafletTooltip 
-              permanent 
-              direction="right" 
-              className="client-label"
-              offset={[8, 0]}
-            >
-              {cliente.nome_cliente.split(' ')[0]}
-            </LeafletTooltip>
-            
             <LeafletTooltip direction="top" className="custom-tooltip">
               <div className="space-y-1">
                 <div className="flex items-center justify-between gap-4">
@@ -470,16 +525,28 @@ export default function BrazilMap({
           </motion.div>
         )}
       </AnimatePresence>
-      
+
       {/* Invisible overlay to catch contextmenu on background */}
-      <div 
-        className="absolute inset-0 pointer-events-none z-[500]" 
+      <div
+        className="absolute inset-0 pointer-events-none z-[500]"
         onContextMenu={(e) => {
           e.preventDefault();
-          // This might be tricky because of Leaflet's own layering.
-          // The best way is typically to handle it on the MapContainer itself.
         }}
       />
+
+      <style>{`
+        .custom-tooltip {
+          background: hsl(var(--card)) !important;
+          border: 1px solid hsl(var(--border)) !important;
+          border-radius: 8px !important;
+          padding: 0 !important;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+          overflow: hidden !important;
+        }
+        .custom-tooltip::before {
+          display: none !important;
+        }
+      `}</style>
     </div>
   );
 }

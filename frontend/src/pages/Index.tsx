@@ -21,6 +21,7 @@ const Index = () => {
   const [selectedMunicipio, setSelectedMunicipio] = useState<{ nome: string; uf: string; id?: number } | null>(null);
   const [municipioCodeForBairros, setMunicipioCodeForBairros] = useState<number | null>(null);
   const [showClientes, setShowClientes] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState(false);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -102,6 +103,10 @@ const Index = () => {
         isAuthenticated={isAuthenticated}
         role={role}
         logout={logout}
+        showClientes={showClientes}
+        onToggleClientes={() => setShowClientes(!showClientes)}
+        showHeatmap={showHeatmap}
+        onToggleHeatmap={() => setShowHeatmap(!showHeatmap)}
       />
 
       <div className="flex-1 relative overflow-hidden">
@@ -121,6 +126,7 @@ const Index = () => {
           }}
           selectedMunicipioName={selectedMunicipio?.nome}
           showClientes={showClientes}
+          showHeatmap={showHeatmap}
           onContextMenuState={handleContextMenuState}
           onContextMenuMunicipio={handleContextMenuMunicipio}
         />
