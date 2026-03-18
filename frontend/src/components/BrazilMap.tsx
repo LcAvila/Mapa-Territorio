@@ -37,6 +37,8 @@ interface BrazilMapProps {
   onContextMenuMunicipio?: (nome: string, uf: string, x: number, y: number) => void;
   flyToLocation?: { center: [number, number]; zoom: number } | null;
   searchResultGeo?: any | null;
+  selectedClients?: any[];
+  onSelectClients?: (clients: any[]) => void;
 }
 
 const API_BASE = "http://localhost:3001";
@@ -68,7 +70,10 @@ function MapController({ center, zoom, flyToLocation }: { center: [number, numbe
         // Use a small timeout to ensure map is ready and not fighting other animations
         const timer = setTimeout(() => {
           try {
-            map.flyTo([lat, lon], flyToLocation.zoom || 14, { duration: 2.5 });
+            map.flyTo([lat, lon], flyToLocation.zoom || 14, { 
+              duration: 2.5,
+              easeLinearity: 0.1
+            });
           } catch (e) {
             map.setView([lat, lon], flyToLocation.zoom || 14);
           }
@@ -78,6 +83,20 @@ function MapController({ center, zoom, flyToLocation }: { center: [number, numbe
     }
   }, [map, flyToLocation]);
 
+  return null;
+}
+
+// ─── Map move handler for animation effects ──────────────────────────────────
+function MapAnimationController({ onMoveStart, onMoveEnd }: { onMoveStart: () => void; onMoveEnd: () => void }) {
+  const map = useMap();
+  useEffect(() => {
+    map.on("movestart", onMoveStart);
+    map.on("moveend", onMoveEnd);
+    return () => {
+      map.off("movestart", onMoveStart);
+      map.off("moveend", onMoveEnd);
+    };
+  }, [map, onMoveStart, onMoveEnd]);
   return null;
 }
 
@@ -120,6 +139,68 @@ function HeatmapLayer({ points }: { points: [number, number, number][] }) {
     return () => { map.removeLayer(heatLayer); };
   }, [map, points]);
   return null;
+}
+
+// ─── Speed Lines Overlay (Falling Effect) ──────────────────────────────────
+function SpeedLinesOverlay({ active }: { active: boolean }) {
+  if (!active) return null;
+
+  return (
+    <div className="absolute inset-0 z-[2000] pointer-events-none overflow-hidden flex items-center justify-center">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="w-full h-full relative"
+      >
+        {/* Speed lines radiating from center */}
+        {[...Array(20)].map((_, i) => (
+          <motion.div
+            key={i}
+            initial={{ 
+              scaleX: 0, 
+              opacity: 0,
+              rotate: (i * 18),
+              x: 0,
+              y: 0
+            }}
+            animate={{ 
+              scaleX: [0, 1.5, 0],
+              opacity: [0, 0.6, 0],
+              x: [0, (Math.cos(i * 18 * Math.PI / 180) * 800)],
+              y: [0, (Math.sin(i * 18 * Math.PI / 180) * 800)]
+            }}
+            transition={{
+              duration: 0.6,
+              repeat: Infinity,
+              delay: Math.random() * 0.5,
+              ease: "easeIn"
+            }}
+            className="absolute w-32 h-[1px] bg-gradient-to-r from-transparent via-white/80 to-transparent"
+            style={{ transformOrigin: "left center" }}
+          />
+        ))}
+        
+        {/* Vertical falling streaks */}
+        {[...Array(15)].map((_, i) => (
+          <motion.div
+            key={`v-${i}`}
+            initial={{ y: -500, x: (Math.random() * 100 - 50) + "%", opacity: 0 }}
+            animate={{ y: 1500, opacity: [0, 0.4, 0] }}
+            transition={{
+              duration: 0.4,
+              repeat: Infinity,
+              delay: Math.random() * 0.4,
+              ease: "linear"
+            }}
+            className="absolute w-[1px] h-64 bg-gradient-to-b from-transparent via-white/40 to-transparent"
+          />
+        ))}
+
+        <div className="absolute inset-0 bg-white/5 backdrop-blur-[1px]" />
+      </motion.div>
+    </div>
+  );
 }
 
 // ─── API hooks ────────────────────────────────────────────────────────────────
@@ -173,13 +254,16 @@ export default function BrazilMap({
   onSelectUF, onSelectMunicipio, searchQuery,
   municipioCodeForBairros, onDeactivateBairros, selectedMunicipioName, showClientes, showHeatmap,
   onContextMenuState, onContextMenuMunicipio,
-  flyToLocation, searchResultGeo
+  flyToLocation, searchResultGeo,
+  selectedClients = [], onSelectClients
 }: BrazilMapProps) {
   const { role, estado_end, token } = useAuth();
   const { data: statesGeo } = useStatesGeoJSON();
   const { data: apiReps = [] } = useApiRepresentatives(!!token);
   const { data: apiTerritories = [] } = useApiTerritories(!!token);
   const { data: apiClientes = [] } = useApiClientes(filtroRepresentante);
+
+  const [isMapMoving, setIsMapMoving] = useState(false);
 
   const ufInfo = selectedUF ? getUFBySigla(selectedUF) : null;
   const { data: municipiosGeo } = useMunicipiosGeoJSON(ufInfo?.codigo ?? null);
@@ -236,7 +320,15 @@ export default function BrazilMap({
       const isMatch = name.toLowerCase().includes(q) || reps.join(" ").toLowerCase().includes(q) || repNames.includes(q);
       
       if (isMatch) {
-         return { fillColor: "hsl(45, 90%, 55%)", weight: 3, opacity: 1, color: "hsl(45, 90%, 40%)", fillOpacity: 0.8 };
+         // Fix "yellow screen" by reducing fillOpacity and removing fill if a client is selected
+         const hasSelection = selectedClients.length > 0;
+         return { 
+           fillColor: "hsl(45, 90%, 55%)", 
+           weight: hasSelection ? 1.5 : 3, 
+           opacity: 1, 
+           color: "hsl(45, 90%, 40%)", 
+           fillOpacity: hasSelection ? 0.05 : 0.25 
+         };
       }
     }
 
@@ -376,7 +468,10 @@ export default function BrazilMap({
     : [];
 
   return (
-    <div className="w-full h-full relative">
+    <div className="w-full h-full relative overflow-hidden bg-background">
+      <AnimatePresence>
+        {isMapMoving && <SpeedLinesOverlay active={true} />}
+      </AnimatePresence>
       <MapContainer
         center={center} zoom={zoom}
         className="w-full h-full"
@@ -388,6 +483,10 @@ export default function BrazilMap({
       >
         <AttributionControl prefix={false} />
         <MapController center={center} zoom={zoom} flyToLocation={flyToLocation} />
+        <MapAnimationController 
+          onMoveStart={() => setIsMapMoving(true)} 
+          onMoveEnd={() => setIsMapMoving(false)} 
+        />
         <MapEventHandler onBackgroundClick={() => selectedUF && onSelectUF("")} />
 
         {/* Auto-zoom to municipality when selected */}
@@ -400,6 +499,7 @@ export default function BrazilMap({
           }
           attribution="Desenvolvido por Lucas Ávila"
           opacity={municipioCodeForBairros || flyToLocation ? 1 : 0.4}
+          className={isMapMoving ? "map-motion-blur" : ""}
         />
 
         {/* Search Result Polygon Highlight */}
@@ -517,38 +617,61 @@ export default function BrazilMap({
         {showHeatmap && <HeatmapLayer points={heatmapPoints} />}
 
         {/* ── Client Pins ── */}
-        {showClientes && visibleClientes.map((cliente) => (
-          <CircleMarker
-            key={`cliente-${cliente.id_cliente}`}
-            center={[cliente.latitude, cliente.longitude]}
-            radius={4}
-            pathOptions={{
-              fillColor: "hsl(190, 100%, 50%)",
-              color: "hsl(190, 100%, 30%)",
-              weight: 2,
-              opacity: 1,
-              fillOpacity: 0.9
-            }}
-          >
-            <LeafletTooltip direction="top" className="custom-tooltip">
-              <div className="space-y-1">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="font-bold text-sm text-primary">{cliente.nome_cliente}</span>
-                  <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded opacity-70">#{cliente.codigo_cliente}</span>
+        {showClientes && visibleClientes.map((cliente) => {
+          const isSelected = selectedClients.some(c => c.id_cliente === cliente.id_cliente);
+          
+          return (
+            <CircleMarker
+              key={`cliente-${cliente.id_cliente}`}
+              center={[cliente.latitude, cliente.longitude]}
+              radius={isSelected ? 6 : 4}
+              pathOptions={{
+                fillColor: isSelected ? "hsl(45, 100%, 50%)" : "hsl(190, 100%, 50%)",
+                color: isSelected ? "white" : "hsl(190, 100%, 30%)",
+                weight: isSelected ? 3 : 2,
+                opacity: 1,
+                fillOpacity: 1
+              }}
+              interactive={true}
+              eventHandlers={{
+                click: (e) => {
+                  L.DomEvent.stopPropagation(e);
+                  const isCtrl = e.originalEvent.ctrlKey;
+                  
+                  if (onSelectClients) {
+                    if (isCtrl) {
+                      if (isSelected) {
+                        onSelectClients(selectedClients.filter(c => c.id_cliente !== cliente.id_cliente));
+                      } else {
+                        onSelectClients([...selectedClients, cliente]);
+                      }
+                    } else {
+                      onSelectClients([cliente]);
+                    }
+                  }
+                }
+              }}
+            >
+              <LeafletTooltip direction="top" className="custom-tooltip">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-bold text-sm text-primary">{cliente.nome_cliente}</span>
+                    <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded opacity-70">#{cliente.codigo_cliente}</span>
+                  </div>
+                  {cliente.nome_abreviado && (
+                    <p className="text-xs font-medium text-muted-foreground border-t border-border/50 pt-1">
+                      {cliente.nome_abreviado}
+                    </p>
+                  )}
+                  <div className="text-[10px] text-muted-foreground bg-muted/30 p-1.5 rounded-md mt-2">
+                    {cliente.endereco_completo && <p className="leading-tight">{cliente.endereco_completo}</p>}
+                    {cliente.bairro && <p className="mt-1 font-semibold uppercase tracking-wider">{cliente.bairro}</p>}
+                  </div>
                 </div>
-                {cliente.nome_abreviado && (
-                  <p className="text-xs font-medium text-muted-foreground border-t border-border/50 pt-1">
-                    {cliente.nome_abreviado}
-                  </p>
-                )}
-                <div className="text-[10px] text-muted-foreground bg-muted/30 p-1.5 rounded-md mt-2">
-                  {cliente.endereco_completo && <p className="leading-tight">{cliente.endereco_completo}</p>}
-                  {cliente.bairro && <p className="mt-1 font-semibold uppercase tracking-wider">{cliente.bairro}</p>}
-                </div>
-              </div>
-            </LeafletTooltip>
-          </CircleMarker>
-        ))}
+              </LeafletTooltip>
+            </CircleMarker>
+          );
+        })}
       </MapContainer>
 
       {/* Deactivate button */}
@@ -595,6 +718,10 @@ export default function BrazilMap({
         }
         .custom-tooltip::before {
           display: none !important;
+        }
+        .map-motion-blur {
+          filter: blur(0.5px) contrast(1.1);
+          transition: filter 0.3s ease;
         }
       `}</style>
     </div>

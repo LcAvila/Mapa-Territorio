@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import BrazilMap from "@/components/BrazilMap";
 import MapHeader from "@/components/MapHeader";
@@ -9,6 +10,7 @@ import InterestModal from "@/components/InterestModal";
 import { getUFBySigla } from "@/data/uf-codes";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import ClientDetailPanel from "@/components/ClientDetailPanel";
 
 const Index = () => {
   const { isAuthenticated, role, logout } = useAuth();
@@ -28,6 +30,9 @@ const Index = () => {
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+
+  // Client selection state
+  const [selectedClients, setSelectedClients] = useState<any[]>([]);
 
   // Interest modal state
   const [interestTarget, setInterestTarget] = useState<{ municipio: string; uf: string } | null>(null);
@@ -176,12 +181,24 @@ const Index = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Auto-zoom to client when a single one is selected
+  useEffect(() => {
+    if (selectedClients.length === 1) {
+      const client = selectedClients[0];
+      setFlyToLocation({
+        center: [client.latitude, client.longitude],
+        zoom: 17
+      });
+    }
+  }, [selectedClients]);
+
   // Close suggestions on map click and clear highlights
   const handleMapBackgroundClick = () => {
     setSearchSuggestions([]);
     setSearchResultGeo(null);
     setFlyToLocation(null);
     setSearchQuery("");
+    setSelectedClients([]); // Clear client selection
     if (selectedUF) handleSelectUF("");
   };
 
@@ -228,6 +245,8 @@ const Index = () => {
           onContextMenuMunicipio={handleContextMenuMunicipio}
           flyToLocation={flyToLocation}
           searchResultGeo={searchResultGeo}
+          selectedClients={selectedClients}
+          onSelectClients={setSelectedClients}
         />
 
         {/* Legend overlay - bottom left */}
@@ -243,7 +262,7 @@ const Index = () => {
           </div>
         )}
 
-        {/* Detail panel overlay - right */}
+        {/* Detail panel overlay - right (Municipality) */}
         {selectedMunicipio && (
           <div className="absolute top-4 right-4 z-[1000] w-[320px]">
             <DetailPanel
@@ -260,6 +279,24 @@ const Index = () => {
             />
           </div>
         )}
+
+        {/* Client detail panel - right (floating lower or same area) */}
+        <AnimatePresence>
+          {selectedClients.length > 0 && (
+            <div className={`absolute ${selectedMunicipio ? 'top-[440px]' : 'top-4'} right-4 z-[1001]`}>
+              <ClientDetailPanel
+                clients={selectedClients}
+                onClose={() => setSelectedClients([])}
+                onSelectClient={(client) => {
+                  setFlyToLocation({
+                    center: [client.latitude, client.longitude],
+                    zoom: 17
+                  });
+                }}
+              />
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* Info badge when no UF selected */}
         {!selectedUF && (
