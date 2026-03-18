@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import BrazilMap from "@/components/BrazilMap";
 import MapHeader from "@/components/MapHeader";
@@ -22,6 +22,9 @@ const Index = () => {
   const [municipioCodeForBairros, setMunicipioCodeForBairros] = useState<number | null>(null);
   const [showClientes, setShowClientes] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
+  const [flyToLocation, setFlyToLocation] = useState<{ center: [number, number]; zoom: number } | null>(null);
+  const [searchSuggestions, setSearchSuggestions] = useState<any[]>([]);
+  const [searchResultGeo, setSearchResultGeo] = useState<any | null>(null);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -91,6 +94,97 @@ const Index = () => {
     }
   }, [handleSelectUF, handleSelectMunicipio]);
 
+  const handleAddressSearch = useCallback(async (query: string) => {
+    if (!query || query.length < 3) return;
+    
+    const toastId = toast.loading('Buscando localização...');
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=br`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'MapaTerritorio-App/1.1' }
+      });
+      const data = await res.json();
+      
+      if (data && data.length > 0) {
+        const { lat, lon } = data[0];
+        setFlyToLocation({ 
+          center: [parseFloat(lat), parseFloat(lon)], 
+          zoom: 16 
+        });
+        toast.success('Localização encontrada!', { id: toastId });
+      } else {
+        toast.error('Endereço não encontrado no Brasil', { id: toastId });
+      }
+    } catch (error) {
+      console.error('Error searching address:', error);
+      toast.error('Erro ao buscar endereço', { id: toastId });
+    }
+  }, []);
+
+  const handleSelectSuggestion = useCallback(async (item: any) => {
+    setSearchSuggestions([]);
+    
+    // Don't update searchQuery with the full name to avoid triggering municipality highlights
+    // Just keep the search input clean or with the short name, but tell BrazilMap to ignore it if needed
+    setSearchQuery(item.display_name.split(',')[0]);
+    
+    const toastId = toast.loading('Carregando região...');
+    try {
+      // Fetch full detail with polygon
+      const url = `https://nominatim.openstreetmap.org/details?place_id=${item.place_id}&polygon_geojson=1&format=json`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'MapaTerritorio-App/1.1' } });
+      const data = await res.json();
+      
+      if (data) {
+        setFlyToLocation({
+          center: [parseFloat(data.lat), parseFloat(data.lon)],
+          zoom: 14
+        });
+        
+        if (data.geometry) {
+           setSearchResultGeo(data.geometry);
+           toast.success('Região selecionada!', { id: toastId });
+        } else {
+           setSearchResultGeo(null);
+           toast.success('Localização encontrada!', { id: toastId });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching details:', error);
+      toast.error('Erro ao carregar detalhes', { id: toastId });
+    }
+  }, []);
+
+  // Debounced autocomplete
+  useEffect(() => {
+    if (searchQuery.length < 3) {
+      setSearchSuggestions([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery)}&format=json&limit=5&countrycodes=br`;
+        const res = await fetch(url, { headers: { 'User-Agent': 'MapaTerritorio-App/1.1' } });
+        const data = await res.json();
+        setSearchSuggestions(data);
+      } catch (e) {
+        console.error("Autocomplete error:", e);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Close suggestions on map click and clear highlights
+  const handleMapBackgroundClick = () => {
+    setSearchSuggestions([]);
+    setSearchResultGeo(null);
+    setFlyToLocation(null);
+    setSearchQuery("");
+    if (selectedUF) handleSelectUF("");
+  };
+
   const ufInfo = selectedUF ? getUFBySigla(selectedUF) : null;
 
   return (
@@ -107,6 +201,9 @@ const Index = () => {
         onToggleClientes={() => setShowClientes(!showClientes)}
         showHeatmap={showHeatmap}
         onToggleHeatmap={() => setShowHeatmap(!showHeatmap)}
+        onSearchEnter={handleAddressSearch}
+        suggestions={searchSuggestions}
+        onSelectSuggestion={handleSelectSuggestion}
       />
 
       <div className="flex-1 relative overflow-hidden">
@@ -116,9 +213,9 @@ const Index = () => {
           modo={modo}
           filtroRepresentante={filtroRepresentante}
           mostrarVagos={mostrarVagos}
-          onSelectUF={(uf) => handleSelectUF(uf)}
+          onSelectUF={handleSelectUF}
           onSelectMunicipio={handleSelectMunicipio}
-          searchQuery={searchQuery}
+          searchQuery={flyToLocation ? "" : searchQuery} // Disable highlights if we have a flyTo target
           municipioCodeForBairros={municipioCodeForBairros}
           onDeactivateBairros={() => {
             setMunicipioCodeForBairros(null);
@@ -129,6 +226,8 @@ const Index = () => {
           showHeatmap={showHeatmap}
           onContextMenuState={handleContextMenuState}
           onContextMenuMunicipio={handleContextMenuMunicipio}
+          flyToLocation={flyToLocation}
+          searchResultGeo={searchResultGeo}
         />
 
         {/* Legend overlay - bottom left */}

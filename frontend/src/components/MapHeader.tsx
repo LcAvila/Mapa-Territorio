@@ -30,12 +30,16 @@ interface MapHeaderProps {
   onToggleClientes?: () => void;
   showHeatmap?: boolean;
   onToggleHeatmap?: () => void;
+  onSearchEnter?: (q: string) => void;
+  suggestions?: any[];
+  onSelectSuggestion?: (item: any) => void;
 }
 
 export default function MapHeader({
   selectedUF, onSelectUF, 
   searchQuery, onSearchChange, isAuthenticated, role, logout,
-  showClientes, onToggleClientes, showHeatmap, onToggleHeatmap
+  showClientes, onToggleClientes, showHeatmap, onToggleHeatmap,
+  onSearchEnter, suggestions, onSelectSuggestion
 }: MapHeaderProps) {
   const navigate = useNavigate();
   const { repCode } = useAuth();
@@ -105,18 +109,47 @@ export default function MapHeader({
         <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
       </div>
 
-      {/* Search Bar (Centered) */}
-      <div className="flex-1 flex justify-center max-w-2xl mx-auto order-last sm:order-none w-full sm:w-auto mt-2 sm:mt-0">
+      <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto order-last sm:order-none w-full sm:w-auto mt-2 sm:mt-0 relative">
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Buscar município, bairro ou representante..."
+            placeholder="Buscar município, representante ou endereço..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && onSearchEnter) {
+                onSearchEnter(searchQuery);
+              }
+            }}
             className="w-full bg-secondary text-foreground text-sm pl-9 pr-3 py-2.5 rounded-md border border-border placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 shadow-sm transition-all"
           />
         </div>
+
+        {/* Suggestions Dropdown */}
+        {suggestions && suggestions.length > 0 && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-xl z-[2000] overflow-hidden max-h-[300px] overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+            {suggestions.map((item, idx) => (
+              <button
+                key={idx}
+                onClick={() => onSelectSuggestion?.(item)}
+                className="w-full text-left px-4 py-2.5 hover:bg-muted flex items-center gap-3 transition-colors border-b border-border/50 last:border-0"
+              >
+                <div className="p-1.5 bg-secondary rounded-md">
+                   {item.type === 'city' || item.type === 'administrative' ? (
+                     <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                   ) : (
+                     <Search className="w-3.5 h-3.5 text-muted-foreground" />
+                   )}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-sm font-medium truncate">{item.display_name.split(',')[0]}</span>
+                  <span className="text-[10px] text-muted-foreground truncate">{item.display_name.split(',').slice(1).join(',').trim()}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Map Layers Toggles */}

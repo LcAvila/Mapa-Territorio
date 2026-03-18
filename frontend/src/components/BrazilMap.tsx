@@ -35,18 +35,49 @@ interface BrazilMapProps {
   showHeatmap: boolean;
   onContextMenuState?: (nome: string, uf: string, x: number, y: number) => void;
   onContextMenuMunicipio?: (nome: string, uf: string, x: number, y: number) => void;
+  flyToLocation?: { center: [number, number]; zoom: number } | null;
+  searchResultGeo?: any | null;
 }
 
 const API_BASE = "http://localhost:3001";
 
-// ─── Map controller: smoothly fly to center/zoom ──────────────────────────
-function MapController({ center, zoom }: { center: [number, number]; zoom: number }) {
+function MapController({ center, zoom, flyToLocation }: { center: [number, number]; zoom: number; flyToLocation?: { center: [number, number]; zoom: number } | null }) {
   const map = useMap();
   const isFirst = useRef(true);
+
+  // Initial view and state-driven animations
   useEffect(() => {
-    if (isFirst.current) { isFirst.current = false; map.setView(center, zoom); }
-    else map.flyTo(center, zoom, { duration: 2.5, easeLinearity: 0.25 });
-  }, [map, center[0], center[1], zoom]);
+    if (!map) return;
+    if (isFirst.current) { 
+      isFirst.current = false; 
+      map.setView(center, zoom); 
+      return;
+    }
+
+    // Only follow state 'center/zoom' if we DON'T have a manual search location active
+    if (!flyToLocation && !isNaN(center[0]) && !isNaN(center[1])) {
+      map.flyTo(center, zoom, { duration: 2.0, easeLinearity: 0.25 });
+    }
+  }, [map, center[0], center[1], zoom, !!flyToLocation]);
+
+  // Handle manual address search navigation
+  useEffect(() => {
+    if (map && flyToLocation && flyToLocation.center) {
+      const [lat, lon] = flyToLocation.center;
+      if (!isNaN(lat) && !isNaN(lon)) {
+        // Use a small timeout to ensure map is ready and not fighting other animations
+        const timer = setTimeout(() => {
+          try {
+            map.flyTo([lat, lon], flyToLocation.zoom || 14, { duration: 2.5 });
+          } catch (e) {
+            map.setView([lat, lon], flyToLocation.zoom || 14);
+          }
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [map, flyToLocation]);
+
   return null;
 }
 
@@ -92,25 +123,29 @@ function HeatmapLayer({ points }: { points: [number, number, number][] }) {
 }
 
 // ─── API hooks ────────────────────────────────────────────────────────────────
-function useApiRepresentatives() {
+function useApiRepresentatives(enabled: boolean) {
   return useQuery<Representative[]>({
     queryKey: ["api", "representatives"],
     queryFn: async () => {
       const res = await fetch(`${API_BASE}/api/representatives`);
       return res.ok ? res.json() : [];
     },
-    staleTime: 30_000, refetchInterval: 60_000,
+    staleTime: 30_000, 
+    refetchInterval: 60_000,
+    enabled
   });
 }
 
-function useApiTerritories() {
+function useApiTerritories(enabled: boolean) {
   return useQuery<TerritoryAssignment[]>({
     queryKey: ["api", "territories"],
     queryFn: async () => {
       const res = await fetch(`${API_BASE}/api/territories`);
       return res.ok ? res.json() : [];
     },
-    staleTime: 30_000, refetchInterval: 60_000,
+    staleTime: 30_000, 
+    refetchInterval: 60_000,
+    enabled
   });
 }
 
@@ -138,11 +173,12 @@ export default function BrazilMap({
   onSelectUF, onSelectMunicipio, searchQuery,
   municipioCodeForBairros, onDeactivateBairros, selectedMunicipioName, showClientes, showHeatmap,
   onContextMenuState, onContextMenuMunicipio,
+  flyToLocation, searchResultGeo
 }: BrazilMapProps) {
-  const { role, estado_end } = useAuth();
+  const { role, estado_end, token } = useAuth();
   const { data: statesGeo } = useStatesGeoJSON();
-  const { data: apiReps = [] } = useApiRepresentatives();
-  const { data: apiTerritories = [] } = useApiTerritories();
+  const { data: apiReps = [] } = useApiRepresentatives(!!token);
+  const { data: apiTerritories = [] } = useApiTerritories(!!token);
   const { data: apiClientes = [] } = useApiClientes(filtroRepresentante);
 
   const ufInfo = selectedUF ? getUFBySigla(selectedUF) : null;
@@ -192,13 +228,16 @@ export default function BrazilMap({
     const name = municipioNames?.[codArea] || "";
     const reps = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
 
-    if (searchQuery) {
+    // Only highlight if the search query is a specific word that matches name/rep
+    // We avoid highlighting every polygon if the search is a broad address search
+    if (searchQuery && searchQuery.length > 2) {
       const q = searchQuery.toLowerCase();
       const repNames = reps.map(c => apiReps.find(r => r.code === c)?.name || "").join(" ").toLowerCase();
-      if (!name.toLowerCase().includes(q) && !reps.join(" ").toLowerCase().includes(q) && !repNames.includes(q)) {
-        return { fillColor: "transparent", weight: 0.5, opacity: 0.1, color: "hsl(220, 15%, 20%)", fillOpacity: 0 };
+      const isMatch = name.toLowerCase().includes(q) || reps.join(" ").toLowerCase().includes(q) || repNames.includes(q);
+      
+      if (isMatch) {
+         return { fillColor: "hsl(45, 90%, 55%)", weight: 3, opacity: 1, color: "hsl(45, 90%, 40%)", fillOpacity: 0.8 };
       }
-      return { fillColor: "hsl(45, 90%, 55%)", weight: 3, opacity: 1, color: "hsl(45, 90%, 40%)", fillOpacity: 0.8 };
     }
 
     if (reps.length === 0) return blank;
@@ -315,19 +354,14 @@ export default function BrazilMap({
       if (!c.latitude || !c.longitude) return false;
       if (selectedUF && c.uf !== selectedUF) return false;
 
-      // Point-in-polygon check
+      // If no UF is selected, we assume any geocoded client is "visible" in Brazil view.
+      // This saves O(N * 27) polygon checks every render.
+      if (!selectedUF) return true;
+
+      // Point-in-polygon check (only when filtered by UF)
       try {
         const pt = turfPoint([c.longitude, c.latitude]);
         if (filterGeometry) {
-          if (filterGeometry.type === 'FeatureCollection') {
-            return filterGeometry.features.some((f: any) => {
-              try {
-                return f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') && booleanPointInPolygon(pt, f);
-              } catch {
-                return false; 
-              }
-            });
-          }
           return booleanPointInPolygon(pt, filterGeometry);
         }
       } catch (e) {
@@ -353,20 +387,36 @@ export default function BrazilMap({
         maxBoundsViscosity={1.0}
       >
         <AttributionControl prefix={false} />
-        <MapController center={center} zoom={zoom} />
+        <MapController center={center} zoom={zoom} flyToLocation={flyToLocation} />
         <MapEventHandler onBackgroundClick={() => selectedUF && onSelectUF("")} />
 
         {/* Auto-zoom to municipality when selected */}
         {munGeo && <ZoomToMunicipio geoJson={munGeo} />}
 
         <TileLayer
-          url={municipioCodeForBairros
-            ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          url={municipioCodeForBairros || flyToLocation
+            ? "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             : "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"
           }
           attribution="Desenvolvido por Lucas Ávila"
-          opacity={municipioCodeForBairros ? 1 : 0.4}
+          opacity={municipioCodeForBairros || flyToLocation ? 1 : 0.4}
         />
+
+        {/* Search Result Polygon Highlight */}
+        {searchResultGeo && (
+          <GeoJSON 
+            key={`search-result-${JSON.stringify(searchResultGeo).length}`} 
+            data={searchResultGeo}
+            interactive={false}
+            style={{
+              fillColor: "hsl(190, 100%, 50%)",
+              weight: 3,
+              opacity: 1,
+              color: "hsl(190, 100%, 40%)",
+              fillOpacity: 0.1
+            }}
+          />
+        )}
 
         {/* States */}
         {statesGeo && !selectedUF && (
