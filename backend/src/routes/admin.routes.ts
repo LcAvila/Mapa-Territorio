@@ -91,7 +91,14 @@ router.post('/reps', requireAdminMiddleware, async (req, res) => {
 });
 
 router.get('/reps', async (req, res) => {
+  const user = (req as any).user;
+  const where: any = {};
+  if (user && user.role === 'representante' && user.repCode) {
+    where.code = user.repCode;
+  }
+
   const reps = await prisma.representative.findMany({ 
+    where,
     include: {
       _count: {
         select: { clientes: true, territories: true }
@@ -132,7 +139,13 @@ router.put('/reps/:code', requireAdminMiddleware, async (req, res) => {
 
 // --- TERRITORIES ---
 router.get('/territories', async (req, res) => {
-  const ter = await prisma.territory.findMany({ orderBy: [{ uf: 'asc' }, { municipio: 'asc' }] });
+  const user = (req as any).user;
+  const where: any = {};
+  if (user && user.role === 'representante' && user.repCode) {
+    where.repCode = user.repCode;
+  }
+
+  const ter = await prisma.territory.findMany({ where, orderBy: [{ uf: 'asc' }, { municipio: 'asc' }] });
   res.json(ter);
 });
 

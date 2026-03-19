@@ -257,11 +257,13 @@ export default function BrazilMap({
   flyToLocation, searchResultGeo,
   selectedClients = [], onSelectClients
 }: BrazilMapProps) {
-  const { role, estado_end, token } = useAuth();
+  const { role, estado_end, token, repCode: loggedRepCode } = useAuth();
   const { data: statesGeo } = useStatesGeoJSON();
   const { data: apiReps = [] } = useApiRepresentatives(!!token);
   const { data: apiTerritories = [] } = useApiTerritories(!!token);
-  const { data: apiClientes = [] } = useApiClientes(filtroRepresentante);
+  // If the logged-in user is a representative, always show their clients; otherwise use the admin filter
+  const effectiveRepFilter = role === 'representante' ? loggedRepCode : filtroRepresentante;
+  const { data: apiClientes = [] } = useApiClientes(effectiveRepFilter);
 
   const [isMapMoving, setIsMapMoving] = useState(false);
 

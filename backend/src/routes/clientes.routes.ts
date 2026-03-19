@@ -15,8 +15,14 @@ router.get('/', async (req, res) => {
     const { repCode, supervisorName } = req.query;
     const where: any = {};
     
-    if (repCode) where.repCode = repCode.toString();
-    if (supervisorName) where.supervisorName = supervisorName.toString();
+    // Isolamento de dados: Representantes veem apenas os próprios clientes
+    const user = (req as any).user;
+    if (user && user.role === 'representante') {
+      where.repCode = user.repCode;
+    } else {
+      if (repCode) where.repCode = repCode.toString();
+      if (supervisorName) where.supervisorName = supervisorName.toString();
+    }
 
     const clientes = await prisma.cliente.findMany({
       where,

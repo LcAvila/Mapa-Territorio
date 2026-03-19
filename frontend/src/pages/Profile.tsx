@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import Loader from '@/components/Loader';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,7 +67,7 @@ export default function Profile() {
     const authHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
 
     useEffect(() => {
-        fetch(`${API}/api/profile`, { headers: authHeaders })
+        fetch(`${API}/api/me`, { headers: authHeaders })
             .then(r => r.json())
             .then(data => {
                 setProfile(data);
@@ -87,6 +88,7 @@ export default function Profile() {
             })
             .catch(() => toast.error('Erro ao carregar perfil'))
             .finally(() => setLoading(false));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleCepBlur = async () => {
@@ -146,7 +148,7 @@ export default function Profile() {
         if (form.password) body.password = form.password;
 
         try {
-            const res = await fetch(`${API}/api/profile`, {
+            const res = await fetch(`${API}/api/me`, {
                 method: 'PUT', headers: authHeaders, body: JSON.stringify(body),
             });
             if (res.ok) {
@@ -164,8 +166,8 @@ export default function Profile() {
     };
 
     if (loading) return (
-        <div className="flex h-screen items-center justify-center bg-background">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <div className="flex w-full h-screen items-center justify-center bg-background">
+            <Loader />
         </div>
     );
 

@@ -1,4 +1,15 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+
+export interface ClienteData { 
+  id_cliente?: number; 
+  codigo_cliente?: string; 
+  nome_cliente?: string; 
+  nome_abreviado?: string; 
+  uf?: string; 
+  cidade?: string; 
+  repCode?: string; 
+  [key: string]: unknown; 
+}
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -18,6 +29,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import Loader from '@/components/Loader';
 import { REP_COLOR_PALETTE, getNextColorIndex } from '@/data/representatives';
 import { UF_DATA } from '@/data/uf-codes';
 
@@ -141,6 +153,7 @@ export default function Admin() {
   const [territories, setTerritories] = useState<Territory[]>([]);
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [interests, setInterests] = useState<InterestRequest[]>([]);
+  const [clientes, setClientes] = useState<ClienteData[]>([]);
   const [loading, setLoading] = useState(true);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
@@ -222,11 +235,12 @@ export default function Admin() {
   });
 
   // ── Users form (enhanced) ─────────────────────────────────────────────────
-  const [newUser, setNewUser] = useState({ fullName: '', email: '', password: '', confirmPassword: '', role: 'user', repCode: '', documentType: 'cpf' as 'cpf' | 'cnpj', document: '', companyName: '', age: '', photo: '' });
+  const [newUser, setNewUser] = useState({ fullName: '', email: '', password: '', confirmPassword: '', role: 'user' as 'user' | 'supervisor' | 'admin', repCode: '', documentType: 'cpf' as 'cpf' | 'cnpj', document: '', companyName: '', age: '', photo: '' });
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
-  const [editUserForm, setEditUserForm] = useState({ username: '', fullName: '', document: '', password: '', confirmPassword: '', role: 'user', repCode: '', photo: '' });
+  const [editUserForm, setEditUserForm] = useState({ username: '', fullName: '', document: '', password: '', confirmPassword: '', role: 'user' as 'user' | 'supervisor' | 'admin', repCode: '', photo: '' });
   const [showEditPwd, setShowEditPwd] = useState(false);
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
 
   const handleUserPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
     const file = e.target.files?.[0];
@@ -279,16 +293,18 @@ export default function Admin() {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [rR, tR, uR, iR] = await Promise.all([
+      const [rR, tR, uR, iR, cR] = await Promise.all([
         fetch(`${API}/api/admin/reps`, { headers: authHeaders }),
         fetch(`${API}/api/admin/territories`, { headers: authHeaders }),
         fetch(`${API}/api/admin/users`, { headers: authHeaders }),
         fetch(`${API}/api/interest`, { headers: authHeaders }),
+        fetch(`${API}/api/clientes`, { headers: authHeaders }),
       ]);
       if (rR.ok) setReps(await rR.json());
       if (tR.ok) setTerritories(await tR.json());
       if (uR.ok) setUsers(await uR.json());
       if (iR.ok) setInterests(await iR.json());
+      if (cR.ok) setClientes(await cR.json());
     } catch { toast.error('Erro ao carregar dados'); }
     finally { setLoading(false); }
   };
@@ -446,7 +462,13 @@ export default function Admin() {
     if (newUser.repCode) body.repCode = newUser.repCode;
     if (newUser.photo) body.photo = newUser.photo;
     const res = await fetch(`${API}/api/admin/users`, { method: 'POST', headers: authHeaders, body: JSON.stringify(body) });
-    if (res.ok) { toast.success(`Usuário "${newUser.fullName}" criado!`); addAudit('create_user', 'Usuário', newUser.email, `Criou usuário ${newUser.fullName} (${newUser.email})`); setNewUser({ fullName: '', email: '', password: '', confirmPassword: '', role: 'user', repCode: '', documentType: 'cpf', document: '', companyName: '', age: '', photo: '' }); fetchAll(); }
+    if (res.ok) { 
+      toast.success(`Usuário "${newUser.fullName}" criado!`); 
+      addAudit('create_user', 'Usuário', newUser.email, `Criou usuário ${newUser.fullName} (${newUser.email})`); 
+      setNewUser({ fullName: '', email: '', password: '', confirmPassword: '', role: 'user', repCode: '', documentType: 'cpf', document: '', companyName: '', age: '', photo: '' }); 
+      setIsUserModalOpen(false);
+      fetchAll(); 
+    }
     else { const err = await res.json(); toast.error(err.message || 'Erro'); }
   };
 
@@ -466,7 +488,13 @@ export default function Admin() {
     if (editUserForm.password.trim()) body.password = editUserForm.password;
     if (editUserForm.photo) body.photo = editUserForm.photo;
     const res = await fetch(`${API}/api/admin/users/${id}`, { method: 'PUT', headers: authHeaders, body: JSON.stringify(body) });
-    if (res.ok) { toast.success('Usuário atualizado!'); addAudit('update_user', 'Usuário', String(id), `Atualizou usuário ${editUserForm.username}`); setEditingUserId(null); fetchAll(); }
+    if (res.ok) { 
+      toast.success('Usuário atualizado!'); 
+      addAudit('update_user', 'Usuário', String(id), `Atualizou usuário ${editUserForm.username}`); 
+      setEditingUserId(null); 
+      setIsUserModalOpen(false);
+      fetchAll(); 
+    }
     else { const err = await res.json(); toast.error(err.message || 'Erro'); }
   };
 
@@ -524,10 +552,7 @@ export default function Admin() {
 
   if (loading) return (
     <div className="admin-layout items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="animate-spin w-10 h-10" style={{ color: 'hsl(var(--admin-sidebar-accent))' }} />
-        <p className="text-sm" style={{ color: 'hsl(var(--muted-foreground))' }}>Carregando painel administrativo...</p>
-      </div>
+      <Loader />
     </div>
   );
 
@@ -540,7 +565,7 @@ export default function Admin() {
   const displayPhoto = currentUser?.photo || '';
 
   const navItems: { id: TabId | 'settings' | 'rotas_menu'; label: string; icon: React.ElementType; count?: number; badge?: boolean; restrict?: string[]; subItems?: { id: TabId; label: string; icon: React.ElementType; count?: number; }[] }[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, restrict: ['admin'] },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, restrict: ['admin', 'supervisor', 'representante'] },
     { id: 'reps', label: 'Representantes', icon: Briefcase, count: reps.length, restrict: ['admin', 'supervisor'] },
     { id: 'baserotas', label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor'] },
     { id: 'territories', label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin', 'supervisor'] },
@@ -726,23 +751,24 @@ export default function Admin() {
           {/* ══ DASHBOARD ══ */}
           {activeTab === 'dashboard' && (() => {
             // ── Derived / filtered data ──────────────────────────────────────
-            const filteredTerrs = territories.filter(t => {
-              if (dashFilterRep && t.repCode !== dashFilterRep) return false;
-              if (dashFilterUF && t.uf !== dashFilterUF) return false;
-              if (dashFilterModo && t.modo !== dashFilterModo) return false;
+            const filteredClientes = clientes.filter(c => {
+              if (dashFilterRep && c.repCode !== dashFilterRep) return false;
+              if (dashFilterUF && c.uf !== dashFilterUF) return false;
+              // Ignore dashFilterModo for clients as it acts on territories mostly
               if (dashSearch) {
                 const q = dashSearch.toLowerCase();
-                const repName = reps.find(r => r.code === t.repCode)?.name?.toLowerCase() || '';
-                if (!t.municipio.toLowerCase().includes(q) && !t.uf.toLowerCase().includes(q) && !repName.includes(q)) return false;
+                const repName = reps.find(r => r.code === c.repCode)?.name?.toLowerCase() || '';
+                if (!(c.nome_cliente || '').toLowerCase().includes(q) && !(c.cidade || '').toLowerCase().includes(q) && !(c.uf || '').toLowerCase().includes(q) && !repName.includes(q)) return false;
               }
               return true;
             });
 
             // Group by UF
-            const byUF: Record<string, typeof filteredTerrs> = {};
-            for (const t of filteredTerrs) {
-              if (!byUF[t.uf]) byUF[t.uf] = [];
-              byUF[t.uf].push(t);
+            const byUF: Record<string, typeof filteredClientes> = {};
+            for (const c of filteredClientes) {
+              const uf = c.uf || 'Sem UF';
+              if (!byUF[uf]) byUF[uf] = [];
+              byUF[uf].push(c);
             }
             const ufEntries = Object.entries(byUF).sort((a, b) => b[1].length - a[1].length);
 
@@ -840,9 +866,10 @@ export default function Admin() {
                   {/* Stat pills */}
                   <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
                     {[
-                      { label: 'Territórios', value: filteredTerrs.length, color: '#22C55E', bg: '#F0FDF4' },
-                      { label: 'Estados', value: ufEntries.length, color: '#3B82F6', bg: '#EFF6FF' },
-                      { label: 'Representantes', value: new Set(filteredTerrs.map(t => t.repCode)).size, color: '#8B5CF6', bg: '#F5F3FF' },
+                      { label: 'Clientes Fitrados', value: filteredClientes.length, color: '#EAB308', bg: '#FEFCE8' },
+                      { label: 'Territórios (Global)', value: territories.length, color: '#22C55E', bg: '#F0FDF4' },
+                      { label: 'Estados Visíveis', value: ufEntries.length, color: '#3B82F6', bg: '#EFF6FF' },
+                      { label: 'Representantes', value: new Set(filteredClientes.map(c => c.repCode)).size, color: '#8B5CF6', bg: '#F5F3FF' },
                       { label: 'Pendentes', value: pendingInterests, color: '#F59E0B', bg: '#FFFBEB' },
                       { label: 'Usuários', value: users.length, color: '#06B6D4', bg: '#ECFEFF' },
                     ].map(s => (
@@ -868,7 +895,7 @@ export default function Admin() {
                       const uniqueReps = [...new Set(terrs.map(t => t.repCode))];
                       const modos = [...new Set(terrs.map(t => t.modo))];
                       return (
-                        <div key={uf} className="admin-card" style={{ padding: 0, overflow: 'hidden' }}>
+                        <div key={uf} className="admin-card" style={{ padding: 0, overflow: 'hidden', flexShrink: 0 }}>
                           {/* UF header */}
                           <div style={{
                             display: 'flex', alignItems: 'center', gap: 12,
@@ -884,20 +911,18 @@ export default function Admin() {
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <p style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 2 }}>
-                                {terrs.length} município(s) — {uniqueReps.length} rep(s)
+                                {terrs.length} cliente(s) — {uniqueReps.length} rep(s)
                               </p>
                               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                {modos.map(m => (
-                                  <span key={m} style={{
-                                    fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: 10, letterSpacing: '0.03em',
-                                    background: m === 'planejamento' ? 'hsl(var(--admin-sidebar-accent) / 0.13)' : 'hsl(200 70% 50% / 0.12)',
-                                    color: m === 'planejamento' ? 'hsl(var(--admin-sidebar-accent))' : 'hsl(200 70% 40%)',
-                                    border: `1px solid ${m === 'planejamento' ? 'hsl(var(--admin-sidebar-accent) / 0.25)' : 'hsl(200 70% 50% / 0.2)'}`,
-                                    textTransform: 'uppercase',
-                                  }}>
-                                    {m}
-                                  </span>
-                                ))}
+                                <span style={{
+                                  fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: 10, letterSpacing: '0.03em',
+                                  background: 'hsl(var(--admin-sidebar-accent) / 0.13)',
+                                  color: 'hsl(var(--admin-sidebar-accent))',
+                                  border: '1px solid hsl(var(--admin-sidebar-accent) / 0.25)',
+                                  textTransform: 'uppercase',
+                                }}>
+                                  PRESENÇA ATIVA
+                                </span>
                               </div>
                             </div>
                             {/* Rep avatars */}
@@ -914,7 +939,7 @@ export default function Admin() {
                                     marginLeft: idx > 0 ? -8 : 0, zIndex: 4 - idx,
                                     position: 'relative',
                                   }}>
-                                    {code.substring(0, 2).toUpperCase()}
+                                    {(code || 'SR').substring(0, 2).toUpperCase()}
                                   </div>
                                 );
                               })}
@@ -944,31 +969,32 @@ export default function Admin() {
 
                           {/* Municipality rows (collapsed by default, show top 5) */}
                           <div>
-                            {terrs.slice(0, 5).map(t => {
-                              const rep = reps.find(r => r.code === t.repCode);
+                            {terrs.slice(0, 5).map(c => {
+                              const rep = reps.find(r => r.code === c.repCode);
                               const color = rep && !rep.isVago ? REP_COLOR_PALETTE[rep.colorIndex] : 'hsl(0 0% 40%)';
                               return (
-                                <div key={t.id} style={{
+                                <div key={c.codigo_cliente || c.id_cliente} style={{
                                   display: 'flex', alignItems: 'center', gap: 12,
                                   padding: '9px 18px', borderBottom: '1px solid hsl(var(--admin-card-border))',
                                 }}>
                                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                                  <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: 500 }}>{t.municipio}</span>
-                                  <span style={{ fontSize: '0.72rem', color: 'hsl(var(--muted-foreground))' }}>{rep?.name || t.repCode}</span>
+                                  <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: 500 }} title={c.nome_cliente}>{c.nome_abreviado || c.nome_cliente}</span>
+                                  <span style={{ fontSize: '0.72rem', color: 'hsl(var(--muted-foreground))' }}>{c.cidade}</span>
                                   <span style={{
                                     fontSize: '0.65rem', fontWeight: 700, padding: '1px 7px', borderRadius: 8,
-                                    background: t.modo === 'planejamento' ? 'hsl(43 90% 55% / 0.12)' : 'hsl(200 70% 50% / 0.1)',
-                                    color: t.modo === 'planejamento' ? 'hsl(43 90% 38%)' : 'hsl(200 70% 38%)',
+                                    background: 'hsl(43 90% 55% / 0.12)',
+                                    color: 'hsl(43 90% 38%)',
                                     textTransform: 'uppercase',
+                                    minWidth: 50, textAlign: 'center'
                                   }}>
-                                    {t.modo === 'planejamento' ? 'PL' : 'AT'}
+                                    {rep?.code || 'S/ REP'}
                                   </span>
                                 </div>
                               );
                             })}
                             {terrs.length > 5 && (
                               <div style={{ padding: '8px 18px', fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))', fontStyle: 'italic' }}>
-                                + {terrs.length - 5} município(s) não exibido(s) — use filtro para ver todos
+                                + {terrs.length - 5} cliente(s) não exibido(s) — use filtro para ver todos
                               </div>
                             )}
                           </div>
@@ -1014,7 +1040,7 @@ export default function Admin() {
                           </p>
                         ) : activeReps.map(rep => {
                           const color = REP_COLOR_PALETTE[rep.colorIndex] || 'hsl(220 15% 40%)';
-                          const count = territories.filter(t => t.repCode === rep.code).length;
+                          const count = clientes.filter(c => c.repCode === rep.code).length;
                           const isActive = dashFilterRep === rep.code;
                           return (
                             <button
@@ -1025,6 +1051,7 @@ export default function Admin() {
                                 padding: '7px 16px', border: 'none', cursor: 'pointer', textAlign: 'left',
                                 background: isActive ? `${color}18` : 'transparent',
                                 transition: 'background 0.15s',
+                                flexShrink: 0,
                               }}
                             >
                               <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0, border: isActive ? `2px solid ${color}` : 'none' }} />
@@ -1041,14 +1068,18 @@ export default function Admin() {
                       </div>
                     </div>
 
-                    {/* Quick stats */}
+                    {/* Quick stats & Reports */}
                     <div className="admin-card" style={{ padding: '12px 16px' }}>
+                      <div style={{ paddingBottom: 10, borderBottom: '1px solid hsl(var(--admin-card-border))', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Database style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
+                        <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>Relatórios e Métricas</span>
+                      </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                         {[
+                          { l: 'Clientes Total', v: clientes.length, t: 'baserotas' as TabId, c: '#EAB308' },
                           { l: 'Usuários', v: users.length, t: 'users' as TabId, c: '#3B82F6' },
                           { l: 'Interesses', v: interests.length, t: 'interests' as TabId, c: '#6366F1' },
                           { l: 'Grupos', v: groups.length, t: 'groups' as TabId, c: '#06B6D4' },
-                          { l: 'Notificações', v: notifications.length, t: 'notifications' as TabId, c: '#F43F5E' },
                         ].map(s => (
                           <button
                             key={s.l}
@@ -1073,206 +1104,102 @@ export default function Admin() {
 
           {/* ══ USUÁRIOS ══ */}
           {activeTab === 'users' && (
-            <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
-              <div className="xl:col-span-2">
-                <Card className="border-border/40">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="flex items-center gap-2 text-sm">
-                      <div className="w-7 h-7 bg-primary/15 rounded-md flex items-center justify-center"><UserPlus className="w-3.5 h-3.5 text-primary" /></div>
-                      Novo Usuário
-                    </CardTitle>
-                    <CardDescription className="text-xs">Crie logins para acessar o sistema</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <form onSubmit={handleCreateUser} className="space-y-3">
-                      <div className="flex items-center gap-4 mb-2">
-                        <label className="shrink-0 cursor-pointer group relative w-16 h-16 rounded-xl bg-secondary border border-border/40 flex items-center justify-center overflow-hidden hover:border-primary/50 transition-colors">
-                          {newUser.photo ? <img src={newUser.photo} alt="Avatar" className="w-full h-full object-cover" /> : <Camera className="w-5 h-5 text-muted-foreground" />}
-                          <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center transition-all"><Camera className="w-4 h-4 text-white" /></div>
-                          <input type="file" accept="image/*" className="hidden" onChange={e => handleUserPhotoUpload(e, false)} />
-                        </label>
-                        <div className="text-xs text-muted-foreground"><p className="font-medium text-foreground">Foto de Perfil</p><p>Máx. 2MB (opcional)</p></div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground">Nome Completo *</label>
-                        <Input placeholder="Ex: João da Silva" value={newUser.fullName} onChange={e => setNewUser({ ...newUser, fullName: e.target.value })} required />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground">Tipo de Documento</label>
-                        <div className="flex gap-2">
-                          {(['cpf', 'cnpj'] as const).map(t => (
-                            <button key={t} type="button" onClick={() => setNewUser({ ...newUser, documentType: t, document: '' })}
-                              className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold border transition-all ${newUser.documentType === t ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>
-                              {t.toUpperCase()}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground">{newUser.documentType === 'cpf' ? 'CPF' : 'CNPJ'} *</label>
-                        <Input placeholder={newUser.documentType === 'cpf' ? '000.000.000-00' : '00.000.000/0000-00'} value={newUser.document}
-                          onChange={e => setNewUser({ ...newUser, document: maskDoc(e.target.value, newUser.documentType) })} required />
-                      </div>
-                      {newUser.documentType === 'cnpj' && (
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Building2 className="w-3 h-3" />Nome da Empresa *</label>
-                          <Input placeholder="Razão social" value={newUser.companyName} onChange={e => setNewUser({ ...newUser, companyName: e.target.value })} required />
-                        </div>
-                      )}
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium text-muted-foreground">Idade</label>
-                          <Input type="number" min="1" max="120" placeholder="Ex: 35" value={newUser.age} onChange={e => setNewUser({ ...newUser, age: e.target.value })} />
-                        </div>
-                        {role === 'admin' && (
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium text-muted-foreground">Papel *</label>
-                          <div className="flex gap-1.5 h-9">
-                            {(['user', 'supervisor'] as const).map(r => (
-                              <button key={r} type="button" onClick={() => setNewUser({ ...newUser, role: r })}
-                                className={`flex-1 rounded-md text-[11px] font-semibold border transition-all flex items-center justify-center gap-1 ${newUser.role === r ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground'}`}>
-                                {r === 'supervisor' ? <ShieldCheck className="w-3 h-3" /> : <User className="w-3 h-3" />}{r === 'supervisor' ? 'Supervisor' : 'User'}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        )}
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground">Email *</label>
-                        <Input type="email" placeholder="email@exemplo.com" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} required />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium text-muted-foreground">Senha *</label>
-                          <div className="relative">
-                            <Input type={showNewPwd ? 'text' : 'password'} placeholder="Senha de acesso" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} className="pr-10" required />
-                            <button type="button" tabIndex={-1} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowNewPwd(v => !v)}>
-                              {showNewPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium text-muted-foreground">Confirmar Senha *</label>
-                          <Input type={showNewPwd ? 'text' : 'password'} placeholder="Confirme a senha" value={newUser.confirmPassword} onChange={e => setNewUser({ ...newUser, confirmPassword: e.target.value })} required />
-                        </div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground">Vincular Representante <span className="font-normal">(opcional)</span></label>
-                        <select className="w-full h-9 px-3 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary" value={newUser.repCode} onChange={e => setNewUser({ ...newUser, repCode: e.target.value })}>
-                          <option value="">— Nenhum —</option>
-                          {reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
-                        </select>
-                      </div>
-                      <Button className="w-full gap-2" type="submit"><Plus className="w-4 h-4" />Criar Usuário</Button>
-                    </form>
-                  </CardContent>
-                </Card>
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <div className="flex flex-col md:flex-row gap-4 items-center justify-between pb-2">
+                <div>
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    <Users className="w-6 h-6 text-primary" /> Gestão de Usuários
+                  </h2>
+                  <p className="text-sm text-muted-foreground">Controle de acesso e permissões.</p>
+                </div>
+                <div className="flex w-full md:w-auto items-center gap-3">
+                  <div className="relative flex-1 md:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input placeholder="Buscar..." className="pl-9 bg-background/50 border-border/40" />
+                  </div>
+                  <Button className="gap-2 shadow-lg shadow-primary/20" onClick={() => {
+                    setEditingUserId(null);
+                    setNewUser({ fullName: '', email: '', password: '', confirmPassword: '', role: 'user', repCode: '', documentType: 'cpf', document: '', companyName: '', age: '', photo: '' });
+                    setIsUserModalOpen(true);
+                  }}>
+                    <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Novo Usuário</span>
+                  </Button>
+                </div>
               </div>
 
-              <div className="xl:col-span-3">
-                <Card className="border-border/40">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2 text-sm"><Users className="w-4 h-4 text-primary" />Usuários do Sistema</CardTitle>
-                      <span className="text-xs text-muted-foreground bg-secondary/50 px-2.5 py-1 rounded-full">{users.length} total</span>
+              {users.length === 0 ? (
+                <Card className="border-dashed border-2 py-20 flex flex-col items-center justify-center text-muted-foreground bg-transparent">
+                  <Users className="w-12 h-12 opacity-10 mb-4" /> <p>Nenhum usuário</p>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                  {users.map(u => (
+                    <Card key={u.id} className="group relative overflow-hidden border-border/40 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 transform hover:-translate-y-1">
+                      <div className={`h-1.5 w-full absolute top-0 left-0 ${u.role === 'admin' ? 'bg-amber-500' : u.role === 'supervisor' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                      <CardContent className="p-5">
+                        <div className="flex flex-col items-center text-center space-y-3">
+                          <div className="relative">
+                            <div className="w-16 h-16 rounded-2xl bg-secondary border border-border/50 flex items-center justify-center overflow-hidden transition-transform group-hover:scale-105 duration-300">
+                              {u.photo ? <img src={u.photo} alt="Avatar" className="w-full h-full object-cover" /> : <User className="w-8 h-8 text-muted-foreground/30" />}
+                            </div>
+                            <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-lg flex items-center justify-center border-2 border-card shadow-sm ${u.role === 'admin' ? 'bg-amber-500 text-white' : u.role === 'supervisor' ? 'bg-emerald-500 text-white' : 'bg-blue-500 text-white'}`}>
+                              {u.role === 'admin' ? <ShieldCheck className="w-3" /> : u.role === 'supervisor' ? <Briefcase className="w-3" /> : <User className="w-3" />}
+                            </div>
+                          </div>
+                          <div className="space-y-0.5 w-full">
+                            <h3 className="font-bold text-sm truncate" title={u.full_name || u.fullName || u.username}>{u.full_name || u.fullName || u.username}</h3>
+                            <p className="text-[10px] text-muted-foreground truncate">{u.username}</p>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${u.role === 'admin' ? 'bg-amber-500/15 text-amber-500' : u.role === 'supervisor' ? 'bg-emerald-500/15 text-emerald-500' : 'bg-blue-500/15 text-blue-500'}`}>{u.role}</span>
+                            {u.repCode && <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase bg-secondary text-muted-foreground">Rep: {u.repCode}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-border/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary" onClick={() => { setEditingUserId(u.id); setEditUserForm({ username: u.username, fullName: u.full_name || u.fullName || '', document: u.document || u.cpf_cnpj || '', password: '', confirmPassword: '', role: u.role as 'user' | 'supervisor' | 'admin', repCode: u.repCode || '', photo: u.photo || '' }); setIsUserModalOpen(true); }}><Pencil className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteUser(u.id, u.username)}><Trash2 className="w-4 h-4" /></Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
+                <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-xl">{editingUserId ? <Pencil className="w-5 h-5 text-primary" /> : <UserPlus className="w-5 h-5 text-primary" />} {editingUserId ? 'Editar Usuário' : 'Novo Usuário'}</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={editingUserId ? (e) => { e.preventDefault(); handleUpdateUser(editingUserId); setIsUserModalOpen(false); } : (e) => { handleCreateUser(e); setIsUserModalOpen(false); }} className="space-y-4 pt-2">
+                    <div className="flex items-center gap-4">
+                      <label className="shrink-0 cursor-pointer w-20 h-20 rounded-2xl bg-secondary border-2 border-dashed border-border/60 flex items-center justify-center overflow-hidden hover:border-primary/50 transition-all">
+                        {(editingUserId ? editUserForm.photo : newUser.photo) ? <img src={editingUserId ? editUserForm.photo : newUser.photo} alt="Avatar" className="w-full h-full object-cover" /> : <Camera className="w-6 h-6 text-muted-foreground opacity-40" />}
+                        <input type="file" accept="image/*" className="hidden" onChange={e => handleUserPhotoUpload(e, !!editingUserId)} />
+                      </label>
+                      <div className="text-xs text-muted-foreground"><p className="font-bold text-foreground">Foto de Perfil</p><p>JPG, PNG. Máx 2MB.</p></div>
                     </div>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    {users.length === 0 ? (
-                      <div className="py-16 text-center text-muted-foreground"><Users className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Nenhum usuário</p></div>
-                    ) : (
-                      <div className="overflow-hidden rounded-b-lg">
-                        <Table>
-                          <TableHeader><TableRow className="hover:bg-transparent border-border/40">
-                            <TableHead className="pl-4">Usuário</TableHead>
-                            <TableHead className="w-20">Papel</TableHead>
-                            <TableHead>Representante</TableHead>
-                            <TableHead className="w-20 pr-4"></TableHead>
-                          </TableRow></TableHeader>
-                          <TableBody>
-                            {users.map(u => (
-                              <React.Fragment key={u.id}>
-                                <TableRow className={`border-border/30 ${editingUserId === u.id ? 'bg-primary/5' : 'hover:bg-secondary/30'}`}>
-                                  <TableCell className="pl-4">
-                                    <div className="flex items-center gap-3">
-                                      <div className="w-9 h-9 rounded-full bg-secondary border border-border/50 shrink-0 overflow-hidden flex items-center justify-center">
-                                        {u.photo ? <img src={u.photo} alt={u.username} className="w-full h-full object-cover" /> : <User className="w-4 h-4 text-muted-foreground" />}
-                                      </div>
-                                      <div>
-                                        <p className="text-sm font-semibold">{u.full_name || u.fullName || u.username}</p>
-                                        <p className="text-[10px] text-muted-foreground">{u.username} • ID #{u.id}</p>
-                                      </div>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 w-fit ${u.role === 'admin' ? 'bg-amber-500/20 text-amber-400' : u.role === 'supervisor' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                                      {u.role === 'admin' ? <ShieldCheck className="w-3 h-3" /> : u.role === 'supervisor' ? <Briefcase className="w-3 h-3" /> : <User className="w-3 h-3" />}{u.role.charAt(0).toUpperCase() + u.role.slice(1)}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell className="text-xs text-muted-foreground">{u.repCode ? (() => { const r = reps.find(r => r.code === u.repCode); return r ? `${r.code} — ${r.name}` : u.repCode; })() : '—'}</TableCell>
-                                  <TableCell className="pr-4">
-                                    <div className="flex gap-1 justify-end">
-                                      <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-primary/10 hover:text-primary" onClick={() => editingUserId === u.id ? setEditingUserId(null) : (setEditingUserId(u.id), setEditUserForm({ username: u.username, fullName: u.full_name || u.fullName || '', document: u.document || u.cpf_cnpj || '', password: '', confirmPassword: '', role: u.role, repCode: u.repCode || '', photo: u.photo || '' }))}>
-                                        {editingUserId === u.id ? <X className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
-                                      </Button>
-                                      <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteUser(u.id, u.username)}>
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </Button>
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                                {editingUserId === u.id && (
-                                  <TableRow className="bg-primary/5 border-border/30">
-                                    <TableCell colSpan={4} className="py-3 px-6">
-                                      <div className="flex flex-col gap-3">
-                                        <div className="flex items-center gap-4">
-                                          <label className="shrink-0 cursor-pointer group relative w-12 h-12 rounded-full bg-secondary border border-border/40 flex items-center justify-center overflow-hidden hover:border-primary/50 transition-colors">
-                                            {editUserForm.photo ? <img src={editUserForm.photo} alt="Avatar" className="w-full h-full object-cover" /> : <Camera className="w-4 h-4 text-muted-foreground" />}
-                                            <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center transition-all"><Camera className="w-3 h-3 text-white" /></div>
-                                            <input type="file" accept="image/*" className="hidden" onChange={e => handleUserPhotoUpload(e, true)} />
-                                          </label>
-                                          <span className="text-xs text-muted-foreground font-medium">Trocar Foto</span>
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                                          <div className="space-y-1"><label className="text-[10px] text-muted-foreground">Nome (Username)</label><Input value={editUserForm.fullName} onChange={e => setEditUserForm(f => ({ ...f, fullName: e.target.value }))} className="h-8 text-xs" /></div>
-                                          <div className="space-y-1"><label className="text-[10px] text-muted-foreground">Email</label><Input value={editUserForm.username} onChange={e => setEditUserForm(f => ({ ...f, username: e.target.value }))} className="h-8 text-xs" /></div>
-                                          <div className="space-y-1"><label className="text-[10px] text-muted-foreground">Nova Senha</label>
-                                            <div className="relative"><Input type={showEditPwd ? 'text' : 'password'} value={editUserForm.password} onChange={e => setEditUserForm(f => ({ ...f, password: e.target.value }))} className="h-8 text-xs pr-8" placeholder="Opcional" />
-                                              <button type="button" tabIndex={-1} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowEditPwd(v => !v)}>{showEditPwd ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}</button>
-                                            </div>
-                                          </div>
-                                          <div className="space-y-1">
-                                            <label className="text-[10px] text-muted-foreground">Confirmar Senha</label>
-                                            <Input type={showEditPwd ? 'text' : 'password'} value={editUserForm.confirmPassword} onChange={e => setEditUserForm(f => ({ ...f, confirmPassword: e.target.value }))} className="h-8 text-xs" placeholder="Confirmação" />
-                                          </div>
-                                          {role === 'admin' && (
-                                          <div className="space-y-1"><label className="text-[10px] text-muted-foreground">Papel</label>
-                                            <select className="w-full h-8 text-xs px-2 bg-background border border-input rounded-md focus:outline-none focus:ring-1 focus:ring-primary" value={editUserForm.role} onChange={e => setEditUserForm(f => ({ ...f, role: e.target.value }))}>
-                                              <option value="user">User</option>
-                                              <option value="supervisor">Supervisor</option>
-                                              <option value="admin">Admin</option>
-                                            </select>
-                                          </div>
-                                          )}
-                                        </div>
-                                      <div className="flex gap-2 mt-2">
-                                        <Button size="sm" className="gap-1.5 h-7 text-xs" onClick={() => handleUpdateUser(u.id)}><Save className="w-3 h-3" />Salvar</Button>
-                                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingUserId(null)}>Cancelar</Button>
-                                      </div>
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                )}
-                              </React.Fragment>
-                            ))}
-                          </TableBody>
-                        </Table>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Nome Completo *</Label><Input value={editingUserId ? editUserForm.fullName : newUser.fullName} onChange={e => editingUserId ? setEditUserForm({ ...editUserForm, fullName: e.target.value }) : setNewUser({ ...newUser, fullName: e.target.value })} required /></div>
+                      <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">E-mail (Username) *</Label><Input type="email" value={editingUserId ? editUserForm.username : newUser.email} onChange={e => editingUserId ? setEditUserForm({ ...editUserForm, username: e.target.value }) : setNewUser({ ...newUser, email: e.target.value })} required /></div>
+                    </div>
+                    {!editingUserId && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Tipo Doc</Label><div className="flex gap-1">{(['cpf', 'cnpj'] as const).map(t => <button key={t} type="button" onClick={() => setNewUser({ ...newUser, documentType: t, document: '' })} className={`flex-1 py-1.5 rounded-lg text-xs font-bold border ${newUser.documentType === t ? 'bg-primary border-primary text-white' : 'border-border text-muted-foreground'}`}>{t.toUpperCase()}</button>)}</div></div>
+                        <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">{newUser.documentType.toUpperCase()} *</Label><Input value={newUser.document} onChange={e => setNewUser({ ...newUser, document: maskDoc(e.target.value, newUser.documentType) })} required /></div>
                       </div>
                     )}
-                  </CardContent>
-                </Card>
-              </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Papel *</Label><select className="w-full h-10 px-3 bg-muted/40 border rounded-md text-sm" value={editingUserId ? editUserForm.role : newUser.role} onChange={e => editingUserId ? setEditUserForm({ ...editUserForm, role: e.target.value as 'user' | 'supervisor' | 'admin' }) : setNewUser({ ...newUser, role: e.target.value as 'user' | 'supervisor' | 'admin' })}><option value="user">Usuário</option><option value="supervisor">Supervisor</option>{role === 'admin' && <option value="admin">Administrador</option>}</select></div>
+                      <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Rep. Vinculado</Label><select className="w-full h-10 px-3 bg-muted/40 border rounded-md text-sm" value={editingUserId ? editUserForm.repCode : newUser.repCode} onChange={e => editingUserId ? setEditUserForm({ ...editUserForm, repCode: e.target.value }) : setNewUser({ ...newUser, repCode: e.target.value })}><option value="">— Nenhum —</option>{reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}</select></div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">{editingUserId ? 'Senha (opcional)' : 'Senha *'}</Label><div className="relative"><Input type={editingUserId ? (showEditPwd ? 'text' : 'password') : (showNewPwd ? 'text' : 'password')} value={editingUserId ? editUserForm.password : newUser.password} onChange={e => editingUserId ? setEditUserForm({ ...editUserForm, password: e.target.value }) : setNewUser({ ...newUser, password: e.target.value })} required={!editingUserId} className="pr-10" /><button type="button" className="absolute right-3 top-1/2 -translate-y-1/2" onClick={() => editingUserId ? setShowEditPwd(!showEditPwd) : setShowNewPwd(!showNewPwd)}>{(editingUserId ? showEditPwd : showNewPwd) ? <EyeOff className="w-4 h-4 hover:text-primary transition-colors" /> : <Eye className="w-4 h-4 hover:text-primary transition-colors" />}</button></div></div>
+                      <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Confirmar *</Label><Input type={editingUserId ? (showEditPwd ? 'text' : 'password') : (showNewPwd ? 'text' : 'password')} value={editingUserId ? editUserForm.confirmPassword : newUser.confirmPassword} onChange={e => editingUserId ? setEditUserForm({ ...editUserForm, confirmPassword: e.target.value }) : setNewUser({ ...newUser, confirmPassword: e.target.value })} required={!editingUserId || (editingUserId && editUserForm.password !== '')} /></div>
+                    </div>
+                    <div className="flex gap-3 pt-2"><Button variant="ghost" className="flex-1" type="button" onClick={() => setIsUserModalOpen(false)}>Cancelar</Button><Button className="flex-1 gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all" type="submit"><Save className="w-4 h-4" />{editingUserId ? 'Salvar' : 'Criar'}</Button></div>
+                  </form>
+                </DialogContent>
+              </Dialog>
             </div>
           )}
 
@@ -1377,7 +1304,7 @@ export default function Admin() {
                                   <div className="max-w-[200px]">
                                     <p className="text-xs font-semibold truncate">{rep.name}</p>
                                     <p className="text-[10px] text-muted-foreground truncate">{rep.fullName || '—'}</p>
-                                    {rep.isVago && <span className="text-[9px] bg-orange-500/10 text-orange-500 px-1 rounded font-bold uppercase tracking-tighter">VAGO</span>}
+                                    {Boolean(rep.isVago) && <span className="text-[9px] bg-orange-500/10 text-orange-500 px-1 rounded font-bold uppercase tracking-tighter">VAGO</span>}
                                   </div>
                                 </TableCell>
                                 <TableCell>
@@ -1560,9 +1487,20 @@ export default function Admin() {
                   </CardContent>
                 </Card>)}
               </div>
-              <div className="xl:col-span-3">
+              <div className="xl:col-span-3 space-y-4">
                 <Card className="border-border/40">
-                  <CardHeader className="pb-3"><div className="flex items-center justify-between flex-wrap gap-2"><CardTitle className="text-sm">Territórios Atribuídos</CardTitle><div className="flex gap-2"><div className="relative"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" /><Input placeholder="Filtrar UF..." value={filterUF} onChange={e => setFilterUF(e.target.value)} className="h-8 text-xs pl-7 w-28" /></div><select className="h-8 px-2 bg-background border border-input rounded-md text-xs" value={filterRep} onChange={e => setFilterRep(e.target.value)}><option value="">Todos</option>{reps.map(r => <option key={r.code} value={r.code}>{r.code} - {r.name}</option>)}</select></div></div></CardHeader>
+                  <CardHeader className="pb-3 border-b border-border/10">
+                    <CardTitle className="text-sm flex items-center gap-2"><Map className="w-4 h-4 text-primary" />Mapeamento Geográfico</CardTitle>
+                    <CardDescription className="text-xs">Clique num estado para filtrar a lista abaixo</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 bg-primary/5 flex justify-center">
+                    <div style={{ width: '350px', maxWidth: '100%' }}>
+                      <MiniMapBrasil territories={territories} reps={reps} filterUF={filterUF} filterRep={filterRep} onClickUF={uf => setFilterUF(prev => prev === uf ? '' : uf)} />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="border-border/40">
+                  <CardHeader className="pb-3"><div className="flex items-center justify-between flex-wrap gap-2"><CardTitle className="text-sm">Lista de Territórios</CardTitle><div className="flex gap-2"><div className="relative"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" /><Input placeholder="Filtrar UF..." value={filterUF} onChange={e => setFilterUF(e.target.value)} className="h-8 text-xs pl-7 w-28" /></div><select className="h-8 px-2 bg-background border border-input rounded-md text-xs" value={filterRep} onChange={e => setFilterRep(e.target.value)}><option value="">Todos</option>{reps.map(r => <option key={r.code} value={r.code}>{r.code} - {r.name}</option>)}</select></div></div></CardHeader>
                   <CardContent className="p-0">
                     {filteredTerritories.length === 0 ? (<div className="py-16 text-center text-muted-foreground"><MapPin className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Nenhum território encontrado</p></div>) : (
                       <div className="overflow-auto max-h-[calc(100vh-300px)] rounded-b-lg"><Table>

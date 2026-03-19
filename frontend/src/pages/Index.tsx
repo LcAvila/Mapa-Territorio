@@ -25,14 +25,28 @@ const Index = () => {
   const [showClientes, setShowClientes] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [flyToLocation, setFlyToLocation] = useState<{ center: [number, number]; zoom: number } | null>(null);
-  const [searchSuggestions, setSearchSuggestions] = useState<any[]>([]);
-  const [searchResultGeo, setSearchResultGeo] = useState<any | null>(null);
+  interface SearchSuggestion { place_id: number; display_name: string; lat: string; lon: string; [key: string]: unknown; }
+  const [searchSuggestions, setSearchSuggestions] = useState<SearchSuggestion[]>([]);
+  const [searchResultGeo, setSearchResultGeo] = useState<Record<string, unknown> | null>(null);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   // Client selection state
-  const [selectedClients, setSelectedClients] = useState<any[]>([]);
+  interface MapClient { 
+    id_cliente: number;
+    codigo_cliente: string;
+    nome_cliente: string;
+    nome_abreviado?: string;
+    endereco_completo?: string;
+    bairro?: string;
+    cidade?: string;
+    uf?: string;
+    latitude: number; 
+    longitude: number; 
+    [key: string]: unknown; 
+  }
+  const [selectedClients, setSelectedClients] = useState<MapClient[]>([]);
 
   // Interest modal state
   const [interestTarget, setInterestTarget] = useState<{ municipio: string; uf: string } | null>(null);
@@ -126,7 +140,7 @@ const Index = () => {
     }
   }, []);
 
-  const handleSelectSuggestion = useCallback(async (item: any) => {
+  const handleSelectSuggestion = useCallback(async (item: SearchSuggestion) => {
     setSearchSuggestions([]);
     
     // Don't update searchQuery with the full name to avoid triggering municipality highlights
