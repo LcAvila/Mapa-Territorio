@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../prisma';
-import { authenticate, requireAdmin } from '../middlewares/auth';
+import { authenticate, requireAdmin, requirePermission } from '../middlewares/auth';
+import { logUserActivity } from '../utils/logger';
 import type { AuthRequest } from '../middlewares/auth';
 
 const router = Router();
@@ -18,7 +19,7 @@ const requireAdminMiddleware = (req: any, res: any, next: any) => {
 const PUBLIC_USER_FIELDS = { id: true, username: true, role: true, repCode: true, tipo: true, full_name: true, cpf_cnpj: true, telefone: true, cep: true, logradouro: true, numero: true, complemento: true, bairro_end: true, cidade: true, estado_end: true, photo: true, created_at: true };
 
 // --- USERS ---
-router.get('/users', async (req, res) => {
+router.get('/users', requirePermission('users', 'view'), async (req, res) => {
   const users = await prisma.user.findMany({ select: PUBLIC_USER_FIELDS, orderBy: { id: 'asc' } });
   res.json(users);
 });
@@ -90,7 +91,7 @@ router.post('/reps', requireAdminMiddleware, async (req, res) => {
   }
 });
 
-router.get('/reps', async (req, res) => {
+router.get('/reps', requirePermission('reps', 'view'), async (req, res) => {
   const user = (req as any).user;
   const where: any = {};
   if (user && user.role === 'representante' && user.repCode) {
@@ -138,7 +139,7 @@ router.put('/reps/:code', requireAdminMiddleware, async (req, res) => {
 });
 
 // --- TERRITORIES ---
-router.get('/territories', async (req, res) => {
+router.get('/territories', requirePermission('territories', 'view'), async (req, res) => {
   const user = (req as any).user;
   const where: any = {};
   if (user && user.role === 'representante' && user.repCode) {
@@ -169,6 +170,98 @@ router.post('/bairros/import', requireAdminMiddleware, async (req, res) => {
   );
   
   res.json({ message: `${mappings.length} bairros importados.` });
+});
+
+// --- MODULES & PERMISSIONS ---
+router.get('/modules', async (req, res) => {
+  const modules = await (prisma as any).module.findMany({ orderBy: { name: 'asc' } });
+  res.json(modules);
+});
+
+router.get('/users/:id/permissions', async (req, res) => {
+  const userId = Number(req.params.id);
+  const permissions = await (prisma as any).userPermission.findMany({
+    where: { userId },
+    include: { module: true }
+  });
+  res.json(permissions);
+});
+
+router.post('/users/:id/permissions', requireAdminMiddleware, async (req, res) => {
+  const userId = Number(req.params.id);
+  const { permissions } = req.body; // Array of { moduleId, canView, canEdit }
+
+  if (!Array.isArray(permissions)) return res.status(400).json({ message: 'Formato inválido' });
+
+  try {
+    await prisma.$transaction([
+      (prisma as any).userPermission.deleteMany({ where: { userId } }),
+      (prisma as any).userPermission.createMany({
+        data: permissions.map((p: any) => ({
+          userId,
+          moduleId: p.moduleId,
+          canView: !!p.canView,
+          canEdit: !!p.canEdit
+        }))
+      })
+    ]);
+    res.json({ message: 'Permissões atualizadas com sucesso' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Erro ao atualizar permissões' });
+  }
+});
+
+// --- USER ACTIVITIES & CONFIG ---
+router.get('/users/:id/activities', requirePermission('users', 'view'), async (req, res) => {
+  const userId = Number(req.params.id);
+  try {
+    // @ts-ignore - Prisma client maybe not updated yet
+    const activities = await prisma.userActivity.findMany({
+      where: { userId },
+      orderBy: { timestamp: 'desc' },
+      take: 50
+    });
+    res.json(activities);
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao buscar atividades' });
+  }
+});
+
+router.put('/users/:id/config', requirePermission('users', 'edit'), async (req, res) => {
+  const userId = Number(req.params.id);
+  const { default_workspace, inactivity_limit } = req.body;
+  try {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      // @ts-ignore
+      data: { default_workspace, inactivity_limit }
+    });
+    
+    await logUserActivity((req as any).user.id, 'config_update', `Atualizou configurações do usuário ${user.username}`, req, 'User', String(userId));
+    
+    res.json({ message: 'Configurações atualizadas', user });
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao atualizar configurações' });
+  }
+});
+
+router.put('/users/:id/notif-prefs', requirePermission('users', 'edit'), async (req, res) => {
+  const userId = Number(req.params.id);
+  const { notif_email, notif_sms, notif_push } = req.body;
+  try {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      // @ts-ignore
+      data: { notif_email, notif_sms, notif_push }
+    });
+
+    await logUserActivity((req as any).user.id, 'notif_prefs_update', `Atualizou preferências de notificação do usuário ${user.username}`, req, 'User', String(userId));
+
+    res.json({ message: 'Preferências atualizadas', user });
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao atualizar notificações' });
+  }
 });
 
 export default router;

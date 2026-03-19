@@ -113,7 +113,7 @@ export function useMunicipioNames(ufCode: number | null) {
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       const map: Record<string, string> = {};
-      data.forEach((m: any) => { map[String(m.id)] = m.nome; });
+      data.forEach((m: { id: number | string; nome: string }) => { map[String(m.id)] = m.nome; });
       return map;
     },
     enabled: !!ufCode,

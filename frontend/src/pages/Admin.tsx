@@ -24,7 +24,7 @@ import {
   TrendingUp, AlertCircle, BadgeCheck, Palette, Upload, ImageOff, Download, Truck, Settings,
   Database, Layers, Grid3X3, Calendar, FileSpreadsheet, Camera, Percent, Mail, Phone, MapPinned
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -42,6 +42,7 @@ import { DensidadePanel } from '../components/admin/rotas/DensidadePanel';
 import { LeituraPlanilhaPanel } from '../components/admin/rotas/LeituraPlanilhaPanel';
 import { RotasProvider } from '../contexts/RotasContext';
 import MiniMapBrasil from '../components/admin/MiniMapBrasil';
+import UserProfileManager from '../components/admin/users/UserProfileManager';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 interface Representative { 
@@ -67,6 +68,7 @@ interface InterestRequest { id: number; nome: string; email: string | null; tele
 interface Group { id: string; name: string; repCodes: string[]; createdAt: string; }
 interface Notification { id: string; title: string; message: string; targetAll: boolean; targetReps: string[]; sentAt: string; readBy: string[]; }
 interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; repCode?: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; }
+interface ModulePermission { userId: number; moduleId: string; canView: boolean; canEdit: boolean; }
 
 const API = 'http://localhost:3001';
 const IBGE = 'https://servicodados.ibge.gov.br/api/v1/localidades';
@@ -206,6 +208,27 @@ export default function Admin() {
   const saveNotifications = (n: Notification[]) => { setNotifications(n); LS.set('admin_notifications', n); };
   const saveAuditLogs = (a: AuditLog[]) => { setAuditLogs(a); LS.set('admin_audit', a); };
 
+  // ── Auth & Permissions ──────────────────────────────────────────────────
+  const authHeaders = useMemo(() => ({ 
+    'Content-Type': 'application/json', 
+    'Authorization': `Bearer ${token}` 
+  }), [token]);
+
+  const [myPermissions, setMyPermissions] = useState<ModulePermission[]>([]);
+  const fetchMyPermissions = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API}/api/admin/users/${userId}/permissions`, { headers: authHeaders });
+      if (res.ok) setMyPermissions(await res.json());
+    } catch (error) { console.error('Error fetching permissions', error); }
+  }, [userId, authHeaders]);
+
+  const canAccess = (moduleId: string) => {
+    if (role === 'admin') return true;
+    const p = myPermissions.find(p => p.moduleId === moduleId);
+    return p?.canView || false;
+  };
+
   // ── Dashboard filters ─────────────────────────────────────────────────────
   const [dashFilterRep, setDashFilterRep] = useState('');
   const [dashFilterUF, setDashFilterUF] = useState('');
@@ -287,10 +310,9 @@ export default function Admin() {
   const [auditFilterAction, setAuditFilterAction] = useState('');
   const [auditFilterUF, setAuditFilterUF] = useState('');
 
-  const authHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
 
   // ── Fetch all API data ─────────────────────────────────────────────────────
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
       const [rR, tR, uR, iR, cR] = await Promise.all([
@@ -307,7 +329,7 @@ export default function Admin() {
       if (cR.ok) setClientes(await cR.json());
     } catch { toast.error('Erro ao carregar dados'); }
     finally { setLoading(false); }
-  };
+  }, [authHeaders]); // Stable dependency
   
   const handleDownloadLogisticsPlan = async () => {
     try {
@@ -333,8 +355,11 @@ export default function Admin() {
     }
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { 
+    fetchAll(); 
+    fetchMyPermissions(); 
+  }, [fetchAll, fetchMyPermissions]); // Now includes dependencies
+
 
   useEffect(() => {
     if (!selectedUF) { setMunicipios([]); setSelectedMunicipio(''); setSelectedMunicipioName(''); return; }
@@ -499,7 +524,7 @@ export default function Admin() {
   };
 
   const handleInterestStatus = async (id: number, status: 'accepted' | 'rejected') => {
-    const res = await fetch(`${API}/api/interest/${id}`, { method: 'PUT', headers: authHeaders, body: JSON.stringify({ status }) });
+    const res = await fetch(`${API}/api/interest/${id}/status`, { method: 'PUT', headers: authHeaders, body: JSON.stringify({ status }) });
     if (res.ok) { toast.success(status === 'accepted' ? 'Aceito!' : 'Recusado'); addAudit(status === 'accepted' ? 'accept_interest' : 'reject_interest', 'Interesse', String(id), `${status === 'accepted' ? 'Aceitou' : 'Recusou'} interesse #${id}`); fetchAll(); }
     else toast.error('Erro');
   };
@@ -550,11 +575,6 @@ export default function Admin() {
     send_notification: 'Enviou notificação', accept_interest: 'Aceitou interesse', reject_interest: 'Recusou interesse',
   };
 
-  if (loading) return (
-    <div className="admin-layout items-center justify-center">
-      <Loader />
-    </div>
-  );
 
   const pendingInterests = interests.filter(i => i.status === 'pending').length;
 
@@ -585,7 +605,48 @@ export default function Admin() {
         { id: 'personal', label: 'Personalização', icon: Palette },
         { id: 'audit', label: 'Auditoria', icon: ScrollText, count: auditLogs.length },
     ]}
-  ];
+  ].filter(item => {
+    // If it's a core section (like dashboard), allow or check specific permission if needed
+    if (item.id === 'dashboard') return true;
+    
+    // Check role-based restriction first
+    if (item.restrict && !item.restrict.includes(role || '')) return false;
+    
+    // Check modular permission for specific areas
+    const moduleMap: Record<string, string> = {
+      'baserotas': 'clients',
+      'reps': 'reps',
+      'territories': 'territories',
+      'rotas_menu': 'routes',
+      'interests': 'interests',
+      'notifications': 'notifications',
+      'audit': 'audit',
+      'users': 'users'
+    };
+    
+    const moduleId = moduleMap[item.id as string];
+    if (moduleId && role !== 'admin') {
+       return canAccess(moduleId);
+    }
+    
+    return true;
+  });
+
+  // Update activeTab if current one is restricted after permissions load
+  useEffect(() => {
+    if (loading || role === 'admin') return;
+    
+    const isCurrentTabRestricted = !navItems.some(item => {
+      if (item.id === activeTab) return true;
+      if (item.subItems?.some(s => s.id === activeTab)) return true;
+      return false;
+    });
+
+    if (isCurrentTabRestricted && navItems.length > 0) {
+      const firstPermitted = navItems[0].subItems ? navItems[0].subItems[0].id : navItems[0].id;
+      setActiveTab(firstPermitted as TabId);
+    }
+  }, [myPermissions, loading, navItems, activeTab, role]);
 
   // Find active tab label for header
   const findActiveLabel = () => {
@@ -599,6 +660,12 @@ export default function Admin() {
     return null;
   };
   const activeNavInfo = findActiveLabel();
+
+  if (loading) return (
+    <div className="admin-layout items-center justify-center">
+      <Loader />
+    </div>
+  );
 
   return (<>
     <ConfirmDialog open={confirmDialog.open} title={confirmDialog.title} description={confirmDialog.description} confirmLabel="Confirmar" onConfirm={confirmDialog.onConfirm} onCancel={closeConfirm} />
@@ -624,8 +691,6 @@ export default function Admin() {
         {/* Navigation */}
         <nav className="admin-sidebar-nav">
           {navItems.map(item => {
-            if (item.restrict && !item.restrict.includes(role || '')) return null;
-
             const Icon = item.icon;
             const isParentActive = item.subItems?.some(s => s.id === activeTab);
             const isDirectActive = !item.subItems && activeTab === item.id;
@@ -1166,38 +1231,53 @@ export default function Admin() {
               )}
 
               <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
-                <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-xl">{editingUserId ? <Pencil className="w-5 h-5 text-primary" /> : <UserPlus className="w-5 h-5 text-primary" />} {editingUserId ? 'Editar Usuário' : 'Novo Usuário'}</DialogTitle>
-                  </DialogHeader>
-                  <form onSubmit={editingUserId ? (e) => { e.preventDefault(); handleUpdateUser(editingUserId); setIsUserModalOpen(false); } : (e) => { handleCreateUser(e); setIsUserModalOpen(false); }} className="space-y-4 pt-2">
-                    <div className="flex items-center gap-4">
-                      <label className="shrink-0 cursor-pointer w-20 h-20 rounded-2xl bg-secondary border-2 border-dashed border-border/60 flex items-center justify-center overflow-hidden hover:border-primary/50 transition-all">
-                        {(editingUserId ? editUserForm.photo : newUser.photo) ? <img src={editingUserId ? editUserForm.photo : newUser.photo} alt="Avatar" className="w-full h-full object-cover" /> : <Camera className="w-6 h-6 text-muted-foreground opacity-40" />}
-                        <input type="file" accept="image/*" className="hidden" onChange={e => handleUserPhotoUpload(e, !!editingUserId)} />
-                      </label>
-                      <div className="text-xs text-muted-foreground"><p className="font-bold text-foreground">Foto de Perfil</p><p>JPG, PNG. Máx 2MB.</p></div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Nome Completo *</Label><Input value={editingUserId ? editUserForm.fullName : newUser.fullName} onChange={e => editingUserId ? setEditUserForm({ ...editUserForm, fullName: e.target.value }) : setNewUser({ ...newUser, fullName: e.target.value })} required /></div>
-                      <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">E-mail (Username) *</Label><Input type="email" value={editingUserId ? editUserForm.username : newUser.email} onChange={e => editingUserId ? setEditUserForm({ ...editUserForm, username: e.target.value }) : setNewUser({ ...newUser, email: e.target.value })} required /></div>
-                    </div>
-                    {!editingUserId && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Tipo Doc</Label><div className="flex gap-1">{(['cpf', 'cnpj'] as const).map(t => <button key={t} type="button" onClick={() => setNewUser({ ...newUser, documentType: t, document: '' })} className={`flex-1 py-1.5 rounded-lg text-xs font-bold border ${newUser.documentType === t ? 'bg-primary border-primary text-white' : 'border-border text-muted-foreground'}`}>{t.toUpperCase()}</button>)}</div></div>
-                        <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">{newUser.documentType.toUpperCase()} *</Label><Input value={newUser.document} onChange={e => setNewUser({ ...newUser, document: maskDoc(e.target.value, newUser.documentType) })} required /></div>
-                      </div>
-                    )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Papel *</Label><select className="w-full h-10 px-3 bg-muted/40 border rounded-md text-sm" value={editingUserId ? editUserForm.role : newUser.role} onChange={e => editingUserId ? setEditUserForm({ ...editUserForm, role: e.target.value as 'user' | 'supervisor' | 'admin' }) : setNewUser({ ...newUser, role: e.target.value as 'user' | 'supervisor' | 'admin' })}><option value="user">Usuário</option><option value="supervisor">Supervisor</option>{role === 'admin' && <option value="admin">Administrador</option>}</select></div>
-                      <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Rep. Vinculado</Label><select className="w-full h-10 px-3 bg-muted/40 border rounded-md text-sm" value={editingUserId ? editUserForm.repCode : newUser.repCode} onChange={e => editingUserId ? setEditUserForm({ ...editUserForm, repCode: e.target.value }) : setNewUser({ ...newUser, repCode: e.target.value })}><option value="">— Nenhum —</option>{reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}</select></div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">{editingUserId ? 'Senha (opcional)' : 'Senha *'}</Label><div className="relative"><Input type={editingUserId ? (showEditPwd ? 'text' : 'password') : (showNewPwd ? 'text' : 'password')} value={editingUserId ? editUserForm.password : newUser.password} onChange={e => editingUserId ? setEditUserForm({ ...editUserForm, password: e.target.value }) : setNewUser({ ...newUser, password: e.target.value })} required={!editingUserId} className="pr-10" /><button type="button" className="absolute right-3 top-1/2 -translate-y-1/2" onClick={() => editingUserId ? setShowEditPwd(!showEditPwd) : setShowNewPwd(!showNewPwd)}>{(editingUserId ? showEditPwd : showNewPwd) ? <EyeOff className="w-4 h-4 hover:text-primary transition-colors" /> : <Eye className="w-4 h-4 hover:text-primary transition-colors" />}</button></div></div>
-                      <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Confirmar *</Label><Input type={editingUserId ? (showEditPwd ? 'text' : 'password') : (showNewPwd ? 'text' : 'password')} value={editingUserId ? editUserForm.confirmPassword : newUser.confirmPassword} onChange={e => editingUserId ? setEditUserForm({ ...editUserForm, confirmPassword: e.target.value }) : setNewUser({ ...newUser, confirmPassword: e.target.value })} required={!editingUserId || (editingUserId && editUserForm.password !== '')} /></div>
-                    </div>
-                    <div className="flex gap-3 pt-2"><Button variant="ghost" className="flex-1" type="button" onClick={() => setIsUserModalOpen(false)}>Cancelar</Button><Button className="flex-1 gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all" type="submit"><Save className="w-4 h-4" />{editingUserId ? 'Salvar' : 'Criar'}</Button></div>
-                  </form>
+                <DialogContent className={editingUserId ? "max-w-6xl p-0 border-none bg-transparent shadow-none" : "max-w-xl max-h-[90vh] overflow-y-auto"}>
+                  {editingUserId ? (
+                    <>
+                      <DialogHeader className="sr-only">
+                        <DialogTitle>Gerenciador de Perfil - {users.find(u => u.id === editingUserId)?.full_name || 'Usuário'}</DialogTitle>
+                        <DialogDescription>Configurações de perfil, permissões e histórico do usuário.</DialogDescription>
+                      </DialogHeader>
+                      <UserProfileManager 
+                      user={users.find(u => u.id === editingUserId)!}
+                      reps={reps}
+                      onUpdate={fetchAll}
+                      onClose={() => setIsUserModalOpen(false)}
+                    />
+                  </>
+                  ) : (
+                    <>
+                      <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-xl"><UserPlus className="w-5 h-5 text-primary" /> Novo Usuário</DialogTitle>
+                      </DialogHeader>
+                      <form onSubmit={(e) => { handleCreateUser(e); setIsUserModalOpen(false); }} className="space-y-4 pt-2">
+                        <div className="flex items-center gap-4">
+                          <label className="shrink-0 cursor-pointer w-20 h-20 rounded-2xl bg-secondary border-2 border-dashed border-border/60 flex items-center justify-center overflow-hidden hover:border-primary/50 transition-all">
+                            {newUser.photo ? <img src={newUser.photo} alt="Avatar" className="w-full h-full object-cover" /> : <Camera className="w-6 h-6 text-muted-foreground opacity-40" />}
+                            <input type="file" accept="image/*" className="hidden" onChange={e => handleUserPhotoUpload(e, false)} />
+                          </label>
+                          <div className="text-xs text-muted-foreground"><p className="font-bold text-foreground">Foto de Perfil</p><p>JPG, PNG. Máx 2MB.</p></div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Nome Completo *</Label><Input value={newUser.fullName} onChange={e => setNewUser({ ...newUser, fullName: e.target.value })} required /></div>
+                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">E-mail (Username) *</Label><Input type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} required /></div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Tipo Doc</Label><div className="flex gap-1">{(['cpf', 'cnpj'] as const).map(t => <button key={t} type="button" onClick={() => setNewUser({ ...newUser, documentType: t, document: '' })} className={`flex-1 py-1.5 rounded-lg text-xs font-bold border ${newUser.documentType === t ? 'bg-primary border-primary text-white' : 'border-border text-muted-foreground'}`}>{t.toUpperCase()}</button>)}</div></div>
+                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">{newUser.documentType.toUpperCase()} *</Label><Input value={newUser.document} onChange={e => setNewUser({ ...newUser, document: maskDoc(e.target.value, newUser.documentType) })} required /></div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Papel *</Label><select className="w-full h-10 px-3 bg-muted/40 border rounded-md text-sm" value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value as 'user' | 'supervisor' | 'admin' })}><option value="user">Usuário</option><option value="supervisor">Supervisor</option>{role === 'admin' && <option value="admin">Administrador</option>}</select></div>
+                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Rep. Vinculado</Label><select className="w-full h-10 px-3 bg-muted/40 border rounded-md text-sm" value={newUser.repCode} onChange={e => setNewUser({ ...newUser, repCode: e.target.value })}><option value="">— Nenhum —</option>{reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}</select></div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Senha *</Label><div className="relative"><Input type={showNewPwd ? 'text' : 'password'} value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} required className="pr-10" /><button type="button" className="absolute right-3 top-1/2 -translate-y-1/2" onClick={() => setShowNewPwd(!showNewPwd)}>{showNewPwd ? <EyeOff className="w-4 h-4 hover:text-primary transition-colors" /> : <Eye className="w-4 h-4 hover:text-primary transition-colors" />}</button></div></div>
+                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Confirmar *</Label><Input type={showNewPwd ? 'text' : 'password'} value={newUser.confirmPassword} onChange={e => setNewUser({ ...newUser, confirmPassword: e.target.value })} required /></div>
+                        </div>
+                        <div className="flex gap-3 pt-2"><Button variant="ghost" className="flex-1" type="button" onClick={() => setIsUserModalOpen(false)}>Cancelar</Button><Button className="flex-1 gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all" type="submit"><Save className="w-4 h-4" />Criar</Button></div>
+                      </form>
+                    </>
+                  )}
                 </DialogContent>
               </Dialog>
             </div>

@@ -20,6 +20,41 @@ import { getMunicipioResponsaveis } from "@/data/territories";
 import { getRepColor, getRepByCode, Representative } from "@/data/representatives";
 import type { TerritoryAssignment } from "@/data/territories";
 
+interface Cliente {
+  id_cliente: number;
+  latitude: number;
+  longitude: number;
+  uf: string;
+  nome_cliente: string;
+  codigo_cliente: string;
+  nome_abreviado?: string;
+  endereco_completo?: string;
+  bairro?: string;
+}
+
+interface GeoJSONFeature {
+  type: "Feature";
+  properties: {
+    codarea?: string | number;
+    nome?: string;
+    name?: string;
+    NM_DIST?: string;
+    NM_SUBDIST?: string;
+    localidadeId?: number;
+    isMunicipality?: boolean;
+    [key: string]: unknown;
+  };
+  geometry: {
+    type: "Point" | "MultiPoint" | "LineString" | "MultiLineString" | "Polygon" | "MultiPolygon" | "GeometryCollection";
+    coordinates: unknown;
+  };
+}
+
+interface GeoJSONFeatureCollection {
+  type: "FeatureCollection";
+  features: GeoJSONFeature[];
+}
+
 interface BrazilMapProps {
   selectedUF: string | null;
   modo: "planejamento" | "atendimento";
@@ -36,9 +71,9 @@ interface BrazilMapProps {
   onContextMenuState?: (nome: string, uf: string, x: number, y: number) => void;
   onContextMenuMunicipio?: (nome: string, uf: string, x: number, y: number) => void;
   flyToLocation?: { center: [number, number]; zoom: number } | null;
-  searchResultGeo?: any | null;
-  selectedClients?: any[];
-  onSelectClients?: (clients: any[]) => void;
+  searchResultGeo?: GeoJSONFeatureCollection | GeoJSONFeature | null;
+  selectedClients?: Cliente[];
+  onSelectClients?: (clients: Cliente[]) => void;
 }
 
 const API_BASE = "http://localhost:3001";
@@ -46,6 +81,10 @@ const API_BASE = "http://localhost:3001";
 function MapController({ center, zoom, flyToLocation }: { center: [number, number]; zoom: number; flyToLocation?: { center: [number, number]; zoom: number } | null }) {
   const map = useMap();
   const isFirst = useRef(true);
+
+  const centerLat = center[0];
+  const centerLng = center[1];
+  const hasFlyTo = !!flyToLocation;
 
   // Initial view and state-driven animations
   useEffect(() => {
@@ -57,10 +96,10 @@ function MapController({ center, zoom, flyToLocation }: { center: [number, numbe
     }
 
     // Only follow state 'center/zoom' if we DON'T have a manual search location active
-    if (!flyToLocation && !isNaN(center[0]) && !isNaN(center[1])) {
-      map.flyTo(center, zoom, { duration: 2.0, easeLinearity: 0.25 });
+    if (!hasFlyTo && !isNaN(centerLat) && !isNaN(centerLng)) {
+      map.flyTo([centerLat, centerLng], zoom, { duration: 2.0, easeLinearity: 0.25 });
     }
-  }, [map, center[0], center[1], zoom, !!flyToLocation]);
+  }, [map, centerLat, centerLng, zoom, hasFlyTo, center]);
 
   // Handle manual address search navigation
   useEffect(() => {
@@ -111,12 +150,12 @@ function MapEventHandler({ onBackgroundClick }: { onBackgroundClick: () => void 
 }
 
 // ─── Zoom to a specific GeoJSON feature bounds ───────────────────────────────
-function ZoomToMunicipio({ geoJson }: { geoJson: any }) {
+function ZoomToMunicipio({ geoJson }: { geoJson: GeoJSONFeature | GeoJSONFeatureCollection }) {
   const map = useMap();
   useEffect(() => {
     if (!geoJson) return;
     try {
-      const layer = L.geoJSON(geoJson);
+      const layer = L.geoJSON(geoJson as Parameters<typeof L.geoJSON>[0]);
       const bounds = layer.getBounds();
       if (bounds.isValid()) map.flyToBounds(bounds, { padding: [40, 40], duration: 2.0, easeLinearity: 0.5, maxZoom: 13 });
     } catch { /* ignore */ }
@@ -129,7 +168,7 @@ function HeatmapLayer({ points }: { points: [number, number, number][] }) {
   const map = useMap();
   useEffect(() => {
     if (!points || points.length === 0) return;
-    const heatLayer = (L as any).heatLayer(points, {
+    const heatLayer = (L as unknown as { heatLayer: (pts: [number, number, number][], options: unknown) => L.Layer }).heatLayer(points, {
       radius: 20,
       blur: 15,
       maxZoom: 10,
@@ -205,10 +244,13 @@ function SpeedLinesOverlay({ active }: { active: boolean }) {
 
 // ─── API hooks ────────────────────────────────────────────────────────────────
 function useApiRepresentatives(enabled: boolean) {
+  const { token } = useAuth();
   return useQuery<Representative[]>({
     queryKey: ["api", "representatives"],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/representatives`);
+      const res = await fetch(`${API_BASE}/api/admin/reps`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       return res.ok ? res.json() : [];
     },
     staleTime: 30_000, 
@@ -218,10 +260,13 @@ function useApiRepresentatives(enabled: boolean) {
 }
 
 function useApiTerritories(enabled: boolean) {
+  const { token } = useAuth();
   return useQuery<TerritoryAssignment[]>({
     queryKey: ["api", "territories"],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/territories`);
+      const res = await fetch(`${API_BASE}/api/admin/territories`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       return res.ok ? res.json() : [];
     },
     staleTime: 30_000, 
@@ -232,7 +277,7 @@ function useApiTerritories(enabled: boolean) {
 
 function useApiClientes(repCode: string | null) {
   const { token } = useAuth();
-  return useQuery<any[]>({
+  return useQuery<Cliente[]>({
     queryKey: ["api", "clientes", repCode],
     queryFn: async () => {
       const url = repCode 
@@ -283,11 +328,11 @@ export default function BrazilMap({
     );
     if (!entry) return null;
     const [codArea] = entry;
-    return municipiosGeo.features?.find((f: any) => String(f.properties?.codarea) === codArea) || null;
+    return (municipiosGeo.features as GeoJSONFeature[])?.find((f) => String(f.properties?.codarea) === codArea) || null;
   }, [municipiosGeo, selectedMunicipioName, municipioNames]);
 
   // ── Styles ──────────────────────────────────────────────────────────────────
-  const neighborhoodStyle = useCallback((_feature: any) => ({
+  const neighborhoodStyle = useCallback((_feature: unknown) => ({
     fillColor: "hsl(168, 60%, 40%)",
     weight: 1.5,
     opacity: 1,
@@ -296,8 +341,9 @@ export default function BrazilMap({
     dashArray: "4 3",
   }), []);
 
-  const stateStyle = useCallback((feature: any) => {
-    const uf = getUFByCode(Number(feature?.properties?.codarea));
+  const stateStyle = useCallback((feature: unknown) => {
+    const f = feature as GeoJSONFeature;
+    const uf = getUFByCode(Number(f?.properties?.codarea));
     const isSelected = uf && selectedUF === uf.sigla;
     return {
       fillColor: isSelected ? "hsl(168, 70%, 45%)" : "hsl(220, 15%, 25%)",
@@ -306,12 +352,14 @@ export default function BrazilMap({
     };
   }, [selectedUF]);
 
-  const municipioStyle = useCallback((feature: any) => {
+  const municipioStyle = useCallback((feature: unknown) => {
+    const f = feature as GeoJSONFeature;
     const blank = { fillColor: "hsl(220, 15%, 20%)", weight: 1, opacity: 0.6, color: "hsl(220, 15%, 28%)", fillOpacity: 0.4 };
     if (!municipioNames || !selectedUF) return blank;
 
-    const codArea = feature?.properties?.codarea;
-    const name = municipioNames?.[codArea] || "";
+    const codArea = f?.properties?.codarea;
+    if (!codArea) return blank;
+    const name = (municipioNames[String(codArea)] as string) || "";
     const reps = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
 
     // Only highlight if the search query is a specific word that matches name/rep
@@ -323,7 +371,7 @@ export default function BrazilMap({
       
       if (isMatch) {
          // Fix "yellow screen" by reducing fillOpacity and removing fill if a client is selected
-         const hasSelection = selectedClients.length > 0;
+         const hasSelection = (selectedClients || []).length > 0;
          return { 
            fillColor: "hsl(45, 90%, 55%)", 
            weight: hasSelection ? 1.5 : 3, 
@@ -350,20 +398,56 @@ export default function BrazilMap({
       fillOpacity: rep.isVago ? 0.3 : 0.55,
       dashArray: rep.isVago ? "6 4" : undefined,
     };
-  }, [municipioNames, selectedUF, modo, filtroRepresentante, mostrarVagos, searchQuery, apiTerritories, apiReps]);
+  }, [municipioNames, selectedUF, modo, filtroRepresentante, mostrarVagos, searchQuery, apiTerritories, apiReps, selectedClients]);
+
+  const stateOutlineStyle = useCallback((feature: unknown) => {
+    const f = feature as GeoJSONFeature;
+    const uf = getUFByCode(Number(f?.properties?.codarea));
+    const isSel = uf && selectedUF === uf.sigla;
+    return {
+      fillColor: "transparent" as const,
+      weight: isSel ? 2 : 0.5,
+      opacity: isSel ? 1 : 0.2,
+      color: isSel ? "hsl(168, 70%, 45%)" : "hsl(220, 15%, 25%)",
+      fillOpacity: 0
+    };
+  }, [selectedUF]);
+
+  const targetMunicipioStyle = useCallback((feature: unknown) => {
+    const f = feature as GeoJSONFeature;
+    const codArea = f?.properties?.codarea;
+    const name = (municipioNames?.[String(codArea)] as string) || "";
+    const isTarget = name.toLowerCase() === (selectedMunicipioName || "").toLowerCase();
+    return isTarget
+      ? { fillColor: "transparent", weight: 2.5, opacity: 1, color: "hsl(168, 70%, 70%)", fillOpacity: 0 }
+      : { fillColor: "transparent", weight: 0, opacity: 0, color: "transparent", fillOpacity: 0 };
+  }, [municipioNames, selectedMunicipioName]);
+
+  const onEachNeighborhood = useCallback((feature: unknown, layer: L.Layer) => {
+    const f = feature as GeoJSONFeature;
+    const nameList = [
+      f.properties?.nome,
+      f.properties?.name,
+      f.properties?.NM_DIST,
+      f.properties?.NM_SUBDIST
+    ];
+    const name = nameList.find(n => n) || "Bairro";
+    layer.bindTooltip(`<strong>${name}</strong>`, { sticky: true, direction: "top" });
+  }, []);
 
   // ── Event handlers ──────────────────────────────────────────────────────────
-  const onEachState = useCallback((feature: any, layer: L.Layer) => {
-    const uf = getUFByCode(Number(feature?.properties?.codarea));
+  const onEachState = useCallback((feature: unknown, layer: L.Layer) => {
+    const f = feature as GeoJSONFeature;
+    const uf = getUFByCode(Number(f?.properties?.codarea));
     if (!uf) return;
     (layer as L.Path).on({
       mouseover: (e) => { e.target.setStyle({ fillOpacity: 0.3, weight: 2.5 }); e.target.bindTooltip(uf.nome, { sticky: true }).openTooltip(); },
-      mouseout: (e) => { e.target.setStyle(stateStyle(feature)); e.target.closeTooltip(); },
-      click: (e: any) => {
+      mouseout: (e) => { e.target.setStyle(stateStyle(f)); e.target.closeTooltip(); },
+      click: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
         onSelectUF(uf.sigla);
       },
-      contextmenu: (e: any) => {
+      contextmenu: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
         e.originalEvent.preventDefault();
         onContextMenuState?.(uf.nome, uf.sigla, e.originalEvent.clientX, e.originalEvent.clientY);
@@ -371,10 +455,12 @@ export default function BrazilMap({
     });
   }, [stateStyle, onSelectUF, onContextMenuState]);
 
-  const onEachMunicipio = useCallback((feature: any, layer: L.Layer) => {
+  const onEachMunicipio = useCallback((feature: unknown, layer: L.Layer) => {
+    const f = feature as GeoJSONFeature;
     if (!municipioNames || !selectedUF) return;
-    const codArea = feature?.properties?.codarea;
-    const name = municipioNames?.[codArea] || `Município ${codArea}`;
+    const codArea = f?.properties?.codarea;
+    if (!codArea) return;
+    const name = (municipioNames[String(codArea)] as string) || `Município ${codArea}`;
     const reps = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
     
     // Role-based restrictions mapping
@@ -395,18 +481,18 @@ export default function BrazilMap({
 
     (layer as L.Path).on({
       mouseover: (e) => { e.target.setStyle({ fillOpacity: 0.8, weight: 3 }); e.target.bindTooltip(tooltipHtml, { sticky: true }).openTooltip(); e.target.bringToFront(); },
-      mouseout: (e) => { e.target.setStyle(municipioStyle(feature)); e.target.closeTooltip(); },
-      click: (e: any) => {
+      mouseout: (e) => { e.target.setStyle(municipioStyle(f)); e.target.closeTooltip(); },
+      click: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
         onSelectMunicipio(name, selectedUF);
       },
-      contextmenu: (e: any) => {
+      contextmenu: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
         e.originalEvent.preventDefault();
         onContextMenuMunicipio?.(name, selectedUF, e.originalEvent.clientX, e.originalEvent.clientY);
       },
     });
-  }, [municipioNames, selectedUF, modo, municipioStyle, onSelectMunicipio, apiTerritories, apiReps, onContextMenuMunicipio]);
+  }, [municipioNames, selectedUF, modo, municipioStyle, onSelectMunicipio, apiTerritories, apiReps, onContextMenuMunicipio, role, estado_end]);
 
   // ── Neighborhood label markers — names are now baked into feature.properties.nome ───
   const markers: Array<{ center: L.LatLng; name: string }> = [];
@@ -432,16 +518,16 @@ export default function BrazilMap({
   const visibleClientes = useMemo(() => {
     if (!(showClientes || showHeatmap) || !apiClientes || !statesGeo) return [];
 
-    let filterGeometry: any = null;
+    let filterGeometry: GeoJSONFeature | GeoJSONFeatureCollection | null = null;
     if (selectedUF) {
-      const stateFeature = statesGeo.features?.find((f: any) => {
+      const stateFeature = statesGeo.features?.find((f) => {
         const uf = getUFByCode(Number(f?.properties?.codarea));
         return uf && uf.sigla === selectedUF;
       });
-      if (stateFeature) filterGeometry = stateFeature.geometry;
+      if (stateFeature) filterGeometry = stateFeature as unknown as GeoJSONFeature;
     } else {
       // For Brazil view, any point in any state is fine
-      filterGeometry = statesGeo; 
+      filterGeometry = statesGeo as unknown as GeoJSONFeatureCollection; 
     }
 
     return apiClientes.filter(c => {
@@ -456,7 +542,7 @@ export default function BrazilMap({
       try {
         const pt = turfPoint([c.longitude, c.latitude]);
         if (filterGeometry) {
-          return booleanPointInPolygon(pt, filterGeometry);
+          return booleanPointInPolygon(pt, filterGeometry as Parameters<typeof booleanPointInPolygon>[1]);
         }
       } catch (e) {
         console.warn("Critical check failure for client", c.id_cliente, e);
@@ -525,11 +611,7 @@ export default function BrazilMap({
           <GeoJSON key="states" data={statesGeo} style={stateStyle} onEachFeature={onEachState} />
         )}
         {statesGeo && selectedUF && (
-          <GeoJSON key={`states-outline-${selectedUF}`} data={statesGeo} style={(f) => {
-            const uf = getUFByCode(Number(f?.properties?.codarea));
-            const isSel = uf && selectedUF === uf.sigla;
-            return { fillColor: "transparent", weight: isSel ? 2 : 0.5, opacity: isSel ? 1 : 0.2, color: isSel ? "hsl(168, 70%, 45%)" : "hsl(220, 15%, 25%)", fillOpacity: 0 };
-          }} />
+          <GeoJSON key={`states-outline-${selectedUF}`} data={statesGeo} style={stateOutlineStyle} />
         )}
 
         {/* Municipalities */}
@@ -548,14 +630,7 @@ export default function BrazilMap({
               <GeoJSON
                 key={`muns-bg-${municipioCodeForBairros}`}
                 data={municipiosGeo}
-                style={(f) => {
-                  const codArea = f?.properties?.codarea;
-                  const name = municipioNames?.[codArea] || "";
-                  const isTarget = name.toLowerCase() === (selectedMunicipioName || "").toLowerCase();
-                  return isTarget
-                    ? { fillColor: "transparent", weight: 2.5, opacity: 1, color: "hsl(168, 70%, 70%)", fillOpacity: 0 }
-                    : { fillColor: "transparent", weight: 0, opacity: 0, color: "transparent", fillOpacity: 0 };
-                }}
+                style={targetMunicipioStyle}
               />
             )}
 
@@ -565,14 +640,7 @@ export default function BrazilMap({
                 key={`hoods-${municipioCodeForBairros}-${neighborhoodsGeo.features?.length ?? 0}`}
                 data={neighborhoodsGeo}
                 style={neighborhoodStyle}
-                onEachFeature={(feature, layer) => {
-                  const name = feature.properties?.nome
-                    || feature.properties?.name
-                    || feature.properties?.NM_DIST
-                    || feature.properties?.NM_SUBDIST
-                    || "Bairro";
-                  layer.bindTooltip(`<strong>${name}</strong>`, { sticky: true, direction: "top" });
-                }}
+                onEachFeature={onEachNeighborhood}
               />
             )}
 

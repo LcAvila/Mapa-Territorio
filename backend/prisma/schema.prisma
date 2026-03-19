@@ -23,18 +23,49 @@ model User {
   bairro_end  String?
   cidade      String?
   estado_end  String?
-  photo       String?
-  repCode     String?  
-  created_at  DateTime @default(now())
+  photo             String?
+  repCode           String?  
+  created_at        DateTime @default(now())
 
-  // Relações como supervisor
+  // Configurações e Notificações
+  default_workspace String?  @default("dashboard")
+  inactivity_limit  Int?     @default(30) // minutos
+  notif_email       Boolean  @default(true)
+  notif_sms         Boolean  @default(false)
+  notif_push        Boolean  @default(true)
+
+  // Relações
+  permissions       UserPermission[]
   alocacoes         AlocacaoSupervisor[]
   visitasLogistica  DistanciasLogistica[]
   planejamentos     PlanejamentoVisitas[]
   blocosViagem      BlocosViagem[]
   historicosVisitas HistoricoVisitas[]
+  activities        UserActivity[]
 
   @@map("users")
+}
+
+model Module {
+  id    String @id // e.g., "dashboard", "clients", "reps", "territories", "routes", "users", "audit"
+  name  String
+  
+  permissions UserPermission[]
+
+  @@map("modules")
+}
+
+model UserPermission {
+  userId   Int
+  moduleId String
+  canView  Boolean @default(false)
+  canEdit  Boolean @default(false)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, moduleId])
+  @@map("user_permissions")
 }
 
 model Representative {
@@ -99,6 +130,21 @@ model InterestRequest {
   created_at  DateTime @default(now())
 
   @@map("interest_requests")
+}
+
+model UserActivity {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  action     String   // e.g., "login", "profile_update", "query", "interest"
+  entity     String?  // e.g., "Cliente", "Representative", "User"
+  entityId   String?  // ID do registro envolvido
+  details    String?  // Descrição adicional
+  ipAddress  String?
+  timestamp  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_activities")
 }
 
 // -----------------------------------------------------

@@ -23,10 +23,19 @@ export default function Login() {
             });
             const data = await response.json();
             if (response.ok) {
-                login(data.token, data.role, data.tipo, data.repCode, data.estado_end);
+                login(
+                  data.token, 
+                  data.role, 
+                  data.tipo, 
+                  data.repCode, 
+                  data.estado_end, 
+                  data.user.default_workspace, 
+                  data.user.inactivity_limit
+                );
                 toast.success('Bem-vindo ao sistema!');
-                if (data.role === 'admin' || data.role === 'supervisor') navigate('/admin');
-                else navigate('/');
+                
+                const target = data.user.default_workspace || (data.role === 'admin' || data.role === 'supervisor' ? 'admin' : '');
+                navigate(`/${target}`);
             } else {
                 toast.error(data.message || 'Credenciais inválidas');
             }

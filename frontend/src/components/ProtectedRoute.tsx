@@ -1,5 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 
 interface ProtectedRouteProps {
     allowedRoles?: string[];
@@ -7,6 +8,7 @@ interface ProtectedRouteProps {
 
 export default function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
     const { isAuthenticated, role } = useAuth();
+    useInactivityLogout();
 
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;

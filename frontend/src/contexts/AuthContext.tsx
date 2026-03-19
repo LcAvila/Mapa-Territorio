@@ -7,7 +7,9 @@ interface AuthContextType {
     repCode: string | null;
     tipo: string | null;
     estado_end: string | null;
-    login: (token: string, role: string, tipo?: string, repCode?: string, estado_end?: string) => void;
+    defaultWorkspace: string | null;
+    inactivityLimit: number | null;
+    login: (token: string, role: string, tipo?: string, repCode?: string, estado_end?: string, defaultWorkspace?: string, inactivityLimit?: number) => void;
     logout: () => void;
     isAuthenticated: boolean;
 }
@@ -24,8 +26,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [repCode, setRepCode] = useState<string | null>(localStorage.getItem('repCode'));
     const [tipo, setTipo] = useState<string | null>(localStorage.getItem('tipo'));
     const [estado_end, setEstadoEnd] = useState<string | null>(localStorage.getItem('estado_end'));
+    const [defaultWorkspace, setDefaultWorkspace] = useState<string | null>(localStorage.getItem('defaultWorkspace'));
+    const [inactivityLimit, setInactivityLimit] = useState<number | null>(() => {
+        const stored = localStorage.getItem('inactivityLimit');
+        return stored ? Number(stored) : null;
+    });
 
-    const login = (newToken: string, newRole: string, newTipo?: string, newRepCode?: string, newEstadoEnd?: string) => {
+    const login = (newToken: string, newRole: string, newTipo?: string, newRepCode?: string, newEstadoEnd?: string, newWorkspace?: string, newLimit?: number) => {
         // Decode JWT to extract userId
         let uid: number | null = null;
         try {
@@ -42,6 +49,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         else localStorage.removeItem('tipo');
         if (newEstadoEnd) localStorage.setItem('estado_end', newEstadoEnd);
         else localStorage.removeItem('estado_end');
+        if (newWorkspace) localStorage.setItem('defaultWorkspace', newWorkspace);
+        else localStorage.removeItem('defaultWorkspace');
+        if (newLimit) localStorage.setItem('inactivityLimit', String(newLimit));
+        else localStorage.removeItem('inactivityLimit');
 
         setToken(newToken);
         setRole(newRole);
@@ -49,15 +60,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setRepCode(newRepCode || null);
         setTipo(newTipo || null);
         setEstadoEnd(newEstadoEnd || null);
+        setDefaultWorkspace(newWorkspace || null);
+        setInactivityLimit(newLimit || null);
     };
 
     const logout = () => {
-        ['token', 'role', 'userId', 'repCode', 'tipo', 'estado_end'].forEach(k => localStorage.removeItem(k));
+        ['token', 'role', 'userId', 'repCode', 'tipo', 'estado_end', 'defaultWorkspace', 'inactivityLimit'].forEach(k => localStorage.removeItem(k));
         setToken(null); setRole(null); setUserId(null); setRepCode(null); setTipo(null); setEstadoEnd(null);
+        setDefaultWorkspace(null); setInactivityLimit(null);
     };
 
     return (
-        <AuthContext.Provider value={{ token, role, userId, repCode, tipo, estado_end, login, logout, isAuthenticated: !!token }}>
+        <AuthContext.Provider value={{ token, role, userId, repCode, tipo, estado_end, defaultWorkspace, inactivityLimit, login, logout, isAuthenticated: !!token }}>
             {children}
         </AuthContext.Provider>
     );

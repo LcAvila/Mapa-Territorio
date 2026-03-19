@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../prisma';
-import { authenticate } from '../middlewares/auth';
+import { authenticate, requirePermission } from '../middlewares/auth';
+import { logUserActivity } from '../utils/logger';
 
 const router = Router();
 
@@ -10,7 +11,7 @@ router.use(authenticate);
 // ---------------------------------------------------------
 // GET /api/clientes - Listar todos os clientes
 // ---------------------------------------------------------
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('clients', 'view'), async (req, res) => {
   try {
     const { repCode, supervisorName } = req.query;
     const where: any = {};
@@ -28,6 +29,10 @@ router.get('/', async (req, res) => {
       where,
       orderBy: { nome_cliente: 'asc' },
     });
+
+    // Log Consulta
+    if (user) await logUserActivity(user.id, 'query', 'Usuário consultou a base de clientes', req, 'Cliente');
+
     res.json(clientes);
   } catch (error) {
     console.error('Erro ao buscar clientes:', error);
@@ -38,7 +43,7 @@ router.get('/', async (req, res) => {
 // ---------------------------------------------------------
 // POST /api/clientes - Cadastrar um novo cliente
 // ---------------------------------------------------------
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('clients', 'edit'), async (req, res) => {
   try {
     const { 
       codigo_cliente, 

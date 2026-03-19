@@ -18,7 +18,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 app.use('/api', authRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api', interestRoutes);
+app.use('/api/interest', interestRoutes);
 app.use('/api', planilhaRoutes);
 app.use('/api/clientes', clientesRoutes);
 
