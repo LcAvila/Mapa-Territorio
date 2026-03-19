@@ -7,18 +7,44 @@ export interface AuthRequest extends ExRequest {
   user?: any;
 }
 
-export const authenticate = (req: AuthRequest, res: ExResponse, next: ExNextFunction) => {
+export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) {
     return res.status(401).json({ message: 'Acesso negado' });
   }
 
   try {
-    const verified = jwt.verify(token, SECRET_KEY);
+    const verified = jwt.verify(token, SECRET_KEY) as any;
+    const { prisma } = require('../prisma');
+    
+    const user = await (prisma as any).user.findUnique({ 
+      where: { id: verified.id }, 
+      select: { token_version: true, last_active: true } 
+    });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Usuário não encontrado' });
+    }
+
+    // Validation of session version (kick feature)
+    const tokenVersion = verified.token_version ?? 0;
+    if (user.token_version !== tokenVersion) {
+      return res.status(401).json({ message: 'Sessão encerrada ou inválida' });
+    }
+
+    // Update last_active periodically (every 1 min) to optimize performance
+    const oneMinAgo = new Date(Date.now() - 60000);
+    if (!user.last_active || new Date(user.last_active) < oneMinAgo) {
+      await (prisma as any).user.update({
+        where: { id: verified.id },
+        data: { last_active: new Date() }
+      });
+    }
+
     req.user = verified;
     next();
   } catch (err) {
-    res.status(400).json({ message: 'Token inválido' });
+    res.status(401).json({ message: 'Token inválido' });
   }
 };
 

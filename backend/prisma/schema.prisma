@@ -28,11 +28,13 @@ model User {
   created_at        DateTime @default(now())
 
   // Configurações e Notificações
-  default_workspace String?  @default("dashboard")
+  default_workspace String?  @default("admin")
   inactivity_limit  Int?     @default(30) // minutos
   notif_email       Boolean  @default(true)
   notif_sms         Boolean  @default(false)
   notif_push        Boolean  @default(true)
+  last_active       DateTime @default(now())
+  token_version     Int      @default(0)
 
   // Relações
   permissions       UserPermission[]

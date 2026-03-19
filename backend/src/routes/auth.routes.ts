@@ -13,7 +13,8 @@ const PUBLIC_USER_FIELDS = {
   cpf_cnpj: true, telefone: true, cep: true, logradouro: true, numero: true, 
   complemento: true, bairro_end: true, cidade: true, estado_end: true, photo: true, 
   created_at: true, default_workspace: true, inactivity_limit: true,
-  notif_email: true, notif_sms: true, notif_push: true
+  notif_email: true, notif_sms: true, notif_push: true,
+  last_active: true
 };
 
 router.post('/register', async (req, res) => {
@@ -39,7 +40,12 @@ router.post('/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ message: 'Credenciais inválidas' });
     
-    const token = jwt.sign({ id: user.id, username: user.username, role: user.role, type: user.tipo, repCode: user.repCode }, SECRET_KEY, { expiresIn: '24h' });
+    const token = jwt.sign(
+      // @ts-ignore
+      { id: user.id, username: user.username, role: user.role, type: user.tipo, repCode: user.repCode, token_version: user.token_version }, 
+      SECRET_KEY, 
+      { expiresIn: '24h' }
+    );
     
     // Log Activity
     await logUserActivity(user.id, 'login', 'Usuário realizou login no sistema', req);
@@ -94,6 +100,8 @@ router.put('/me', authenticate, async (req: AuthRequest, res) => {
         return res.status(401).json({ message: 'Senha atual incorreta' });
       }
       updatedData.password = await bcrypt.hash(newPassword, 10);
+      // @ts-ignore
+      updatedData.token_version = (existing.token_version || 0) + 1;
     }
     
     const user = await prisma.user.update({ where: { id: req.user!.id }, data: updatedData, select: PUBLIC_USER_FIELDS });

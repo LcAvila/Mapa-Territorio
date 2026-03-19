@@ -16,9 +16,30 @@ const requireAdminMiddleware = (req: any, res: any, next: any) => {
   next();
 };
 
-const PUBLIC_USER_FIELDS = { id: true, username: true, role: true, repCode: true, tipo: true, full_name: true, cpf_cnpj: true, telefone: true, cep: true, logradouro: true, numero: true, complemento: true, bairro_end: true, cidade: true, estado_end: true, photo: true, created_at: true };
+const PUBLIC_USER_FIELDS = { 
+  id: true, username: true, role: true, repCode: true, tipo: true, 
+  full_name: true, cpf_cnpj: true, telefone: true, photo: true, 
+  created_at: true, last_active: true 
+};
 
-// --- USERS ---
+// --- KICK USER ---
+router.post('/users/:id/kick', requireAdminMiddleware, async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const user = await prisma.user.update({
+      where: { id },
+      // @ts-ignore
+      data: { token_version: { increment: 1 } }
+    });
+    
+    await logUserActivity((req as any).user.id, 'kick_user', `Administrador derrubou a sessão do usuário ${user.username}`, req, 'User', String(id));
+    
+    res.json({ message: `Sessão do usuário ${user.username} encerrada com sucesso` });
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao derrubar sessão' });
+  }
+});
+
 router.get('/users', requirePermission('users', 'view'), async (req, res) => {
   const users = await prisma.user.findMany({ select: PUBLIC_USER_FIELDS, orderBy: { id: 'asc' } });
   res.json(users);
@@ -45,7 +66,11 @@ router.put('/users/:id', requireAdminMiddleware, async (req, res) => {
   if (usernameCheck) return res.status(409).json({ message: 'Username já em uso' });
   
   const data: any = { username, role, repCode, tipo, full_name };
-  if (password) data.password = await bcrypt.hash(password, 10);
+  if (password) {
+    data.password = await bcrypt.hash(password, 10);
+    // @ts-ignore
+    data.token_version = { increment: 1 };
+  }
   if (photo !== undefined) data.photo = photo;
   
   const user = await prisma.user.update({ where: { id }, data, select: PUBLIC_USER_FIELDS });
@@ -239,7 +264,6 @@ router.put('/users/:id/config', requirePermission('users', 'edit'), async (req, 
     });
     
     await logUserActivity((req as any).user.id, 'config_update', `Atualizou configurações do usuário ${user.username}`, req, 'User', String(userId));
-    
     res.json({ message: 'Configurações atualizadas', user });
   } catch (error) {
     res.status(500).json({ message: 'Erro ao atualizar configurações' });
@@ -257,7 +281,6 @@ router.put('/users/:id/notif-prefs', requirePermission('users', 'edit'), async (
     });
 
     await logUserActivity((req as any).user.id, 'notif_prefs_update', `Atualizou preferências de notificação do usuário ${user.username}`, req, 'User', String(userId));
-
     res.json({ message: 'Preferências atualizadas', user });
   } catch (error) {
     res.status(500).json({ message: 'Erro ao atualizar notificações' });

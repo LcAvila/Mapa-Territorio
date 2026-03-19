@@ -62,13 +62,25 @@ interface Representative {
   _count?: { clientes: number; territories: number; };
 }
 interface Territory { id: number; municipio: string; uf: string; repCode: string; modo: string; }
-interface SystemUser { id: number; username: string; role: string; repCode: string | null; fullName?: string; full_name?: string; document?: string; cpf_cnpj?: string; documentType?: 'cpf' | 'cnpj'; companyName?: string; age?: number; email?: string; photo?: string; }
+interface SystemUser { id: number; username: string; role: string; repCode: string | null; fullName?: string; full_name?: string; document?: string; cpf_cnpj?: string; documentType?: 'cpf' | 'cnpj'; companyName?: string; age?: number; email?: string; photo?: string; last_active?: string; }
 interface InterestRequest { id: number; nome: string; email: string | null; telefone: string | null; empresa: string | null; municipio: string; uf: string; modo: string | null; observacoes: string | null; status: 'pending' | 'accepted' | 'rejected'; created_at: string; }
 
 interface Group { id: string; name: string; repCodes: string[]; createdAt: string; }
 interface Notification { id: string; title: string; message: string; targetAll: boolean; targetReps: string[]; sentAt: string; readBy: string[]; }
 interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; repCode?: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; }
 interface ModulePermission { userId: number; moduleId: string; canView: boolean; canEdit: boolean; }
+
+type TabId = 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha';
+
+interface NavItem {
+  id: TabId | 'settings' | 'rotas_menu';
+  label: string;
+  icon: React.ElementType;
+  count?: number;
+  badge?: boolean;
+  restrict?: string[];
+  subItems?: { id: TabId; label: string; icon: React.ElementType; count?: number; }[];
+}
 
 const API = 'http://localhost:3001';
 const IBGE = 'https://servicodados.ibge.gov.br/api/v1/localidades';
@@ -149,6 +161,11 @@ function MultiRepSelect({ reps, value, onChange }: { reps: Representative[]; val
 export default function Admin() {
   const { token, logout, repCode: myRepCode, userId } = useAuth();
   const navigate = useNavigate();
+  
+  // Security: redirect if no token
+  useEffect(() => {
+    if (!token) navigate('/login');
+  }, [token, navigate]);
 
   // ── Core API data ──────────────────────────────────────────────────────────
   const [reps, setReps] = useState<Representative[]>([]);
@@ -159,7 +176,6 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
-  type TabId = 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha';
   
   const { role } = useAuth();
   
@@ -322,14 +338,26 @@ export default function Admin() {
         fetch(`${API}/api/interest`, { headers: authHeaders }),
         fetch(`${API}/api/clientes`, { headers: authHeaders }),
       ]);
-      if (rR.ok) setReps(await rR.json());
-      if (tR.ok) setTerritories(await tR.json());
-      if (uR.ok) setUsers(await uR.json());
-      if (iR.ok) setInterests(await iR.json());
-      if (cR.ok) setClientes(await cR.json());
-    } catch { toast.error('Erro ao carregar dados'); }
-    finally { setLoading(false); }
-  }, [authHeaders]); // Stable dependency
+      
+      const responses = [rR, tR, uR, iR, cR];
+      const unauth = responses.find(r => r.status === 401);
+      if (unauth) {
+        toast.error('Sessão encerrada ou inválida. Faça login novamente.');
+        logout();
+        return;
+      }
+
+      if (rR.ok && tR.ok && uR.ok && iR.ok && cR.ok) {
+        setReps(await rR.json());
+        setTerritories(await tR.json());
+        setUsers(await uR.json());
+        setInterests(await iR.json());
+        setClientes(await cR.json());
+      }
+    } catch (error) {
+      console.error('Fetch error:', error);
+    } finally { setLoading(false); }
+  }, [authHeaders, logout]); 
   
   const handleDownloadLogisticsPlan = async () => {
     try {
@@ -529,6 +557,19 @@ export default function Admin() {
     else toast.error('Erro');
   };
 
+  const handleKickUser = async (user: SystemUser) => {
+    openConfirm('Derrubar Sessão', `Tem certeza que deseja encerrar a sessão de ${user.full_name || user.fullName || user.username}? O usuário será desconectado imediatamente.`, async () => {
+      closeConfirm();
+      const res = await fetch(`${API}/api/admin/users/${user.id}/kick`, { method: 'POST', headers: authHeaders });
+      if (res.ok) {
+        toast.success(`Sessão de ${user.username} encerrada!`);
+        fetchAll();
+      } else {
+        toast.error('Erro ao derrubar sessão');
+      }
+    });
+  };
+
   // ── Groups CRUD ───────────────────────────────────────────────────────────
   const handleCreateGroup = (e: React.FormEvent) => {
     e.preventDefault();
@@ -584,26 +625,26 @@ export default function Admin() {
   const displayEmail = currentUser?.username || '';
   const displayPhoto = currentUser?.photo || '';
 
-  const navItems: { id: TabId | 'settings' | 'rotas_menu'; label: string; icon: React.ElementType; count?: number; badge?: boolean; restrict?: string[]; subItems?: { id: TabId; label: string; icon: React.ElementType; count?: number; }[] }[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, restrict: ['admin', 'supervisor', 'representante'] },
-    { id: 'reps', label: 'Representantes', icon: Briefcase, count: reps.length, restrict: ['admin', 'supervisor'] },
-    { id: 'baserotas', label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor'] },
-    { id: 'territories', label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin', 'supervisor'] },
-    { id: 'rotas_menu', label: 'Rotas', icon: Truck, restrict: ['admin', 'supervisor'], subItems: [
-        { id: 'leituraplanilha', label: 'Leitura Excel', icon: FileSpreadsheet },
-        { id: 'clusters', label: 'Clusters', icon: Layers },
-        { id: 'blocos', label: 'Blocos', icon: Grid3X3 },
-        { id: 'roteiros', label: 'Roteiros', icon: Map },
-        { id: 'agenda', label: 'Agenda', icon: Calendar },
-        { id: 'densidade', label: 'Densidade', icon: Activity },
+  const navItems: NavItem[] = [
+    { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard, restrict: ['admin', 'supervisor', 'representante'] },
+    { id: 'reps' as const, label: 'Representantes', icon: Briefcase, count: reps.length, restrict: ['admin', 'supervisor'] },
+    { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor'] },
+    { id: 'territories' as const, label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin', 'supervisor'] },
+    { id: 'rotas_menu' as const, label: 'Rotas', icon: Truck, restrict: ['admin', 'supervisor'], subItems: [
+        { id: 'leituraplanilha' as const, label: 'Leitura Excel', icon: FileSpreadsheet },
+        { id: 'clusters' as const, label: 'Clusters', icon: Layers },
+        { id: 'blocos' as const, label: 'Blocos', icon: Grid3X3 },
+        { id: 'roteiros' as const, label: 'Roteiros', icon: Map },
+        { id: 'agenda' as const, label: 'Agenda', icon: Calendar },
+        { id: 'densidade' as const, label: 'Densidade', icon: Activity },
     ]},
-    { id: 'interests', label: 'Interesses', icon: HandHeart, count: pendingInterests, badge: pendingInterests > 0, restrict: ['admin'] },
-    { id: 'notifications', label: 'Enviar Alerta', icon: Bell, count: notifications.length, restrict: ['admin'] },
-    { id: 'settings', label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
-        { id: 'users', label: 'Usuários', icon: UserPlus, count: users.length },
-        { id: 'groups', label: 'Grupos', icon: UsersRound, count: groups.length },
-        { id: 'personal', label: 'Personalização', icon: Palette },
-        { id: 'audit', label: 'Auditoria', icon: ScrollText, count: auditLogs.length },
+    { id: 'interests' as const, label: 'Interesses', icon: HandHeart, count: pendingInterests, badge: pendingInterests > 0, restrict: ['admin'] },
+    { id: 'notifications' as const, label: 'Enviar Alerta', icon: Bell, count: notifications.length, restrict: ['admin'] },
+    { id: 'settings' as const, label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
+        { id: 'users' as const, label: 'Usuários', icon: UserPlus, count: users.length },
+        { id: 'groups' as const, label: 'Grupos', icon: UsersRound, count: groups.length },
+        { id: 'personal' as const, label: 'Personalização', icon: Palette },
+        { id: 'audit' as const, label: 'Auditoria', icon: ScrollText, count: auditLogs.length },
     ]}
   ].filter(item => {
     // If it's a core section (like dashboard), allow or check specific permission if needed
@@ -1198,7 +1239,13 @@ export default function Admin() {
                 </Card>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                  {users.map(u => (
+                  {users.map(u => {
+                    const rawLastActive = u.last_active || (u as SystemUser & { lastActive?: string }).lastActive;
+                    const lastDate = rawLastActive ? new Date(rawLastActive) : null;
+                    const isOnline = (u.id === userId) || (lastDate && !isNaN(lastDate.getTime()) && (Date.now() - lastDate.getTime()) < 300000);
+                    const lastActive = (lastDate && !isNaN(lastDate.getTime())) ? lastDate : null;
+                    
+                    return (
                     <Card key={u.id} className="group relative overflow-hidden border-border/40 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 transform hover:-translate-y-1">
                       <div className={`h-1.5 w-full absolute top-0 left-0 ${u.role === 'admin' ? 'bg-amber-500' : u.role === 'supervisor' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
                       <CardContent className="p-5">
@@ -1210,10 +1257,15 @@ export default function Admin() {
                             <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-lg flex items-center justify-center border-2 border-card shadow-sm ${u.role === 'admin' ? 'bg-amber-500 text-white' : u.role === 'supervisor' ? 'bg-emerald-500 text-white' : 'bg-blue-500 text-white'}`}>
                               {u.role === 'admin' ? <ShieldCheck className="w-3" /> : u.role === 'supervisor' ? <Briefcase className="w-3" /> : <User className="w-3" />}
                             </div>
+                            {/* Online/Offline status dot */}
+                            <div className={`absolute -top-1 -left-1 w-3.5 h-3.5 rounded-full border-2 border-card shadow-sm ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40'}`} title={isOnline ? 'Online' : 'Offline'} />
                           </div>
                           <div className="space-y-0.5 w-full">
                             <h3 className="font-bold text-sm truncate" title={u.full_name || u.fullName || u.username}>{u.full_name || u.fullName || u.username}</h3>
                             <p className="text-[10px] text-muted-foreground truncate">{u.username}</p>
+                            {!isOnline && lastActive && (
+                              <p className="text-[9px] text-muted-foreground/60 italic mt-0.5">Visto em {lastActive.toLocaleDateString('pt-BR')} às {lastActive.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                            )}
                           </div>
                           <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
                             <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${u.role === 'admin' ? 'bg-amber-500/15 text-amber-500' : u.role === 'supervisor' ? 'bg-emerald-500/15 text-emerald-500' : 'bg-blue-500/15 text-blue-500'}`}>{u.role}</span>
@@ -1222,11 +1274,15 @@ export default function Admin() {
                         </div>
                         <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-border/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                           <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary" onClick={() => { setEditingUserId(u.id); setEditUserForm({ username: u.username, fullName: u.full_name || u.fullName || '', document: u.document || u.cpf_cnpj || '', password: '', confirmPassword: '', role: u.role as 'user' | 'supervisor' | 'admin', repCode: u.repCode || '', photo: u.photo || '' }); setIsUserModalOpen(true); }}><Pencil className="w-4 h-4" /></Button>
+                          {role === 'admin' && u.id !== userId && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-orange-500/10 hover:text-orange-500" title="Derrubar Sessão" onClick={() => handleKickUser(u)}><LogOut className="w-4 h-4" /></Button>
+                          )}
                           <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteUser(u.id, u.username)}><Trash2 className="w-4 h-4" /></Button>
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 

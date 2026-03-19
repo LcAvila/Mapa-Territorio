@@ -34,7 +34,8 @@ export default function Login() {
                 );
                 toast.success('Bem-vindo ao sistema!');
                 
-                const target = data.user.default_workspace || (data.role === 'admin' || data.role === 'supervisor' ? 'admin' : '');
+                let target = data.user.default_workspace || (data.role === 'admin' || data.role === 'supervisor' ? 'admin' : '');
+                if (target === 'dashboard') target = 'admin';
                 navigate(`/${target}`);
             } else {
                 toast.error(data.message || 'Credenciais inválidas');
