@@ -30,7 +30,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import Loader from '@/components/Loader';
-import { REP_COLOR_PALETTE, getNextColorIndex } from '@/data/representatives';
+import { REP_COLOR_PALETTE, getNextColorIndex, getRepColor } from '@/data/representatives';
 import { UF_DATA } from '@/data/uf-codes';
 
 import { BaseClientePanel } from '../components/admin/rotas/BaseClientePanel';
@@ -150,9 +150,27 @@ function MultiRepSelect({ reps, value, onChange }: { reps: Representative[]; val
       {reps.map(r => (
         <label key={r.code} className="flex items-center gap-3 px-3 py-2 hover:bg-secondary/40 cursor-pointer">
           <input type="checkbox" className="rounded" checked={value.includes(r.code)} onChange={() => toggle(r.code)} />
-          <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: r.isVago ? '#555' : (REP_COLOR_PALETTE[r.colorIndex] || '#888') }} />
+          <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: getRepColor(r) }} />
           <span className="text-sm">{r.code} — {r.name}</span>
         </label>
+      ))}
+    </div>
+  );
+}
+
+function ColorPicker({ value, onChange, disabled }: { value: number; onChange: (v: number) => void; disabled?: boolean }) {
+  return (
+    <div className="grid grid-cols-6 sm:grid-cols-12 gap-2 p-2 bg-secondary/10 rounded-lg border border-border/40">
+      {Object.entries(REP_COLOR_PALETTE).map(([idx, color]) => (
+        <button
+          key={idx}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(Number(idx))}
+          className={`w-6 h-6 rounded-full border-2 transition-all ${Number(idx) === value ? 'border-primary ring-2 ring-primary/20 scale-110 shadow-sm' : 'border-transparent hover:scale-110 opacity-60 hover:opacity-100'}`}
+          style={{ background: color }}
+          title={`Cor ${idx}`}
+        />
       ))}
     </div>
   );
@@ -265,11 +283,11 @@ export default function Admin() {
   // ── Reps form ──────────────────────────────────────────────────────────────
   const [editingCode, setEditingCode] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ 
-    name: '', fullName: '', isVago: false, email: '', contato: '', 
+    name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '', 
     endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: '' 
   });
   const [newRep, setNewRep] = useState({ 
-    code: '', name: '', fullName: '', isVago: false, email: '', contato: '', 
+    code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '', 
     endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: '' 
   });
 
@@ -420,21 +438,19 @@ export default function Admin() {
   const handleCreateRep = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRep.code.trim() || !newRep.name.trim()) { toast.error('Código e nome obrigatórios'); return; }
-    const colorIndex = newRep.isVago ? 0 : getNextColorIndex(reps);
     const res = await fetch(`${API}/api/admin/reps`, { 
       method: 'POST', 
       headers: authHeaders, 
       body: JSON.stringify({ 
         ...newRep, 
-        fullName: newRep.fullName || newRep.name, 
-        colorIndex 
+        fullName: newRep.fullName || newRep.name
       }) 
     });
     if (res.ok) { 
       toast.success(`Representante ${newRep.code} cadastrado!`); 
       addAudit('create_rep', 'Representante', newRep.code, `Criou rep ${newRep.code} — ${newRep.name}`); 
       setNewRep({ 
-        code: '', name: '', fullName: '', isVago: false, email: '', contato: '', 
+        code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '', 
         endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: '' 
       }); 
       fetchAll(); 
@@ -519,6 +535,7 @@ export default function Admin() {
       toast.success(`Usuário "${newUser.fullName}" criado!`); 
       addAudit('create_user', 'Usuário', newUser.email, `Criou usuário ${newUser.fullName} (${newUser.email})`); 
       setNewUser({ fullName: '', email: '', password: '', confirmPassword: '', role: 'user', repCode: '', documentType: 'cpf', document: '', companyName: '', age: '', photo: '' }); 
+      setNewRep({ code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '', endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: '' });
       setIsUserModalOpen(false);
       fetchAll(); 
     }
@@ -1392,12 +1409,22 @@ export default function Admin() {
 
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5"><Label className="text-xs font-medium">% Comissão</Label><div className="relative"><Percent className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" /><Input type="number" step="0.01" className="pl-9" placeholder="0.00" value={newRep.comissao} onChange={e => setNewRep({ ...newRep, comissao: e.target.value })} /></div></div>
-                            <div className="flex items-end pb-1">
-                              <label className="flex items-center gap-2.5 text-sm text-muted-foreground cursor-pointer select-none p-2 rounded-lg border border-border/50 hover:bg-secondary/30 transition-colors w-full">
-                                <input type="checkbox" checked={newRep.isVago} onChange={e => setNewRep({ ...newRep, isVago: e.target.checked })} className="rounded" />
-                                <div><p className="text-xs font-medium text-foreground">Marcar como Vago</p></div>
-                              </label>
-                            </div>
+                              <div className="flex items-end pb-1 gap-4">
+                                <label className="flex items-center gap-2.5 text-sm text-muted-foreground cursor-pointer select-none p-2 rounded-lg border border-border/50 hover:bg-secondary/30 transition-colors flex-1">
+                                  <input type="checkbox" checked={newRep.isVago} onChange={e => setNewRep({ ...newRep, isVago: e.target.checked })} className="rounded" />
+                                  <div><p className="text-xs font-medium text-foreground">Marcar como Vago</p></div>
+                                </label>
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label className="text-xs font-bold uppercase tracking-tight text-muted-foreground">Cor do Representante no Mapa</Label>
+                                <ColorPicker 
+                                  value={newRep.colorIndex} 
+                                  onChange={v => setNewRep({ ...newRep, colorIndex: v })} 
+                                  disabled={newRep.isVago}
+                                />
+                                {newRep.isVago && <p className="text-[10px] text-muted-foreground italic">Representantes vagos usam uma cor padrão (cinza).</p>}
+                              </div>
                           </div>
 
                           <Button className="w-full gap-2 mt-2" type="submit"><Plus className="w-4 h-4" />Cadastrar Representante</Button>
@@ -1433,7 +1460,7 @@ export default function Admin() {
                             <React.Fragment key={rep.code}>
                               <TableRow className={`border-border/30 ${editingCode === rep.code ? 'bg-primary/5' : 'hover:bg-secondary/30 transition-colors'}`}>
                                 <TableCell className="pl-6">
-                                  <div className="w-3.5 h-3.5 rounded-full shadow-sm" style={{ background: rep.isVago ? '#555' : (REP_COLOR_PALETTE[rep.colorIndex] || '#888') }} />
+                                  <div className="w-3.5 h-3.5 rounded-full shadow-sm" style={{ background: getRepColor(rep) }} />
                                 </TableCell>
                                 <TableCell className="font-mono text-xs font-bold text-primary">{rep.code}</TableCell>
                                 <TableCell>
@@ -1481,6 +1508,7 @@ export default function Admin() {
                                         name: rep.name, 
                                         fullName: rep.fullName || '', 
                                         isVago: !!rep.isVago,
+                                        colorIndex: rep.colorIndex || 1,
                                         email: rep.email || '',
                                         contato: rep.contato || '',
                                         endereco: rep.endereco || '',
@@ -1568,11 +1596,20 @@ export default function Admin() {
                                         </div>
                                       </div>
                                       
-                                      <div className="flex items-center gap-4">
+                                      <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
                                         <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground transition-colors selection:bg-transparent">
                                           <input type="checkbox" checked={editForm.isVago} onChange={e => setEditForm(f => ({ ...f, isVago: e.target.checked }))} className="rounded border-border" />
-                                          Marcar como Vago (Territórios sem representante ativo)
+                                          Marcar como Vago
                                         </label>
+
+                                        <div className="flex-1 space-y-2">
+                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Escolher Cor no Mapa</Label>
+                                          <ColorPicker 
+                                            value={editForm.colorIndex} 
+                                            onChange={v => setEditForm(f => ({ ...f, colorIndex: v }))}
+                                            disabled={editForm.isVago}
+                                          />
+                                        </div>
                                       </div>
                                     </div>
                                   </TableCell>

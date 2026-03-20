@@ -30,6 +30,7 @@ interface Cliente {
   nome_abreviado?: string;
   endereco_completo?: string;
   bairro?: string;
+  repCode?: string;
 }
 
 interface GeoJSONFeature {
@@ -78,7 +79,7 @@ interface BrazilMapProps {
 
 const API_BASE = "http://localhost:3001";
 
-function MapController({ center, zoom, flyToLocation }: { center: [number, number]; zoom: number; flyToLocation?: { center: [number, number]; zoom: number } | null }) {
+function MapController({ center, zoom, flyToLocation, selectedUF }: { center: [number, number]; zoom: number; flyToLocation?: { center: [number, number]; zoom: number } | null; selectedUF: string | null }) {
   const map = useMap();
   const isFirst = useRef(true);
 
@@ -96,10 +97,13 @@ function MapController({ center, zoom, flyToLocation }: { center: [number, numbe
     }
 
     // Only follow state 'center/zoom' if we DON'T have a manual search location active
-    if (!hasFlyTo && !isNaN(centerLat) && !isNaN(centerLng)) {
+    // AND we don't have a specific geoJson state to zoom into (which uses ZoomToFeature)
+    const hasGeoZoom = !!(flyToLocation || centerLat !== -14.2); // Simple heuristic
+
+    if (!hasFlyTo && !isNaN(centerLat) && !isNaN(centerLng) && !selectedUF) {
       map.flyTo([centerLat, centerLng], zoom, { duration: 2.0, easeLinearity: 0.25 });
     }
-  }, [map, centerLat, centerLng, zoom, hasFlyTo, center]);
+  }, [map, centerLat, centerLng, zoom, hasFlyTo, center, selectedUF, flyToLocation]); 
 
   // Handle manual address search navigation
   useEffect(() => {
@@ -150,16 +154,25 @@ function MapEventHandler({ onBackgroundClick }: { onBackgroundClick: () => void 
 }
 
 // ─── Zoom to a specific GeoJSON feature bounds ───────────────────────────────
-function ZoomToMunicipio({ geoJson }: { geoJson: GeoJSONFeature | GeoJSONFeatureCollection }) {
+function ZoomToFeature({ geoJson, maxZoom = 13 }: { geoJson: GeoJSONFeature | GeoJSONFeatureCollection; maxZoom?: number }) {
   const map = useMap();
   useEffect(() => {
     if (!geoJson) return;
     try {
       const layer = L.geoJSON(geoJson as Parameters<typeof L.geoJSON>[0]);
       const bounds = layer.getBounds();
-      if (bounds.isValid()) map.flyToBounds(bounds, { padding: [40, 40], duration: 2.0, easeLinearity: 0.5, maxZoom: 13 });
+      if (bounds.isValid()) {
+        map.flyToBounds(bounds, { 
+          padding: [50, 50], 
+          duration: 2.0, 
+          easeLinearity: 0.5, 
+          maxZoom: maxZoom 
+        });
+        // Ensure map is correctly aligned after transition
+        setTimeout(() => map.invalidateSize(), 2100);
+      }
     } catch { /* ignore */ }
-  }, [geoJson, map]);
+  }, [geoJson, map, maxZoom]);
   return null;
 }
 
@@ -192,51 +205,79 @@ function SpeedLinesOverlay({ active }: { active: boolean }) {
         exit={{ opacity: 0 }}
         className="w-full h-full relative"
       >
-        {/* Speed lines radiating from center */}
-        {[...Array(20)].map((_, i) => (
+        {/* Deep background glow pulse */}
+        <div className="absolute inset-0 bg-primary/5 backdrop-blur-[2px]" />
+
+        {/* Dense Star Dust / Particles */}
+        {[...Array(80)].map((_, i) => (
           <motion.div
-            key={i}
+            key={`dot-${i}`}
+            initial={{ 
+              x: "50%", y: "50%", 
+              scale: 0, opacity: 0 
+            }}
+            animate={{ 
+              x: `${50 + (Math.random() * 140 - 70)}%`,
+              y: `${50 + (Math.random() * 140 - 70)}%`,
+              scale: [0, Math.random() * 2 + 1, 0],
+              opacity: [0, 0.8, 0]
+            }}
+            transition={{
+              duration: 0.8 + Math.random() * 0.7,
+              repeat: Infinity,
+              delay: Math.random() * 1,
+              ease: "easeOut"
+            }}
+            className="absolute w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_white]"
+          />
+        ))}
+
+        {/* Intense Speed lines radiating from center */}
+        {[...Array(60)].map((_, i) => (
+          <motion.div
+            key={`r-${i}`}
             initial={{ 
               scaleX: 0, 
               opacity: 0,
-              rotate: (i * 18),
+              rotate: (i * 6), // More density
               x: 0,
               y: 0
             }}
             animate={{ 
-              scaleX: [0, 1.5, 0],
-              opacity: [0, 0.6, 0],
-              x: [0, (Math.cos(i * 18 * Math.PI / 180) * 800)],
-              y: [0, (Math.sin(i * 18 * Math.PI / 180) * 800)]
+              scaleX: [0, 2.5, 0],
+              opacity: [0, 0.7, 0],
+              x: [0, (Math.cos(i * 6 * Math.PI / 180) * 1200)],
+              y: [0, (Math.sin(i * 6 * Math.PI / 180) * 1200)]
             }}
             transition={{
-              duration: 0.6,
+              duration: 0.5 + Math.random() * 0.3,
               repeat: Infinity,
-              delay: Math.random() * 0.5,
-              ease: "easeIn"
+              delay: Math.random() * 0.4,
+              ease: "circIn"
             }}
-            className="absolute w-32 h-[1px] bg-gradient-to-r from-transparent via-white/80 to-transparent"
+            className="absolute w-48 h-[1px] bg-gradient-to-r from-transparent via-white/70 to-transparent"
             style={{ transformOrigin: "left center" }}
           />
         ))}
         
-        {/* Vertical falling streaks */}
-        {[...Array(15)].map((_, i) => (
+        {/* High-speed vertical falling streaks */}
+        {[...Array(40)].map((_, i) => (
           <motion.div
             key={`v-${i}`}
-            initial={{ y: -500, x: (Math.random() * 100 - 50) + "%", opacity: 0 }}
-            animate={{ y: 1500, opacity: [0, 0.4, 0] }}
+            initial={{ y: -800, x: (Math.random() * 120 - 10) + "%", opacity: 0 }}
+            animate={{ y: 2000, opacity: [0, 0.5, 0] }}
             transition={{
-              duration: 0.4,
+              duration: 0.3 + Math.random() * 0.2,
               repeat: Infinity,
-              delay: Math.random() * 0.4,
+              delay: Math.random() * 0.3,
               ease: "linear"
             }}
-            className="absolute w-[1px] h-64 bg-gradient-to-b from-transparent via-white/40 to-transparent"
+            className="absolute w-[1.5px] h-96 bg-gradient-to-b from-transparent via-white/30 to-transparent"
           />
         ))}
 
-        <div className="absolute inset-0 bg-white/5 backdrop-blur-[1px]" />
+        {/* Radial Vignette effect */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/40" />
       </motion.div>
     </div>
   );
@@ -320,8 +361,7 @@ export default function BrazilMap({
   const center: [number, number] = ufInfo ? ufInfo.center : [-14.2, -51.9];
   const zoom = ufInfo ? ufInfo.zoom : 4;
 
-  // Find the selected municipality's GeoJSON feature for zoom-to-bounds
-  const selectedMunicipioGeo = useCallback(() => {
+  const munGeo = useMemo(() => {
     if (!municipiosGeo || !selectedMunicipioName || !municipioNames) return null;
     const entry = Object.entries(municipioNames).find(
       ([, name]) => (name as string).toLowerCase() === selectedMunicipioName.toLowerCase()
@@ -330,6 +370,14 @@ export default function BrazilMap({
     const [codArea] = entry;
     return (municipiosGeo.features as GeoJSONFeature[])?.find((f) => String(f.properties?.codarea) === codArea) || null;
   }, [municipiosGeo, selectedMunicipioName, municipioNames]);
+
+  const stateGeo = useMemo(() => {
+    if (!statesGeo || !selectedUF) return null;
+    return (statesGeo.features as GeoJSONFeature[])?.find((f) => {
+        const uf = getUFByCode(Number(f?.properties?.codarea));
+        return uf && uf.sigla === selectedUF;
+    }) || null;
+  }, [statesGeo, selectedUF]);
 
   // ── Styles ──────────────────────────────────────────────────────────────────
   const neighborhoodStyle = useCallback((_feature: unknown) => ({
@@ -511,7 +559,6 @@ export default function BrazilMap({
     }
   }
 
-  const munGeo = selectedMunicipioGeo();
 
   // Filter clients: if UF is selected, show only that UF's clients and ensure they are within the state geometry.
   // If no UF is selected, show all clients that are within Brazil's boundaries.
@@ -570,15 +617,16 @@ export default function BrazilMap({
         maxBoundsViscosity={1.0}
       >
         <AttributionControl prefix={false} />
-        <MapController center={center} zoom={zoom} flyToLocation={flyToLocation} />
+        <MapController center={center} zoom={zoom} flyToLocation={flyToLocation} selectedUF={selectedUF} />
         <MapAnimationController 
           onMoveStart={() => setIsMapMoving(true)} 
           onMoveEnd={() => setIsMapMoving(false)} 
         />
         <MapEventHandler onBackgroundClick={() => selectedUF && onSelectUF("")} />
 
-        {/* Auto-zoom to municipality when selected */}
-        {munGeo && <ZoomToMunicipio geoJson={munGeo} />}
+        {/* Auto-zoom to features when selected */}
+        {munGeo && <ZoomToFeature geoJson={munGeo} maxZoom={13} />}
+        {!munGeo && stateGeo && <ZoomToFeature geoJson={stateGeo} maxZoom={ufInfo?.zoom || 7} />}
 
         <TileLayer
           url={municipioCodeForBairros || flyToLocation
@@ -689,6 +737,8 @@ export default function BrazilMap({
         {/* ── Client Pins ── */}
         {showClientes && visibleClientes.map((cliente) => {
           const isSelected = selectedClients.some(c => c.id_cliente === cliente.id_cliente);
+          const rep = getRepByCode(cliente.repCode as string, apiReps);
+          const repColor = rep ? getRepColor(rep) : "hsl(190, 100%, 50%)";
           
           return (
             <CircleMarker
@@ -696,10 +746,10 @@ export default function BrazilMap({
               center={[cliente.latitude, cliente.longitude]}
               radius={isSelected ? 6 : 4}
               pathOptions={{
-                fillColor: isSelected ? "hsl(45, 100%, 50%)" : "hsl(190, 100%, 50%)",
-                color: isSelected ? "white" : "hsl(190, 100%, 30%)",
+                fillColor: isSelected ? "hsl(45, 100%, 50%)" : repColor,
+                color: isSelected ? "white" : (rep ? repColor : "hsl(190, 100%, 30%)"),
                 weight: isSelected ? 3 : 2,
-                opacity: 1,
+                opacity: 0.9,
                 fillOpacity: 1
               }}
               interactive={true}

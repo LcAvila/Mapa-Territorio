@@ -70,14 +70,14 @@
     --shadow-card: 0 4px 20px -4px hsl(220 20% 10% / 0.05);
     --shadow-popup: 0 8px 30px -8px hsl(220 20% 10% / 0.1);
 
-    /* Login specifics */
-    --login-bg-1: 168 40% 92%;
-    --login-bg-2: 220 25% 97%;
-    --login-bg-3: 220 20% 95%;
+    /* Login specifics (Premium) */
+    --login-bg-1: 220 30% 12%; 
+    --login-bg-2: 220 25% 10%;
+    --login-bg-3: 220 20% 8%;
     --login-card-bg: 0 0% 100%;
-    --login-card-alpha: 0.85;
-    --login-card-border: 168 50% 40% / 0.12;
-    --login-input-bg: 220 20% 98% / 0.8;
+    --login-card-alpha: 0.05;
+    --login-card-border: 168 50% 60% / 0.15;
+    --login-input-bg: 0 0% 0% / 0.2;
 
     /* ── Admin Panel ── */
     --admin-sidebar-bg: 155 33% 21%;
@@ -148,14 +148,14 @@
     --shadow-card: 0 4px 24px -4px hsl(0 0% 0% / 0.4);
     --shadow-popup: 0 8px 32px -8px hsl(0 0% 0% / 0.6);
 
-    /* Login specifics */
-    --login-bg-1: 168 40% 10%;
-    --login-bg-2: 220 25% 7%;
-    --login-bg-3: 220 20% 5%;
-    --login-card-bg: 220 22% 11%;
-    --login-card-alpha: 0.72;
-    --login-card-border: 168 50% 40% / 0.22;
-    --login-input-bg: 220 20% 8% / 0.8;
+    /* Login specifics (Premium Dark) */
+    --login-bg-1: 220 40% 6%;
+    --login-bg-2: 220 35% 4%;
+    --login-bg-3: 220 30% 2%;
+    --login-card-bg: 0 0% 0%;
+    --login-card-alpha: 0.4;
+    --login-card-border: 168 50% 50% / 0.25;
+    --login-input-bg: 0 0% 0% / 0.4;
 
     /* ── Admin Panel (dark mode) ── */
     --admin-sidebar-bg: 220 20% 8%;
@@ -309,40 +309,16 @@
   }
 }
 
-@keyframes login-grid-drift {
-  0% {
-    transform: translate(0, 0);
-  }
-
-  100% {
-    transform: translate(60px, 60px);
-  }
-}
-
-@keyframes login-dot-blink {
-
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.2;
-  }
+@keyframes login-mesh-drift {
+  0% { transform: scale(1) translate(0, 0); }
+  33% { transform: scale(1.1) translate(-2%, 3%); }
+  66% { transform: scale(1.05) translate(3%, -2%); }
+  100% { transform: scale(1) translate(0, 0); }
 }
 
 @keyframes login-glow-pulse {
-
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scaleX(1);
-  }
-
-  50% {
-    opacity: 0.55;
-    transform: scaleX(1.1);
-  }
+  0%, 100% { opacity: 0.2; filter: blur(40px) scaleX(1); }
+  50% { opacity: 0.4; filter: blur(60px) scaleX(1.2); }
 }
 
 /* Root */
@@ -360,18 +336,28 @@
       hsl(var(--login-bg-3)) 100%);
 }
 
-/* Coordinate grid background */
+/* Mesh Background */
 .login-grid {
   position: absolute;
-  inset: -120px;
-  background-image:
-    linear-gradient(hsl(168 50% 45% / 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(168 50% 45% / 0.07) 1px, transparent 1px),
-    linear-gradient(hsl(168 50% 45% / 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(168 50% 45% / 0.03) 1px, transparent 1px);
-  background-size: 60px 60px, 60px 60px, 12px 12px, 12px 12px;
-  animation: login-grid-drift 18s linear infinite;
+  inset: -20%;
   pointer-events: none;
+  background: 
+    radial-gradient(circle at 20% 30%, hsl(168 60% 25% / 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 80% 20%, hsl(220 50% 20% / 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 50% 80%, hsl(168 70% 20% / 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 10% 90%, hsl(220 60% 15% / 0.12) 0%, transparent 30%);
+  filter: blur(80px);
+  animation: login-mesh-drift 20s ease-in-out infinite alternate;
+}
+
+/* Fine grid overlay */
+.login-grid::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(hsl(168 50% 50% / 0.03) 1px, transparent 1px),
+                    linear-gradient(90deg, hsl(168 50% 50% / 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
 }
 
 /* Floating pin decorations */

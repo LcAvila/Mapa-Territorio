@@ -35,7 +35,14 @@ export function getRepByCode(code: string, reps: Representative[] = []): Represe
 
 export function getRepColor(rep: Representative): string {
   if (rep.isVago) return "hsl(0, 0%, 40%)";
-  return REP_COLOR_PALETTE[rep.colorIndex] || "hsl(0, 0%, 50%)";
+  const color = REP_COLOR_PALETTE[rep.colorIndex];
+  if (color) return color;
+  
+  // Deterministic fallback based on code
+  const codeStr = String(rep.code || "");
+  const hash = codeStr.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const index = (hash % 12) + 1;
+  return REP_COLOR_PALETTE[index] || "hsl(200, 80%, 55%)";
 }
 
 export function getNextColorIndex(reps: Representative[]): number {

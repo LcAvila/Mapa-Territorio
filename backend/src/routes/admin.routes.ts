@@ -106,7 +106,7 @@ router.post('/reps', requireAdminMiddleware, async (req, res) => {
         cep, 
         comissao: comissao ? parseFloat(comissao) : null,
         isVago: isVago ? 1 : 0, 
-        colorIndex: Math.floor(Math.random() * 20) 
+        colorIndex: req.body.colorIndex !== undefined ? Number(req.body.colorIndex) : Math.floor(Math.random() * 12) + 1
       } 
     });
     res.json(rep);
@@ -153,7 +153,8 @@ router.put('/reps/:code', requireAdminMiddleware, async (req, res) => {
         uf, 
         cep, 
         comissao: comissao ? parseFloat(comissao) : null,
-        isVago: isVago ? 1 : 0 
+        isVago: isVago ? 1 : 0,
+        colorIndex: req.body.colorIndex !== undefined ? Number(req.body.colorIndex) : undefined
       }
     });
     res.json(rep);
