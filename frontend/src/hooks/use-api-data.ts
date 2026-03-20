@@ -107,7 +107,7 @@ export interface GeoJSONFeature {
   };
   geometry: {
     type: "Point" | "MultiPoint" | "LineString" | "MultiLineString" | "Polygon" | "MultiPolygon" | "GeometryCollection";
-    coordinates: any;
+    coordinates: number[] | number[][] | number[][][] | number[][][][];
   };
 }
 

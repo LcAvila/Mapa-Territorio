@@ -298,6 +298,28 @@ export default function Admin() {
   const [editUserForm, setEditUserForm] = useState({ username: '', fullName: '', document: '', password: '', confirmPassword: '', role: 'user' as 'user' | 'supervisor' | 'admin', repCode: '', photo: '' });
   const [showEditPwd, setShowEditPwd] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+  const [userFilterOnline, setUserFilterOnline] = useState(false);
+
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      const name = (u.full_name || u.fullName || u.username).toLowerCase();
+      const email = u.username.toLowerCase();
+      const search = userSearch.toLowerCase();
+      
+      const matchesSearch = name.includes(search) || email.includes(search);
+      if (!matchesSearch) return false;
+      
+      if (userFilterOnline) {
+        const rawLastActive = u.last_active || (u as SystemUser & { lastActive?: string }).lastActive;
+        const lastDate = rawLastActive ? new Date(rawLastActive) : null;
+        const isOnline = (u.id === userId) || (lastDate && !isNaN(lastDate.getTime()) && (Date.now() - lastDate.getTime()) < 300000);
+        return isOnline;
+      }
+      
+      return true;
+    });
+  }, [users, userSearch, userFilterOnline, userId]);
 
   const handleUserPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
     const file = e.target.files?.[0];
@@ -1238,8 +1260,22 @@ export default function Admin() {
                 <div className="flex w-full md:w-auto items-center gap-3">
                   <div className="relative flex-1 md:w-64">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input placeholder="Buscar..." className="pl-9 bg-background/50 border-border/40" />
+                    <Input 
+                      placeholder="Buscar por nome ou email..." 
+                      className="pl-9 bg-background/50 border-border/40" 
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                    />
                   </div>
+                  <Button 
+                    variant={userFilterOnline ? "default" : "outline"}
+                    className={`gap-2 ${userFilterOnline ? 'bg-emerald-500 hover:bg-emerald-600 border-emerald-500 text-white' : ''}`}
+                    onClick={() => setUserFilterOnline(!userFilterOnline)}
+                  >
+                    <Activity className={`w-4 h-4 ${userFilterOnline ? 'animate-pulse' : ''}`} />
+                    Online
+                    {userFilterOnline && <X className="w-3 h-3 ml-1" />}
+                  </Button>
                   <Button className="gap-2 shadow-lg shadow-primary/20" onClick={() => {
                     setEditingUserId(null);
                     setNewUser({ fullName: '', email: '', password: '', confirmPassword: '', role: 'user', repCode: '', documentType: 'cpf', document: '', companyName: '', age: '', photo: '' });
@@ -1256,7 +1292,7 @@ export default function Admin() {
                 </Card>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                  {users.map(u => {
+                  {filteredUsers.map(u => {
                     const rawLastActive = u.last_active || (u as SystemUser & { lastActive?: string }).lastActive;
                     const lastDate = rawLastActive ? new Date(rawLastActive) : null;
                     const isOnline = (u.id === userId) || (lastDate && !isNaN(lastDate.getTime()) && (Date.now() - lastDate.getTime()) < 300000);
