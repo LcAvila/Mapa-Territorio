@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
-import { getRepColor, Representative } from "@/data/representatives";
+import { useApiRepresentatives, Representative } from "@/hooks/use-api-data";
+import { getRepColor } from "@/data/representatives";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface MapLegendProps {
   modo: "planejamento" | "atendimento";
@@ -9,19 +10,6 @@ interface MapLegendProps {
   onToggleVagos: () => void;
 }
 
-function useApiRepresentatives() {
-  return useQuery<Representative[]>({
-    queryKey: ["api", "representatives"],
-    queryFn: async () => {
-      const res = await fetch("http://localhost:3001/api/representatives");
-      if (!res.ok) return [];
-      return res.json();
-    },
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-  });
-}
-
 export default function MapLegend({
   modo,
   filtroRepresentante,
@@ -29,7 +17,8 @@ export default function MapLegend({
   mostrarVagos,
   onToggleVagos,
 }: MapLegendProps) {
-  const { data: representatives = [] } = useApiRepresentatives();
+  const { token } = useAuth();
+  const { data: representatives = [] } = useApiRepresentatives(!!token);
   const activeReps = representatives.filter(r => !r.isVago);
   const vagoReps = representatives.filter(r => r.isVago);
 

@@ -17,44 +17,8 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { getUFByCode, getUFBySigla } from "@/data/uf-codes";
 import { getMunicipioResponsaveis } from "@/data/territories";
-import { getRepColor, getRepByCode, Representative } from "@/data/representatives";
-import type { TerritoryAssignment } from "@/data/territories";
-
-interface Cliente {
-  id_cliente: number;
-  latitude: number;
-  longitude: number;
-  uf: string;
-  nome_cliente: string;
-  codigo_cliente: string;
-  nome_abreviado?: string;
-  endereco_completo?: string;
-  bairro?: string;
-  repCode?: string;
-}
-
-interface GeoJSONFeature {
-  type: "Feature";
-  properties: {
-    codarea?: string | number;
-    nome?: string;
-    name?: string;
-    NM_DIST?: string;
-    NM_SUBDIST?: string;
-    localidadeId?: number;
-    isMunicipality?: boolean;
-    [key: string]: unknown;
-  };
-  geometry: {
-    type: "Point" | "MultiPoint" | "LineString" | "MultiLineString" | "Polygon" | "MultiPolygon" | "GeometryCollection";
-    coordinates: unknown;
-  };
-}
-
-interface GeoJSONFeatureCollection {
-  type: "FeatureCollection";
-  features: GeoJSONFeature[];
-}
+import { getRepColor, getRepByCode } from "@/data/representatives";
+import { useApiRepresentatives, useApiTerritories, useApiClientes, Representative, TerritoryAssignment, Cliente, GeoJSONFeatureCollection, GeoJSONFeature, SearchSuggestion } from "@/hooks/use-api-data";
 
 interface BrazilMapProps {
   selectedUF: string | null;
@@ -62,6 +26,9 @@ interface BrazilMapProps {
   filtroRepresentante: string | null;
   mostrarVagos: boolean;
   onSelectUF: (uf: string) => void;
+  onSearchEnter?: (q: string) => void;
+  suggestions?: SearchSuggestion[];
+  onSelectSuggestion?: (item: SearchSuggestion) => void;
   onSelectMunicipio: (municipio: string, uf: string) => void;
   searchQuery: string;
   municipioCodeForBairros?: number | null;
@@ -283,56 +250,6 @@ function SpeedLinesOverlay({ active }: { active: boolean }) {
   );
 }
 
-// ─── API hooks ────────────────────────────────────────────────────────────────
-function useApiRepresentatives(enabled: boolean) {
-  const { token } = useAuth();
-  return useQuery<Representative[]>({
-    queryKey: ["api", "representatives"],
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/admin/reps`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      return res.ok ? res.json() : [];
-    },
-    staleTime: 30_000, 
-    refetchInterval: 60_000,
-    enabled
-  });
-}
-
-function useApiTerritories(enabled: boolean) {
-  const { token } = useAuth();
-  return useQuery<TerritoryAssignment[]>({
-    queryKey: ["api", "territories"],
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/admin/territories`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      return res.ok ? res.json() : [];
-    },
-    staleTime: 30_000, 
-    refetchInterval: 60_000,
-    enabled
-  });
-}
-
-function useApiClientes(repCode: string | null) {
-  const { token } = useAuth();
-  return useQuery<Cliente[]>({
-    queryKey: ["api", "clientes", repCode],
-    queryFn: async () => {
-      const url = repCode 
-        ? `${API_BASE}/api/clientes?repCode=${repCode}`
-        : `${API_BASE}/api/clientes`;
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      return res.ok ? res.json() : [];
-    },
-    enabled: !!token,
-    staleTime: 60_000,
-  });
-}
 
 // ─── Main BrazilMap Component ─────────────────────────────────────────────────
 export default function BrazilMap({

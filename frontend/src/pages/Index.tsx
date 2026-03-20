@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import BrazilMap from "@/components/BrazilMap";
@@ -11,6 +11,7 @@ import { getUFBySigla } from "@/data/uf-codes";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import ClientDetailPanel from "@/components/ClientDetailPanel";
+import { useApiRepresentatives, useApiClientes, useApiTerritories, Cliente, SearchSuggestion, GeoJSONFeature, Representative } from "@/hooks/use-api-data";
 
 const Index = () => {
   const { isAuthenticated, role, logout } = useAuth();
@@ -25,34 +26,21 @@ const Index = () => {
   const [showClientes, setShowClientes] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [flyToLocation, setFlyToLocation] = useState<{ center: [number, number]; zoom: number } | null>(null);
-  interface SearchSuggestion { place_id: number; display_name: string; lat: string; lon: string; [key: string]: unknown; }
+  
   const [searchSuggestions, setSearchSuggestions] = useState<SearchSuggestion[]>([]);
-  const [searchResultGeo, setSearchResultGeo] = useState<Record<string, unknown> | null>(null);
+  const [searchResultGeo, setSearchResultGeo] = useState<GeoJSONFeature | null>(null);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   // Client selection state
-  interface MapClient { 
-    id_cliente: number;
-    codigo_cliente: string;
-    nome_cliente: string;
-    nome_abreviado?: string;
-    endereco_completo?: string;
-    bairro?: string;
-    cidade?: string;
-    uf?: string;
-    latitude: number; 
-    longitude: number; 
-    [key: string]: unknown; 
-  }
-  const [selectedClients, setSelectedClients] = useState<MapClient[]>([]);
+  const [selectedClients, setSelectedClients] = useState<Cliente[]>([]);
 
   // Interest modal state
   const [interestTarget, setInterestTarget] = useState<{ municipio: string; uf: string } | null>(null);
 
   const handleSelectUF = useCallback((uf: string | null) => {
-    setSelectedUF(uf ? uf : null);
+    setSelectedUF(uf);
     setSelectedMunicipio(null);
     setMunicipioCodeForBairros(null);
   }, []);
@@ -91,7 +79,7 @@ const Index = () => {
 
   // Fetch IBGE municipality code then activate bairros view
   const handleViewBairrosFromMenu = useCallback(async (nome: string, uf: string) => {
-    // Ensure UF is selected so the municipio data loads
+    // Ensure UF is selected so the municipality data loads
     handleSelectUF(uf);
     handleSelectMunicipio(nome, uf);
     const ufInfo = getUFBySigla(uf);
@@ -142,14 +130,17 @@ const Index = () => {
 
   const handleSelectSuggestion = useCallback(async (item: SearchSuggestion) => {
     setSearchSuggestions([]);
-    
-    // Don't update searchQuery with the full name to avoid triggering municipality highlights
-    // Just keep the search input clean or with the short name, but tell BrazilMap to ignore it if needed
     setSearchQuery(item.display_name.split(',')[0]);
     
+    // If it's a direct selection from our filters (place_id === 0), don't fetch from nominatim
+    if (item.place_id === 0) {
+      setFlyToLocation(null); // Let the map handle based on searchQuery or UF
+      setSearchResultGeo(null);
+      return;
+    }
+
     const toastId = toast.loading('Carregando região...');
     try {
-      // Fetch full detail with polygon
       const url = `https://nominatim.openstreetmap.org/details?place_id=${item.place_id}&polygon_geojson=1&format=json`;
       const res = await fetch(url, { headers: { 'User-Agent': 'MapaTerritorio-App/1.1' } });
       const data = await res.json();
@@ -195,16 +186,52 @@ const Index = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Auto-zoom to client when a single one is selected
+  const { token } = useAuth();
+  const { data: apiReps = [] } = useApiRepresentatives(!!token);
+  const { data: apiTerritories = [] } = useApiTerritories(!!token);
+  const { data: apiClientes = [] } = useApiClientes(filtroRepresentante);
+
+  // Auto-zoom to representative's state when filtered
   useEffect(() => {
-    if (selectedClients.length === 1) {
-      const client = selectedClients[0];
-      setFlyToLocation({
-        center: [client.latitude, client.longitude],
-        zoom: 17
-      });
+    if (filtroRepresentante) {
+      // 1. Strategy: Use Territory assignments if they exist
+      if (apiTerritories.length > 0) {
+        const repTerritories = apiTerritories.filter(t => t.repCode === filtroRepresentante);
+        if (repTerritories.length > 0) {
+          const rep = apiReps.find(r => r.code === filtroRepresentante);
+          const nameParts = rep?.name.split('-');
+          const nameSuffix = nameParts && nameParts.length > 1 ? nameParts[nameParts.length - 1].trim().toUpperCase() : null;
+          
+          let targetUF = repTerritories[0].uf;
+          if (nameSuffix && nameSuffix.length === 2 && repTerritories.some(t => t.uf === nameSuffix)) {
+            targetUF = nameSuffix;
+          } else {
+            const counts = repTerritories.reduce((acc, t) => {
+              acc[t.uf] = (acc[t.uf] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>);
+            const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+            targetUF = sorted[0][0];
+          }
+          
+          handleSelectUF(targetUF);
+          return;
+        }
+      }
+
+      // 2. Fallback: Use Client locations if no territories are defined
+      if (apiClientes.length > 0) {
+        const counts = apiClientes.reduce((acc, c) => {
+          if (c.uf) acc[c.uf] = (acc[c.uf] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        if (sorted.length > 0) {
+          handleSelectUF(sorted[0][0]);
+        }
+      }
     }
-  }, [selectedClients]);
+  }, [filtroRepresentante, apiTerritories, apiReps, apiClientes, handleSelectUF]);
 
   // Close suggestions on map click and clear highlights
   const handleMapBackgroundClick = () => {
@@ -213,7 +240,7 @@ const Index = () => {
     setFlyToLocation(null);
     setSearchQuery("");
     setSelectedClients([]); // Clear client selection
-    if (selectedUF) handleSelectUF("");
+    if (selectedUF) handleSelectUF(null);
   };
 
   const ufInfo = selectedUF ? getUFBySigla(selectedUF) : null;
@@ -235,6 +262,17 @@ const Index = () => {
         onSearchEnter={handleAddressSearch}
         suggestions={searchSuggestions}
         onSelectSuggestion={handleSelectSuggestion}
+        reps={apiReps as Representative[]}
+        clients={apiClientes}
+        filtroRepresentante={filtroRepresentante}
+        onFilterRep={setFiltroRepresentante}
+        onSelectClient={(client) => {
+          setSelectedClients([client]);
+          setFlyToLocation({
+            center: [client.latitude, client.longitude],
+            zoom: 17
+          });
+        }}
       />
 
       <div className="flex-1 relative overflow-hidden">
