@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import pc from 'picocolors';
 
 import authRoutes from './routes/auth.routes';
 import adminRoutes from './routes/admin.routes';
@@ -37,16 +38,26 @@ async function bootstrap() {
                 full_name: 'Administrador'
             }
         });
-        console.log("🟢 Admin master originado com sucesso.");
+        console.log(pc.green("✅ Admin master originado com sucesso."));
     }
 
     app.listen(PORT, () => {
-        console.log(`🚀 Servidor Enterprise ORM rodando na porta ${PORT}`);
+        console.clear();
+        console.log(pc.cyan("──────────────────────────────────────────────────"));
+        console.log(pc.bold(pc.magenta("🚀 MAPA TERRITÓRIO - BACKEND")));
+        console.log(pc.cyan("──────────────────────────────────────────────────"));
+        console.log(`${pc.blue("📡 Status:")} ${pc.green("Online")}`);
+        console.log(`${pc.blue("🔗 URL Local:")} ${pc.underline(pc.white(`http://localhost:${PORT}`))}`);
+        console.log(`${pc.blue("📂 Ambiente:")} ${pc.yellow(process.env.NODE_ENV || 'development')}`);
+        console.log(`${pc.blue("🗄️ Database:")} ${pc.green("Prisma ORM")}`);
+        console.log(pc.cyan("──────────────────────────────────────────────────"));
+        console.log(pc.gray("Aguardando requisições...\n"));
     });
 }
 
 bootstrap()
   .catch((e) => {
+    console.error(pc.red("❌ Erro fatal na inicialização:"));
     console.error(e);
     process.exit(1);
   });

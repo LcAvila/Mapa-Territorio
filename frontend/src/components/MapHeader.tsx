@@ -50,7 +50,7 @@ export default function MapHeader({
   reps, clients, filtroRepresentante, onFilterRep, onSelectClient
 }: MapHeaderProps) {
   const navigate = useNavigate();
-  const { repCode } = useAuth();
+  const { repCode, userName } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
 
@@ -267,13 +267,24 @@ export default function MapHeader({
             <LogIn className="w-4 h-4" /> Entrar
           </Button>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {userName && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/80 rounded-full border border-border/50">
+                <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
+                  <User className="w-3 h-3 text-primary" />
+                </div>
+                <span className="text-xs font-bold text-foreground truncate max-w-[120px]">
+                  {userName.split(' ')[0]}
+                </span>
+              </div>
+            )}
+            
             {role === 'admin' && (
-              <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="gap-2 h-8">
+              <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="gap-2 h-8 px-2">
                 <Settings className="w-4 h-4" /> <span className="hidden sm:inline">Admin</span>
               </Button>
             )}
-            <Button variant="ghost" size="sm" onClick={logout} className="h-8 w-8 p-0 text-destructive">
+            <Button variant="ghost" size="sm" onClick={logout} className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10">
               <LogOut className="w-4 h-4" />
             </Button>
           </div>

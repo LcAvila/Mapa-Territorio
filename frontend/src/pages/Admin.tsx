@@ -659,8 +659,9 @@ export default function Admin() {
   const pendingInterests = interests.filter(i => i.status === 'pending').length;
 
   // Current user info for sidebar profile
+  const { userName: authUserName } = useAuth();
   const currentUser = users.find(u => u.id === userId);
-  const displayName = currentUser?.full_name || currentUser?.fullName || currentUser?.username || 'Admin';
+  const displayName = authUserName || currentUser?.full_name || currentUser?.fullName || currentUser?.username || 'Admin';
   const displayEmail = currentUser?.username || '';
   const displayPhoto = currentUser?.photo || '';
 

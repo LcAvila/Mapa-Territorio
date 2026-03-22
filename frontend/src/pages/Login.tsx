@@ -30,13 +30,14 @@ export default function Login() {
                 login(
                     data.token,
                     data.role,
+                    data.user.full_name,
                     data.tipo,
                     data.repCode,
                     data.estado_end,
                     data.user.default_workspace,
                     data.user.inactivity_limit
                 );
-                toast.success(`Bem-vindo, ${data.user.fullName || 'Usuário'}!`);
+                toast.success(`Bem-vindo, ${data.user.full_name || 'Usuário'}!`);
                 
                 let target = data.user.default_workspace || (data.role === 'admin' || data.role === 'supervisor' ? 'admin' : '');
                 if (target === 'dashboard') target = 'admin';

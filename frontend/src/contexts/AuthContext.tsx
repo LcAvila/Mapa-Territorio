@@ -4,12 +4,13 @@ interface AuthContextType {
     token: string | null;
     role: string | null;
     userId: number | null;
+    userName: string | null;
     repCode: string | null;
     tipo: string | null;
     estado_end: string | null;
     defaultWorkspace: string | null;
     inactivityLimit: number | null;
-    login: (token: string, role: string, tipo?: string, repCode?: string, estado_end?: string, defaultWorkspace?: string, inactivityLimit?: number) => void;
+    login: (token: string, role: string, userName?: string, tipo?: string, repCode?: string, estado_end?: string, defaultWorkspace?: string, inactivityLimit?: number) => void;
     logout: () => void;
     isAuthenticated: boolean;
 }
@@ -23,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const stored = localStorage.getItem('userId');
         return stored ? Number(stored) : null;
     });
+    const [userName, setUserName] = useState<string | null>(localStorage.getItem('userName'));
     const [repCode, setRepCode] = useState<string | null>(localStorage.getItem('repCode'));
     const [tipo, setTipo] = useState<string | null>(localStorage.getItem('tipo'));
     const [estado_end, setEstadoEnd] = useState<string | null>(localStorage.getItem('estado_end'));
@@ -32,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return stored ? Number(stored) : null;
     });
 
-    const login = (newToken: string, newRole: string, newTipo?: string, newRepCode?: string, newEstadoEnd?: string, newWorkspace?: string, newLimit?: number) => {
+    const login = (newToken: string, newRole: string, newUserName?: string, newTipo?: string, newRepCode?: string, newEstadoEnd?: string, newWorkspace?: string, newLimit?: number) => {
         // Decode JWT to extract userId
         let uid: number | null = null;
         try {
@@ -43,6 +45,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('token', newToken);
         localStorage.setItem('role', newRole);
         if (uid !== null) localStorage.setItem('userId', String(uid));
+        if (newUserName) localStorage.setItem('userName', newUserName);
+        else localStorage.removeItem('userName');
         if (newRepCode) localStorage.setItem('repCode', newRepCode);
         else localStorage.removeItem('repCode');
         if (newTipo) localStorage.setItem('tipo', newTipo);
@@ -57,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(newToken);
         setRole(newRole);
         setUserId(uid);
+        setUserName(newUserName || null);
         setRepCode(newRepCode || null);
         setTipo(newTipo || null);
         setEstadoEnd(newEstadoEnd || null);
@@ -65,13 +70,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const logout = () => {
-        ['token', 'role', 'userId', 'repCode', 'tipo', 'estado_end', 'defaultWorkspace', 'inactivityLimit'].forEach(k => localStorage.removeItem(k));
-        setToken(null); setRole(null); setUserId(null); setRepCode(null); setTipo(null); setEstadoEnd(null);
+        ['token', 'role', 'userId', 'userName', 'repCode', 'tipo', 'estado_end', 'defaultWorkspace', 'inactivityLimit'].forEach(k => localStorage.removeItem(k));
+        setToken(null); setRole(null); setUserId(null); setUserName(null); setRepCode(null); setTipo(null); setEstadoEnd(null);
         setDefaultWorkspace(null); setInactivityLimit(null);
     };
 
     return (
-        <AuthContext.Provider value={{ token, role, userId, repCode, tipo, estado_end, defaultWorkspace, inactivityLimit, login, logout, isAuthenticated: !!token }}>
+        <AuthContext.Provider value={{ token, role, userId, userName, repCode, tipo, estado_end, defaultWorkspace, inactivityLimit, login, logout, isAuthenticated: !!token }}>
             {children}
         </AuthContext.Provider>
     );
