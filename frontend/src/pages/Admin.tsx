@@ -1733,7 +1733,7 @@ export default function Admin() {
                     </CardHeader>
                     <CardContent className="p-4 bg-primary/5 flex justify-center">
                       <div style={{ width: '100%', maxWidth: '350px' }}>
-                        <MiniMapBrasil territories={computedTerritories.flatMap(t => t.repCodes.map(r => ({ uf: t.uf, repCode: r })))} reps={reps} filterUF={filterUF} filterRep="" onClickUF={uf => setFilterUF(prev => prev === uf ? '' : uf)} />
+                        <MiniMapBrasil territories={computedTerritories.flatMap(t => t.repCodes.map(r => ({ id: t.id, municipio: t.municipio, uf: t.uf, repCode: r, modo: 'atendimento' as const })))} reps={reps} filterUF={filterUF} filterRep="" onClickUF={uf => setFilterUF(prev => prev === uf ? '' : uf)} />
                       </div>
                     </CardContent>
                   </Card>
