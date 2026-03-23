@@ -44,7 +44,7 @@ import { RotasProvider } from '../contexts/RotasContext';
 import MiniMapBrasil from '../components/admin/MiniMapBrasil';
 import UserProfileManager from '../components/admin/users/UserProfileManager';
 
-// ÔöÇÔöÇÔöÇ Interfaces ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+// ─── Interfaces ───────────────────────────────────────────────────────────────
 interface Representative { 
   code: string; 
   name: string; 
@@ -85,13 +85,13 @@ interface NavItem {
 const API = 'http://localhost:3001';
 const IBGE = 'https://servicodados.ibge.gov.br/api/v1/localidades';
 
-// ÔöÇÔöÇÔöÇ localStorage helpers ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+// ─── localStorage helpers ─────────────────────────────────────────────────────
 const LS = {
   get: <T,>(key: string, def: T): T => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch { return def; } },
   set: <T,>(key: string, val: T) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch { /* ignore */ } },
 };
 
-// ÔöÇÔöÇÔöÇ CPF / CNPJ mask ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+// ─── CPF / CNPJ mask ─────────────────────────────────────────────────────────
 function maskDoc(val: string, type: 'cpf' | 'cnpj') {
   const d = val.replace(/\D/g, '');
   if (type === 'cpf') {
@@ -100,7 +100,7 @@ function maskDoc(val: string, type: 'cpf' | 'cnpj') {
   return d.slice(0, 14).replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, (_, a, b, c, e, f) => f ? `${a}.${b}.${c}/${e}-${f}` : e ? `${a}.${b}.${c}/${e}` : c ? `${a}.${b}.${c}` : b ? `${a}.${b}` : a);
 }
 
-// ÔöÇÔöÇÔöÇ SearchableSelect ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+// ─── SearchableSelect ─────────────────────────────────────────────────────────
 function SearchableSelect({ options, value, onChange, placeholder, disabled = false, loading = false }:
   { options: { value: string; label: string }[]; value: string; onChange: (v: string) => void; placeholder: string; disabled?: boolean; loading?: boolean; }) {
   const [open, setOpen] = useState(false);
@@ -142,7 +142,7 @@ function SearchableSelect({ options, value, onChange, placeholder, disabled = fa
   );
 }
 
-// ÔöÇÔöÇÔöÇ MultiSelect for reps ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+// ─── MultiSelect for reps ─────────────────────────────────────────────────────
 function MultiRepSelect({ reps, value, onChange }: { reps: Representative[]; value: string[]; onChange: (v: string[]) => void; }) {
   const toggle = (code: string) => onChange(value.includes(code) ? value.filter(c => c !== code) : [...value, code]);
   return (
@@ -151,7 +151,7 @@ function MultiRepSelect({ reps, value, onChange }: { reps: Representative[]; val
         <label key={r.code} className="flex items-center gap-3 px-3 py-2 hover:bg-secondary/40 cursor-pointer">
           <input type="checkbox" className="rounded" checked={value.includes(r.code)} onChange={() => toggle(r.code)} />
           <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: getRepColor(r) }} />
-          <span className="text-sm">{r.code} ÔÇö {r.name}</span>
+          <span className="text-sm">{r.code} — {r.name}</span>
         </label>
       ))}
     </div>
@@ -185,7 +185,7 @@ export default function Admin() {
     if (!token) navigate('/login');
   }, [token, navigate]);
 
-  // ÔöÇÔöÇ Core API data ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Core API data ──────────────────────────────────────────────────────────
   const [reps, setReps] = useState<Representative[]>([]);
   const [territories, setTerritories] = useState<Territory[]>([]);
   const [users, setUsers] = useState<SystemUser[]>([]);
@@ -200,16 +200,16 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState<TabId>(role === 'supervisor' ? 'baserotas' : 'dashboard');
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['settings', 'rotas_menu']);
 
-  // ÔöÇÔöÇ Brand / Personaliza├º├úo ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Brand / Personalização ────────────────────────────────────────────────
   const [brandLogo, setBrandLogo] = useState<string>(() => localStorage.getItem('brand_logo') || '');
-  const [brandName, setBrandName] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Territ├│rio');
-  const [brandNameDraft, setBrandNameDraft] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Territ├│rio');
+  const [brandName, setBrandName] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Território');
+  const [brandNameDraft, setBrandNameDraft] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Território');
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) { toast.error('Selecione um arquivo de imagem'); return; }
-    if (file.size > 2 * 1024 * 1024) { toast.error('Imagem muito grande (m├íx. 2 MB)'); return; }
+    if (file.size > 2 * 1024 * 1024) { toast.error('Imagem muito grande (máx. 2 MB)'); return; }
     const reader = new FileReader();
     reader.onload = (ev) => {
       const b64 = ev.target?.result as string;
@@ -221,7 +221,7 @@ export default function Admin() {
   };
 
   const handleSaveBrandName = () => {
-    const name = brandNameDraft.trim() || 'Mapa Territ├│rio';
+    const name = brandNameDraft.trim() || 'Mapa Território';
     setBrandName(name);
     localStorage.setItem('brand_name', name);
     toast.success('Nome da empresa salvo!');
@@ -233,7 +233,7 @@ export default function Admin() {
     toast.success('Logo removida');
   };
 
-  // ÔöÇÔöÇ LocalStorage state ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── LocalStorage state ────────────────────────────────────────────────────
   const [groups, setGroups] = useState<Group[]>(() => LS.get('admin_groups', []));
   const [notifications, setNotifications] = useState<Notification[]>(() => LS.get('admin_notifications', []));
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => LS.get('admin_audit', []));
@@ -242,7 +242,7 @@ export default function Admin() {
   const saveNotifications = (n: Notification[]) => { setNotifications(n); LS.set('admin_notifications', n); };
   const saveAuditLogs = (a: AuditLog[]) => { setAuditLogs(a); LS.set('admin_audit', a); };
 
-  // ÔöÇÔöÇ Auth & Permissions ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Auth & Permissions ──────────────────────────────────────────────────
   const authHeaders = useMemo(() => ({ 
     'Content-Type': 'application/json', 
     'Authorization': `Bearer ${token}` 
@@ -263,7 +263,7 @@ export default function Admin() {
     return p?.canView || false;
   };
 
-  // ÔöÇÔöÇ Dashboard filters ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Dashboard filters ─────────────────────────────────────────────────────
   const [dashFilterRep, setDashFilterRep] = useState('');
   const [dashFilterUF, setDashFilterUF] = useState('');
   const [dashFilterModo, setDashFilterModo] = useState('');
@@ -275,12 +275,12 @@ export default function Admin() {
     saveAuditLogs(updated);
   }, []);
 
-  // ÔöÇÔöÇ Confirm dialog ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Confirm dialog ─────────────────────────────────────────────────────────
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; onConfirm: () => void }>({ open: false, title: '', description: '', onConfirm: () => { } });
   const openConfirm = useCallback((title: string, description: string, onConfirm: () => void) => setConfirmDialog({ open: true, title, description, onConfirm }), []);
   const closeConfirm = useCallback(() => setConfirmDialog(d => ({ ...d, open: false })), []);
 
-  // ÔöÇÔöÇ Reps form ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Reps form ──────────────────────────────────────────────────────────────
   const [editingCode, setEditingCode] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ 
     name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '', 
@@ -291,7 +291,7 @@ export default function Admin() {
     endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: '' 
   });
 
-  // ÔöÇÔöÇ Users form (enhanced) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Users form (enhanced) ─────────────────────────────────────────────────
   const [newUser, setNewUser] = useState({ fullName: '', email: '', password: '', confirmPassword: '', role: 'user' as 'user' | 'supervisor' | 'admin', repCode: '', documentType: 'cpf' as 'cpf' | 'cnpj', document: '', companyName: '', age: '', photo: '' });
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
@@ -324,7 +324,7 @@ export default function Admin() {
   const handleUserPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { toast.error('Foto deve ter no m├íximo 2MB'); return; }
+    if (file.size > 2 * 1024 * 1024) { toast.error('Foto deve ter no máximo 2MB'); return; }
     const reader = new FileReader();
     reader.onload = (ev) => {
       const b64 = ev.target?.result as string;
@@ -334,7 +334,7 @@ export default function Admin() {
     reader.readAsDataURL(file);
   };
 
-  // ÔöÇÔöÇ Territories form ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Territories form ──────────────────────────────────────────────────────
   const [selectedUF, setSelectedUF] = useState('');
   const [selectedMunicipio, setSelectedMunicipio] = useState('');
   const [selectedMunicipioName, setSelectedMunicipioName] = useState('');
@@ -350,24 +350,24 @@ export default function Admin() {
   const [filterUF, setFilterUF] = useState('');
   const [filterRep, setFilterRep] = useState('');
 
-  // ÔöÇÔöÇ Groups form ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Groups form ────────────────────────────────────────────────────────────
   const [newGroupName, setNewGroupName] = useState('');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [groupAddReps, setGroupAddReps] = useState<string[]>([]);
 
-  // ÔöÇÔöÇ Notifications form ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Notifications form ─────────────────────────────────────────────────────
   const [notifTitle, setNotifTitle] = useState('');
   const [notifMessage, setNotifMessage] = useState('');
   const [notifTargetAll, setNotifTargetAll] = useState(true);
   const [notifTargetReps, setNotifTargetReps] = useState<string[]>([]);
 
-  // ÔöÇÔöÇ Audit filters ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Audit filters ──────────────────────────────────────────────────────────
   const [auditFilterRep, setAuditFilterRep] = useState('');
   const [auditFilterAction, setAuditFilterAction] = useState('');
   const [auditFilterUF, setAuditFilterUF] = useState('');
 
 
-  // ÔöÇÔöÇ Fetch all API data ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Fetch all API data ─────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -382,7 +382,7 @@ export default function Admin() {
       const responses = [rR, tR, uR, iR, cR];
       const unauth = responses.find(r => r.status === 401);
       if (unauth) {
-        toast.error('Sess├úo encerrada ou inv├ílida. Fa├ºa login novamente.');
+        toast.error('Sessão encerrada ou inválida. Faça login novamente.');
         logout();
         return;
       }
@@ -402,7 +402,7 @@ export default function Admin() {
   const handleDownloadLogisticsPlan = async () => {
     try {
       setIsGeneratingPlan(true);
-      toast.info('Gerando planilha l├│gistica. Isso pode demorar alguns segundos...');
+      toast.info('Gerando planilha lógistica. Isso pode demorar alguns segundos...');
       const res = await fetch(`${API}/api/generate-plan`, { headers: authHeaders });
       if (!res.ok) throw new Error('Falha ao gerar o arquivo');
       const blob = await res.blob();
@@ -414,9 +414,9 @@ export default function Admin() {
       a.click();
       window.URL.revokeObjectURL(url);
       a.remove();
-      toast.success('Download da planilha conclu├¡do!');
+      toast.success('Download da planilha concluído!');
     } catch (error) {
-      toast.error('Erro ao gerar/baixar a planilha log├¡stica.');
+      toast.error('Erro ao gerar/baixar a planilha logística.');
       console.error(error);
     } finally {
       setIsGeneratingPlan(false);
@@ -435,7 +435,7 @@ export default function Admin() {
     setLoadingMunicipios(true); setSelectedMunicipio(''); setSelectedMunicipioName('');
     fetch(`${IBGE}/estados/${uf.codigo}/municipios`).then(r => r.json())
       .then(d => setMunicipios(d.sort((a: { nome: string }, b: { nome: string }) => a.nome.localeCompare(b.nome))))
-      .catch(() => toast.error('Erro ao carregar munic├¡pios')).finally(() => setLoadingMunicipios(false));
+      .catch(() => toast.error('Erro ao carregar municípios')).finally(() => setLoadingMunicipios(false));
   }, [selectedUF]);
 
   useEffect(() => {
@@ -448,18 +448,18 @@ export default function Admin() {
       .catch(() => toast.error('Erro ao carregar bairros')).finally(() => setLoadingSubdistritos(false));
   }, [selectedMunicipio, includeBairro]);
 
-  // ÔöÇÔöÇ Options ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
-  const ufOptions = UF_DATA.sort((a, b) => a.nome.localeCompare(b.nome)).map(u => ({ value: u.sigla, label: `${u.sigla} ÔÇö ${u.nome}` }));
+  // ── Options ───────────────────────────────────────────────────────────────
+  const ufOptions = UF_DATA.sort((a, b) => a.nome.localeCompare(b.nome)).map(u => ({ value: u.sigla, label: `${u.sigla} — ${u.nome}` }));
   const municipioOptions = municipios.map(m => ({ value: String(m.id), label: m.nome }));
   const bairroOptions = subdistritos.map(s => ({ value: String(s.id), label: s.nome }));
-  const repOptions = reps.map(r => ({ value: r.code, label: `${r.code} ÔÇö ${r.name}` }));
+  const repOptions = reps.map(r => ({ value: r.code, label: `${r.code} — ${r.name}` }));
 
   const handleSelectMunicipio = (id: string) => { setSelectedMunicipio(id); setSelectedMunicipioName(municipios.find(m => String(m.id) === id)?.nome || ''); };
 
-  // ÔöÇÔöÇ Reps CRUD ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Reps CRUD ─────────────────────────────────────────────────────────────
   const handleCreateRep = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newRep.code.trim() || !newRep.name.trim()) { toast.error('C├│digo e nome obrigat├│rios'); return; }
+    if (!newRep.code.trim() || !newRep.name.trim()) { toast.error('Código e nome obrigatórios'); return; }
     const res = await fetch(`${API}/api/admin/reps`, { 
       method: 'POST', 
       headers: authHeaders, 
@@ -470,7 +470,7 @@ export default function Admin() {
     });
     if (res.ok) { 
       toast.success(`Representante ${newRep.code} cadastrado!`); 
-      addAudit('create_rep', 'Representante', newRep.code, `Criou rep ${newRep.code} ÔÇö ${newRep.name}`); 
+      addAudit('create_rep', 'Representante', newRep.code, `Criou rep ${newRep.code} — ${newRep.name}`); 
       setNewRep({ 
         code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '', 
         endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: '' 
@@ -481,16 +481,16 @@ export default function Admin() {
   };
 
   const handleDeleteRep = (code: string, name: string) => {
-    openConfirm('Remover representante', `"${name}" e todos os seus territ├│rios ser├úo removidos.`, async () => {
+    openConfirm('Remover representante', `"${name}" e todos os seus territórios serão removidos.`, async () => {
       closeConfirm();
       const res = await fetch(`${API}/api/admin/reps/${code}`, { method: 'DELETE', headers: authHeaders });
-      if (res.ok) { toast.success('Removido!'); addAudit('delete_rep', 'Representante', code, `Removeu rep ${code} ÔÇö ${name}`); fetchAll(); }
+      if (res.ok) { toast.success('Removido!'); addAudit('delete_rep', 'Representante', code, `Removeu rep ${code} — ${name}`); fetchAll(); }
       else toast.error('Erro ao remover');
     });
   };
 
   const handleUpdateRep = async (code: string) => {
-    if (!editForm.name.trim()) { toast.error('Nome obrigat├│rio'); return; }
+    if (!editForm.name.trim()) { toast.error('Nome obrigatório'); return; }
     const res = await fetch(`${API}/api/admin/reps/${code}`, { 
       method: 'PUT', 
       headers: authHeaders, 
@@ -508,10 +508,10 @@ export default function Admin() {
     else toast.error('Erro ao atualizar');
   };
 
-  // ÔöÇÔöÇ Territory CRUD ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Territory CRUD ────────────────────────────────────────────────────────
   const handleAddToStaged = () => {
-    if (!selectedUF || !selectedMunicipioName || !selectedRep) { toast.error('Selecione estado, munic├¡pio e representante'); return; }
-    if (staged.find(s => s.municipio === selectedMunicipioName && s.uf === selectedUF && s.repCode === selectedRep && s.modo === selectedModo)) { toast.warning('J├í na lista'); return; }
+    if (!selectedUF || !selectedMunicipioName || !selectedRep) { toast.error('Selecione estado, município e representante'); return; }
+    if (staged.find(s => s.municipio === selectedMunicipioName && s.uf === selectedUF && s.repCode === selectedRep && s.modo === selectedModo)) { toast.warning('Já na lista'); return; }
     setStaged(prev => [...prev, { municipio: selectedMunicipioName, uf: selectedUF, bairro: includeBairro && selectedBairro ? subdistritos.find(s => String(s.id) === selectedBairro)?.nome : undefined, repCode: selectedRep, modo: selectedModo }]);
     setSelectedMunicipio(''); setSelectedMunicipioName(''); setSelectedBairro('');
     toast.success('Adicionado!');
@@ -522,17 +522,17 @@ export default function Admin() {
     let ok = 0, fail = 0;
     for (const item of staged) {
       const res = await fetch(`${API}/api/admin/territories`, { method: 'POST', headers: authHeaders, body: JSON.stringify({ municipio: item.municipio, uf: item.uf, repCode: item.repCode, modo: item.modo }) });
-      if (res.ok) { ok++; addAudit('assign_territory', 'Territ├│rio', item.municipio, `Atribuiu ${item.municipio}/${item.uf} ÔåÆ ${item.repCode}`, { repCode: item.repCode, uf: item.uf, municipio: item.municipio }); }
+      if (res.ok) { ok++; addAudit('assign_territory', 'Território', item.municipio, `Atribuiu ${item.municipio}/${item.uf} ÔåÆ ${item.repCode}`, { repCode: item.repCode, uf: item.uf, municipio: item.municipio }); }
       else fail++;
     }
-    if (ok) toast.success(`${ok} territ├│rio(s) atribu├¡do(s)!`);
+    if (ok) toast.success(`${ok} território(s) atribuído(s)!`);
     if (fail) toast.error(`${fail} falhou`);
     setStaged([]); fetchAll();
   };
 
   const handleDeleteTerritory = async (id: number, municipio: string, repCode: string, uf: string) => {
     const res = await fetch(`${API}/api/admin/territories/${id}`, { method: 'DELETE', headers: authHeaders });
-    if (res.ok) { toast.success(`${municipio} removido!`); addAudit('delete_territory', 'Territ├│rio', String(id), `Removeu ${municipio}/${uf}`, { repCode, uf, municipio }); fetchAll(); }
+    if (res.ok) { toast.success(`${municipio} removido!`); addAudit('delete_territory', 'Território', String(id), `Removeu ${municipio}/${uf}`, { repCode, uf, municipio }); fetchAll(); }
     else toast.error('Erro');
   };
 
@@ -542,20 +542,20 @@ export default function Admin() {
     return true;
   });
 
-  // ÔöÇÔöÇ Users CRUD ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Users CRUD ────────────────────────────────────────────────────────────
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUser.fullName.trim() || !newUser.email.trim() || !newUser.password.trim()) { toast.error('Nome, email e senha s├úo obrigat├│rios'); return; }
-    if (!newUser.document.trim()) { toast.error('Documento ├® obrigat├│rio'); return; }
-    if (newUser.password !== newUser.confirmPassword) { toast.error('As senhas n├úo coincidem!'); return; }
+    if (!newUser.fullName.trim() || !newUser.email.trim() || !newUser.password.trim()) { toast.error('Nome, email e senha são obrigatórios'); return; }
+    if (!newUser.document.trim()) { toast.error('Documento é obrigatório'); return; }
+    if (newUser.password !== newUser.confirmPassword) { toast.error('As senhas não coincidem!'); return; }
     const body: Record<string, string> = { username: newUser.email, password: newUser.password, role: newUser.role, fullName: newUser.fullName, email: newUser.email, document: newUser.document, documentType: newUser.documentType, age: newUser.age };
     if (newUser.documentType === 'cnpj' && newUser.companyName) body.companyName = newUser.companyName;
     if (newUser.repCode) body.repCode = newUser.repCode;
     if (newUser.photo) body.photo = newUser.photo;
     const res = await fetch(`${API}/api/admin/users`, { method: 'POST', headers: authHeaders, body: JSON.stringify(body) });
     if (res.ok) { 
-      toast.success(`Usu├írio "${newUser.fullName}" criado!`); 
-      addAudit('create_user', 'Usu├írio', newUser.email, `Criou usu├írio ${newUser.fullName} (${newUser.email})`); 
+      toast.success(`Usuário "${newUser.fullName}" criado!`); 
+      addAudit('create_user', 'Usuário', newUser.email, `Criou usuário ${newUser.fullName} (${newUser.email})`); 
       setNewUser({ fullName: '', email: '', password: '', confirmPassword: '', role: 'user', repCode: '', documentType: 'cpf', document: '', companyName: '', age: '', photo: '' }); 
       setNewRep({ code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '', endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: '' });
       setIsUserModalOpen(false);
@@ -565,24 +565,24 @@ export default function Admin() {
   };
 
   const handleDeleteUser = (id: number, username: string) => {
-    openConfirm('Remover usu├írio', `"${username}" perder├í acesso imediatamente.`, async () => {
+    openConfirm('Remover usuário', `"${username}" perderá acesso imediatamente.`, async () => {
       closeConfirm();
       const res = await fetch(`${API}/api/admin/users/${id}`, { method: 'DELETE', headers: authHeaders });
-      if (res.ok) { toast.success('Usu├írio removido!'); addAudit('delete_user', 'Usu├írio', String(id), `Removeu usu├írio ${username}`); fetchAll(); }
+      if (res.ok) { toast.success('Usuário removido!'); addAudit('delete_user', 'Usuário', String(id), `Removeu usuário ${username}`); fetchAll(); }
       else { const err = await res.json(); toast.error(err.message || 'Erro'); }
     });
   };
 
   const handleUpdateUser = async (id: number) => {
-    if (!editUserForm.username.trim()) { toast.error('Email (Username) obrigat├│rio'); return; }
-    if (editUserForm.password && editUserForm.password !== editUserForm.confirmPassword) { toast.error('As senhas n├úo coincidem!'); return; }
+    if (!editUserForm.username.trim()) { toast.error('Email (Username) obrigatório'); return; }
+    if (editUserForm.password && editUserForm.password !== editUserForm.confirmPassword) { toast.error('As senhas não coincidem!'); return; }
     const body: Record<string, string> = { username: editUserForm.username, role: editUserForm.role, repCode: editUserForm.repCode, full_name: editUserForm.fullName };
     if (editUserForm.password.trim()) body.password = editUserForm.password;
     if (editUserForm.photo) body.photo = editUserForm.photo;
     const res = await fetch(`${API}/api/admin/users/${id}`, { method: 'PUT', headers: authHeaders, body: JSON.stringify(body) });
     if (res.ok) { 
-      toast.success('Usu├írio atualizado!'); 
-      addAudit('update_user', 'Usu├írio', String(id), `Atualizou usu├írio ${editUserForm.username}`); 
+      toast.success('Usuário atualizado!'); 
+      addAudit('update_user', 'Usuário', String(id), `Atualizou usuário ${editUserForm.username}`); 
       setEditingUserId(null); 
       setIsUserModalOpen(false);
       fetchAll(); 
@@ -597,28 +597,28 @@ export default function Admin() {
   };
 
   const handleKickUser = async (user: SystemUser) => {
-    openConfirm('Derrubar Sess├úo', `Tem certeza que deseja encerrar a sess├úo de ${user.full_name || user.fullName || user.username}? O usu├írio ser├í desconectado imediatamente.`, async () => {
+    openConfirm('Derrubar Sessão', `Tem certeza que deseja encerrar a sessão de ${user.full_name || user.fullName || user.username}? O usuário será desconectado imediatamente.`, async () => {
       closeConfirm();
       const res = await fetch(`${API}/api/admin/users/${user.id}/kick`, { method: 'POST', headers: authHeaders });
       if (res.ok) {
-        toast.success(`Sess├úo de ${user.username} encerrada!`);
+        toast.success(`Sessão de ${user.username} encerrada!`);
         fetchAll();
       } else {
-        toast.error('Erro ao derrubar sess├úo');
+        toast.error('Erro ao derrubar sessão');
       }
     });
   };
 
-  // ÔöÇÔöÇ Groups CRUD ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Groups CRUD ───────────────────────────────────────────────────────────
   const handleCreateGroup = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newGroupName.trim()) { toast.error('Nome do grupo obrigat├│rio'); return; }
+    if (!newGroupName.trim()) { toast.error('Nome do grupo obrigatório'); return; }
     const g: Group = { id: Date.now().toString(), name: newGroupName.trim(), repCodes: [], createdAt: new Date().toISOString() };
     saveGroups([...groups, g]); addAudit('create_group', 'Grupo', g.id, `Criou grupo "${g.name}"`); setNewGroupName(''); toast.success('Grupo criado!');
   };
 
   const handleDeleteGroup = (g: Group) => {
-    openConfirm('Remover grupo', `O grupo "${g.name}" ser├í removido.`, () => { closeConfirm(); saveGroups(groups.filter(x => x.id !== g.id)); addAudit('delete_group', 'Grupo', g.id, `Removeu grupo "${g.name}"`); toast.success('Grupo removido!'); });
+    openConfirm('Remover grupo', `O grupo "${g.name}" será removido.`, () => { closeConfirm(); saveGroups(groups.filter(x => x.id !== g.id)); addAudit('delete_group', 'Grupo', g.id, `Removeu grupo "${g.name}"`); toast.success('Grupo removido!'); });
   };
 
   const handleSaveGroupReps = (groupId: string) => {
@@ -627,19 +627,19 @@ export default function Admin() {
     setExpandedGroup(null); toast.success('Grupo atualizado!');
   };
 
-  // ÔöÇÔöÇ Notifications ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Notifications ─────────────────────────────────────────────────────────
   const handleSendNotification = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!notifTitle.trim() || !notifMessage.trim()) { toast.error('T├¡tulo e mensagem obrigat├│rios'); return; }
+    if (!notifTitle.trim() || !notifMessage.trim()) { toast.error('Título e mensagem obrigatórios'); return; }
     if (!notifTargetAll && !notifTargetReps.length) { toast.error('Selecione ao menos um representante'); return; }
     const n: Notification = { id: Date.now().toString(), title: notifTitle.trim(), message: notifMessage.trim(), targetAll: notifTargetAll, targetReps: notifTargetAll ? [] : notifTargetReps, sentAt: new Date().toISOString(), readBy: [] };
     saveNotifications([n, ...notifications]);
-    addAudit('send_notification', 'Notifica├º├úo', n.id, `Enviou "${n.title}" para ${notifTargetAll ? 'todos' : n.targetReps.join(',')}`);
+    addAudit('send_notification', 'Notificação', n.id, `Enviou "${n.title}" para ${notifTargetAll ? 'todos' : n.targetReps.join(',')}`);
     setNotifTitle(''); setNotifMessage(''); setNotifTargetReps([]); setNotifTargetAll(true);
-    toast.success('Notifica├º├úo enviada!');
+    toast.success('Notificação enviada!');
   };
 
-  // ÔöÇÔöÇ Audit filter ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Audit filter ──────────────────────────────────────────────────────────
   const filteredAudit = auditLogs.filter(a => {
     if (auditFilterRep && a.repCode !== auditFilterRep) return false;
     if (auditFilterUF && a.uf !== auditFilterUF) return false;
@@ -648,11 +648,11 @@ export default function Admin() {
   });
 
   const auditActionLabel: Record<string, string> = {
-    create_user: 'Criou usu├írio', delete_user: 'Removeu usu├írio', update_user: 'Editou usu├írio',
+    create_user: 'Criou usuário', delete_user: 'Removeu usuário', update_user: 'Editou usuário',
     create_rep: 'Criou rep.', delete_rep: 'Removeu rep.', update_rep: 'Editou rep.',
-    assign_territory: 'Atribuiu territ├│rio', delete_territory: 'Removeu territ├│rio',
+    assign_territory: 'Atribuiu território', delete_territory: 'Removeu território',
     create_group: 'Criou grupo', delete_group: 'Removeu grupo', update_group: 'Editou grupo',
-    send_notification: 'Enviou notifica├º├úo', accept_interest: 'Aceitou interesse', reject_interest: 'Recusou interesse',
+    send_notification: 'Enviou notificação', accept_interest: 'Aceitou interesse', reject_interest: 'Recusou interesse',
   };
 
 
@@ -669,7 +669,7 @@ export default function Admin() {
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard, restrict: ['admin', 'supervisor', 'representante'] },
     { id: 'reps' as const, label: 'Representantes', icon: Briefcase, count: reps.length, restrict: ['admin', 'supervisor'] },
     { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor'] },
-    { id: 'territories' as const, label: 'Territ├│rios', icon: MapPin, count: territories.length, restrict: ['admin', 'supervisor'] },
+    { id: 'territories' as const, label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin', 'supervisor'] },
     { id: 'rotas_menu' as const, label: 'Rotas', icon: Truck, restrict: ['admin', 'supervisor'], subItems: [
         { id: 'leituraplanilha' as const, label: 'Leitura Excel', icon: FileSpreadsheet },
         { id: 'clusters' as const, label: 'Clusters', icon: Layers },
@@ -680,10 +680,10 @@ export default function Admin() {
     ]},
     { id: 'interests' as const, label: 'Interesses', icon: HandHeart, count: pendingInterests, badge: pendingInterests > 0, restrict: ['admin'] },
     { id: 'notifications' as const, label: 'Enviar Alerta', icon: Bell, count: notifications.length, restrict: ['admin'] },
-    { id: 'settings' as const, label: 'Configura├º├Áes', icon: Settings, restrict: ['admin'], subItems: [
-        { id: 'users' as const, label: 'Usu├írios', icon: UserPlus, count: users.length },
+    { id: 'settings' as const, label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
+        { id: 'users' as const, label: 'Usuários', icon: UserPlus, count: users.length },
         { id: 'groups' as const, label: 'Grupos', icon: UsersRound, count: groups.length },
-        { id: 'personal' as const, label: 'Personaliza├º├úo', icon: Palette },
+        { id: 'personal' as const, label: 'Personalização', icon: Palette },
         { id: 'audit' as const, label: 'Auditoria', icon: ScrollText, count: auditLogs.length },
     ]}
   ].filter(item => {
@@ -753,7 +753,7 @@ export default function Admin() {
 
     <div className="admin-layout">
 
-      {/* ÔòÉÔòÉ SIDEBAR ÔòÉÔòÉ */}
+      {/* ━━ SIDEBAR ━━ */}
       <aside className="admin-sidebar">
 
 
@@ -845,7 +845,7 @@ export default function Admin() {
         </div>
       </aside>
 
-      {/* ÔòÉÔòÉ MAIN ÔòÉÔòÉ */}
+      {/* ━━ MAIN ━━ */}
       <div className="admin-main">
 
         {/* Top Header */}
@@ -876,7 +876,7 @@ export default function Admin() {
                   ? <Loader2 style={{ width: 15, height: 15 }} className="animate-spin" />
                   : <Download style={{ width: 15, height: 15 }} />
                 }
-                {isGeneratingPlan ? 'Gerando...' : 'Gerar Plano Log├¡stico'}
+                {isGeneratingPlan ? 'Gerando...' : 'Gerar Plano Logístico'}
               </button>
             )}
             <button className="admin-header-action-btn" onClick={() => navigate('/')}>
@@ -894,9 +894,9 @@ export default function Admin() {
 
         <main className="admin-content">
 
-          {/* ÔòÉÔòÉ DASHBOARD ÔòÉÔòÉ */}
+          {/* ━━ DASHBOARD ━━ */}
           {activeTab === 'dashboard' && (() => {
-            // ÔöÇÔöÇ Derived / filtered data ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+            // ── Derived / filtered data ──────────────────────────────────────
             const filteredClientes = clientes.filter(c => {
               if (dashFilterRep && c.repCode !== dashFilterRep) return false;
               if (dashFilterUF && c.uf !== dashFilterUF) return false;
@@ -928,7 +928,7 @@ export default function Admin() {
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20, height: '100%' }}>
 
-                {/* ÔöÇÔöÇ FILTER BAR ÔöÇÔöÇ */}
+                {/* ── FILTER BAR ── */}
                 <div className="admin-card" style={{ padding: '14px 20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     {/* Search */}
@@ -937,7 +937,7 @@ export default function Admin() {
                       <input
                         value={dashSearch}
                         onChange={e => setDashSearch(e.target.value)}
-                        placeholder="Buscar munic├¡pio, UF ou rep..."
+                        placeholder="Buscar município, UF ou rep..."
                         style={{
                           width: '100%', paddingLeft: 32, paddingRight: 12, height: 36,
                           border: '1.5px solid hsl(var(--border))', borderRadius: 8,
@@ -958,7 +958,7 @@ export default function Admin() {
                       }}
                     >
                       <option value="">Todos Representantes</option>
-                      {activeReps.map(r => <option key={r.code} value={r.code}>{r.code} ÔÇö {r.name}</option>)}
+                      {activeReps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
                     </select>
 
                     {/* UF dropdown */}
@@ -1013,11 +1013,11 @@ export default function Admin() {
                   <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
                     {[
                       { label: 'Clientes Fitrados', value: filteredClientes.length, color: '#EAB308', bg: '#FEFCE8' },
-                      { label: 'Territ├│rios (Global)', value: territories.length, color: '#22C55E', bg: '#F0FDF4' },
-                      { label: 'Estados Vis├¡veis', value: ufEntries.length, color: '#3B82F6', bg: '#EFF6FF' },
+                      { label: 'Territórios (Global)', value: territories.length, color: '#22C55E', bg: '#F0FDF4' },
+                      { label: 'Estados Visíveis', value: ufEntries.length, color: '#3B82F6', bg: '#EFF6FF' },
                       { label: 'Representantes', value: new Set(filteredClientes.map(c => c.repCode)).size, color: '#8B5CF6', bg: '#F5F3FF' },
                       { label: 'Pendentes', value: pendingInterests, color: '#F59E0B', bg: '#FFFBEB' },
-                      { label: 'Usu├írios', value: users.length, color: '#06B6D4', bg: '#ECFEFF' },
+                      { label: 'Usuários', value: users.length, color: '#06B6D4', bg: '#ECFEFF' },
                     ].map(s => (
                       <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 14px', borderRadius: 20, background: s.bg, border: `1.5px solid ${s.color}22` }}>
                         <span style={{ fontWeight: 800, fontSize: '0.9rem', color: s.color }}>{s.value}</span>
@@ -1027,7 +1027,7 @@ export default function Admin() {
                   </div>
                 </div>
 
-                {/* ÔöÇÔöÇ 2-COLUMN: Results + Map ÔöÇÔöÇ */}
+                {/* ── 2-COLUMN: Results + Map ── */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 20, flex: 1, minHeight: 0 }}>
 
                   {/* LEFT: Territory result cards */}
@@ -1035,7 +1035,7 @@ export default function Admin() {
                     {ufEntries.length === 0 ? (
                       <div className="admin-card" style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--muted-foreground))' }}>
                         <MapPin style={{ width: 32, height: 32, margin: '0 auto 8px', opacity: 0.2 }} />
-                        <p style={{ fontSize: '0.9rem' }}>Nenhum territ├│rio encontrado</p>
+                        <p style={{ fontSize: '0.9rem' }}>Nenhum território encontrado</p>
                       </div>
                     ) : ufEntries.map(([uf, terrs]) => {
                       const uniqueReps = [...new Set(terrs.map(t => t.repCode))];
@@ -1057,7 +1057,7 @@ export default function Admin() {
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <p style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 2 }}>
-                                {terrs.length} cliente(s) ÔÇö {uniqueReps.length} rep(s)
+                                {terrs.length} cliente(s) — {uniqueReps.length} rep(s)
                               </p>
                               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                 <span style={{
@@ -1140,7 +1140,7 @@ export default function Admin() {
                             })}
                             {terrs.length > 5 && (
                               <div style={{ padding: '8px 18px', fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))', fontStyle: 'italic' }}>
-                                + {terrs.length - 5} cliente(s) n├úo exibido(s) ÔÇö use filtro para ver todos
+                                + {terrs.length - 5} cliente(s) não exibido(s) — use filtro para ver todos
                               </div>
                             )}
                           </div>
@@ -1218,12 +1218,12 @@ export default function Admin() {
                     <div className="admin-card" style={{ padding: '12px 16px' }}>
                       <div style={{ paddingBottom: 10, borderBottom: '1px solid hsl(var(--admin-card-border))', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Database style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
-                        <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>Relat├│rios e M├®tricas</span>
+                        <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>Relatórios e Métricas</span>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                         {[
                           { l: 'Clientes Total', v: clientes.length, t: 'baserotas' as TabId, c: '#EAB308' },
-                          { l: 'Usu├írios', v: users.length, t: 'users' as TabId, c: '#3B82F6' },
+                          { l: 'Usuários', v: users.length, t: 'users' as TabId, c: '#3B82F6' },
                           { l: 'Interesses', v: interests.length, t: 'interests' as TabId, c: '#6366F1' },
                           { l: 'Grupos', v: groups.length, t: 'groups' as TabId, c: '#06B6D4' },
                         ].map(s => (
@@ -1248,15 +1248,15 @@ export default function Admin() {
           })()}
 
 
-          {/* ÔòÉÔòÉ USU├üRIOS ÔòÉÔòÉ */}
+          {/* ━━ USU├üRIOS ━━ */}
           {activeTab === 'users' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
               <div className="flex flex-col md:flex-row gap-4 items-center justify-between pb-2">
                 <div>
                   <h2 className="text-xl font-bold flex items-center gap-2">
-                    <Users className="w-6 h-6 text-primary" /> Gest├úo de Usu├írios
+                    <Users className="w-6 h-6 text-primary" /> Gestão de Usuários
                   </h2>
-                  <p className="text-sm text-muted-foreground">Controle de acesso e permiss├Áes.</p>
+                  <p className="text-sm text-muted-foreground">Controle de acesso e permissões.</p>
                 </div>
                 <div className="flex w-full md:w-auto items-center gap-3">
                   <div className="relative flex-1 md:w-64">
@@ -1282,14 +1282,14 @@ export default function Admin() {
                     setNewUser({ fullName: '', email: '', password: '', confirmPassword: '', role: 'user', repCode: '', documentType: 'cpf', document: '', companyName: '', age: '', photo: '' });
                     setIsUserModalOpen(true);
                   }}>
-                    <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Novo Usu├írio</span>
+                    <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Novo Usuário</span>
                   </Button>
                 </div>
               </div>
 
               {users.length === 0 ? (
                 <Card className="border-dashed border-2 py-20 flex flex-col items-center justify-center text-muted-foreground bg-transparent">
-                  <Users className="w-12 h-12 opacity-10 mb-4" /> <p>Nenhum usu├írio</p>
+                  <Users className="w-12 h-12 opacity-10 mb-4" /> <p>Nenhum usuário</p>
                 </Card>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
@@ -1318,7 +1318,7 @@ export default function Admin() {
                             <h3 className="font-bold text-sm truncate" title={u.full_name || u.fullName || u.username}>{u.full_name || u.fullName || u.username}</h3>
                             <p className="text-[10px] text-muted-foreground truncate">{u.username}</p>
                             {!isOnline && lastActive && (
-                              <p className="text-[9px] text-muted-foreground/60 italic mt-0.5">Visto em {lastActive.toLocaleDateString('pt-BR')} ├ás {lastActive.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                              <p className="text-[9px] text-muted-foreground/60 italic mt-0.5">Visto em {lastActive.toLocaleDateString('pt-BR')} às {lastActive.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
                             )}
                           </div>
                           <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
@@ -1329,7 +1329,7 @@ export default function Admin() {
                         <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-border/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                           <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary" onClick={() => { setEditingUserId(u.id); setEditUserForm({ username: u.username, fullName: u.full_name || u.fullName || '', document: u.document || u.cpf_cnpj || '', password: '', confirmPassword: '', role: u.role as 'user' | 'supervisor' | 'admin', repCode: u.repCode || '', photo: u.photo || '' }); setIsUserModalOpen(true); }}><Pencil className="w-4 h-4" /></Button>
                           {role === 'admin' && u.id !== userId && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-orange-500/10 hover:text-orange-500" title="Derrubar Sess├úo" onClick={() => handleKickUser(u)}><LogOut className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-orange-500/10 hover:text-orange-500" title="Derrubar Sessão" onClick={() => handleKickUser(u)}><LogOut className="w-4 h-4" /></Button>
                           )}
                           <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteUser(u.id, u.username)}><Trash2 className="w-4 h-4" /></Button>
                         </div>
@@ -1345,8 +1345,8 @@ export default function Admin() {
                   {editingUserId ? (
                     <>
                       <DialogHeader className="sr-only">
-                        <DialogTitle>Gerenciador de Perfil - {users.find(u => u.id === editingUserId)?.full_name || 'Usu├írio'}</DialogTitle>
-                        <DialogDescription>Configura├º├Áes de perfil, permiss├Áes e hist├│rico do usu├írio.</DialogDescription>
+                        <DialogTitle>Gerenciador de Perfil - {users.find(u => u.id === editingUserId)?.full_name || 'Usuário'}</DialogTitle>
+                        <DialogDescription>Configurações de perfil, permissões e histórico do usuário.</DialogDescription>
                       </DialogHeader>
                       <UserProfileManager 
                       user={users.find(u => u.id === editingUserId)!}
@@ -1358,7 +1358,7 @@ export default function Admin() {
                   ) : (
                     <>
                       <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-xl"><UserPlus className="w-5 h-5 text-primary" /> Novo Usu├írio</DialogTitle>
+                        <DialogTitle className="flex items-center gap-2 text-xl"><UserPlus className="w-5 h-5 text-primary" /> Novo Usuário</DialogTitle>
                       </DialogHeader>
                       <form onSubmit={(e) => { handleCreateUser(e); setIsUserModalOpen(false); }} className="space-y-4 pt-2">
                         <div className="flex items-center gap-4">
@@ -1366,7 +1366,7 @@ export default function Admin() {
                             {newUser.photo ? <img src={newUser.photo} alt="Avatar" className="w-full h-full object-cover" /> : <Camera className="w-6 h-6 text-muted-foreground opacity-40" />}
                             <input type="file" accept="image/*" className="hidden" onChange={e => handleUserPhotoUpload(e, false)} />
                           </label>
-                          <div className="text-xs text-muted-foreground"><p className="font-bold text-foreground">Foto de Perfil</p><p>JPG, PNG. M├íx 2MB.</p></div>
+                          <div className="text-xs text-muted-foreground"><p className="font-bold text-foreground">Foto de Perfil</p><p>JPG, PNG. Máx 2MB.</p></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Nome Completo *</Label><Input value={newUser.fullName} onChange={e => setNewUser({ ...newUser, fullName: e.target.value })} required /></div>
@@ -1377,8 +1377,8 @@ export default function Admin() {
                           <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">{newUser.documentType.toUpperCase()} *</Label><Input value={newUser.document} onChange={e => setNewUser({ ...newUser, document: maskDoc(e.target.value, newUser.documentType) })} required /></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Papel *</Label><select className="w-full h-10 px-3 bg-muted/40 border rounded-md text-sm" value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value as 'user' | 'supervisor' | 'admin' })}><option value="user">Usu├írio</option><option value="supervisor">Supervisor</option>{role === 'admin' && <option value="admin">Administrador</option>}</select></div>
-                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Rep. Vinculado</Label><select className="w-full h-10 px-3 bg-muted/40 border rounded-md text-sm" value={newUser.repCode} onChange={e => setNewUser({ ...newUser, repCode: e.target.value })}><option value="">ÔÇö Nenhum ÔÇö</option>{reps.map(r => <option key={r.code} value={r.code}>{r.code} ÔÇö {r.name}</option>)}</select></div>
+                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Papel *</Label><select className="w-full h-10 px-3 bg-muted/40 border rounded-md text-sm" value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value as 'user' | 'supervisor' | 'admin' })}><option value="user">Usuário</option><option value="supervisor">Supervisor</option>{role === 'admin' && <option value="admin">Administrador</option>}</select></div>
+                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Rep. Vinculado</Label><select className="w-full h-10 px-3 bg-muted/40 border rounded-md text-sm" value={newUser.repCode} onChange={e => setNewUser({ ...newUser, repCode: e.target.value })}><option value="">— Nenhum —</option>{reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}</select></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Senha *</Label><div className="relative"><Input type={showNewPwd ? 'text' : 'password'} value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} required className="pr-10" /><button type="button" className="absolute right-3 top-1/2 -translate-y-1/2" onClick={() => setShowNewPwd(!showNewPwd)}>{showNewPwd ? <EyeOff className="w-4 h-4 hover:text-primary transition-colors" /> : <Eye className="w-4 h-4 hover:text-primary transition-colors" />}</button></div></div>
@@ -1393,7 +1393,7 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ÔòÉÔòÉ REPRESENTANTES ÔòÉÔòÉ */}
+          {/* ━━ REPRESENTANTES ━━ */}
           {activeTab === 'reps' && (
             <div className="space-y-4">
               <Card className="border-border/40">
@@ -1404,7 +1404,7 @@ export default function Admin() {
                         <Briefcase className="w-5 h-5 text-primary" />
                         Representantes
                       </CardTitle>
-                      <p className="text-xs text-muted-foreground mt-1">Gerencie a equipe de representantes e suas informa├º├Áes de contato.</p>
+                      <p className="text-xs text-muted-foreground mt-1">Gerencie a equipe de representantes e suas informações de contato.</p>
                     </div>
                     
                     <Dialog>
@@ -1423,10 +1423,10 @@ export default function Admin() {
                         </DialogHeader>
                         <form onSubmit={(e) => { handleCreateRep(e); document.body.click(); }} className="space-y-4 pt-4">
                           <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1.5"><Label className="text-xs font-medium">C├│digo *</Label><Input placeholder="Ex: REP001" value={newRep.code} onChange={e => setNewRep({ ...newRep, code: e.target.value })} required /></div>
+                            <div className="space-y-1.5"><Label className="text-xs font-medium">Código *</Label><Input placeholder="Ex: REP001" value={newRep.code} onChange={e => setNewRep({ ...newRep, code: e.target.value })} required /></div>
                             <div className="space-y-1.5"><Label className="text-xs font-medium">Nome Curto *</Label><Input placeholder="Ex: AVILA" value={newRep.name} onChange={e => setNewRep({ ...newRep, name: e.target.value })} required /></div>
                           </div>
-                          <div className="space-y-1.5"><Label className="text-xs font-medium">Raz├úo Social / Nome Completo</Label><Input placeholder="Nome completo ou raz├úo social" value={newRep.fullName} onChange={e => setNewRep({ ...newRep, fullName: e.target.value })} /></div>
+                          <div className="space-y-1.5"><Label className="text-xs font-medium">Razão Social / Nome Completo</Label><Input placeholder="Nome completo ou razão social" value={newRep.fullName} onChange={e => setNewRep({ ...newRep, fullName: e.target.value })} /></div>
                           
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5"><Label className="text-xs font-medium">E-mail</Label><Input type="email" placeholder="email@exemplo.com" value={newRep.email} onChange={e => setNewRep({ ...newRep, email: e.target.value })} /></div>
@@ -1434,7 +1434,7 @@ export default function Admin() {
                           </div>
 
                           <div className="grid grid-cols-3 gap-3">
-                            <div className="col-span-2 space-y-1.5"><Label className="text-xs font-medium">Endere├ºo</Label><Input placeholder="Rua, n├║mero, etc." value={newRep.endereco} onChange={e => setNewRep({ ...newRep, endereco: e.target.value })} /></div>
+                            <div className="col-span-2 space-y-1.5"><Label className="text-xs font-medium">Endereço</Label><Input placeholder="Rua, n├║mero, etc." value={newRep.endereco} onChange={e => setNewRep({ ...newRep, endereco: e.target.value })} /></div>
                             <div className="space-y-1.5"><Label className="text-xs font-medium">CEP</Label><Input placeholder="00000-000" value={newRep.cep} onChange={e => setNewRep({ ...newRep, cep: e.target.value })} /></div>
                           </div>
 
@@ -1445,7 +1445,7 @@ export default function Admin() {
                           </div>
 
                           <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1.5"><Label className="text-xs font-medium">% Comiss├úo</Label><div className="relative"><Percent className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" /><Input type="number" step="0.01" className="pl-9" placeholder="0.00" value={newRep.comissao} onChange={e => setNewRep({ ...newRep, comissao: e.target.value })} /></div></div>
+                            <div className="space-y-1.5"><Label className="text-xs font-medium">% Comissão</Label><div className="relative"><Percent className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" /><Input type="number" step="0.01" className="pl-9" placeholder="0.00" value={newRep.comissao} onChange={e => setNewRep({ ...newRep, comissao: e.target.value })} /></div></div>
                               <div className="flex items-end pb-1 gap-4">
                                 <label className="flex items-center gap-2.5 text-sm text-muted-foreground cursor-pointer select-none p-2 rounded-lg border border-border/50 hover:bg-secondary/30 transition-colors flex-1">
                                   <input type="checkbox" checked={newRep.isVago} onChange={e => setNewRep({ ...newRep, isVago: e.target.checked })} className="rounded" />
@@ -1460,7 +1460,7 @@ export default function Admin() {
                                   onChange={v => setNewRep({ ...newRep, colorIndex: v })} 
                                   disabled={newRep.isVago}
                                 />
-                                {newRep.isVago && <p className="text-[10px] text-muted-foreground italic">Representantes vagos usam uma cor padr├úo (cinza).</p>}
+                                {newRep.isVago && <p className="text-[10px] text-muted-foreground italic">Representantes vagos usam uma cor padrão (cinza).</p>}
                               </div>
                           </div>
 
@@ -1482,14 +1482,14 @@ export default function Admin() {
                         <TableHeader>
                           <TableRow className="hover:bg-transparent border-border/40">
                             <TableHead className="w-12 pl-6"></TableHead>
-                            <TableHead className="w-24">C├│digo</TableHead>
+                            <TableHead className="w-24">Código</TableHead>
                             <TableHead>Representante</TableHead>
                             <TableHead>Contato</TableHead>
-                            <TableHead>Localiza├º├úo</TableHead>
-                            <TableHead className="w-24 text-center">Comiss├úo</TableHead>
+                            <TableHead>Localização</TableHead>
+                            <TableHead className="w-24 text-center">Comissão</TableHead>
                             <TableHead className="w-24 text-center">Clientes</TableHead>
-                            <TableHead className="w-24 text-center">Territ├│rios</TableHead>
-                            <TableHead className="w-20 pr-6 text-right">A├º├Áes</TableHead>
+                            <TableHead className="w-24 text-center">Territórios</TableHead>
+                            <TableHead className="w-20 pr-6 text-right">Ações</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1503,7 +1503,7 @@ export default function Admin() {
                                 <TableCell>
                                   <div className="max-w-[200px]">
                                     <p className="text-xs font-semibold truncate">{rep.name}</p>
-                                    <p className="text-[10px] text-muted-foreground truncate">{rep.fullName || 'ÔÇö'}</p>
+                                    <p className="text-[10px] text-muted-foreground truncate">{rep.fullName || '—'}</p>
                                     {Boolean(rep.isVago) && <span className="text-[9px] bg-orange-500/10 text-orange-500 px-1 rounded font-bold uppercase tracking-tighter">VAGO</span>}
                                   </div>
                                 </TableCell>
@@ -1521,13 +1521,13 @@ export default function Admin() {
                                       <span>{rep.cidade}{rep.uf ? `/${rep.uf}` : ''}</span>
                                     </div>
                                   ) : (
-                                    <span className="text-[10px] text-muted-foreground/40 italic">N├úo informada</span>
+                                    <span className="text-[10px] text-muted-foreground/40 italic">Não informada</span>
                                   )}
                                 </TableCell>
                                 <TableCell className="text-center">
                                   {rep.comissao !== null && rep.comissao !== undefined ? (
                                     <span className="text-xs font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full">{rep.comissao}%</span>
-                                  ) : 'ÔÇö'}
+                                  ) : '—'}
                                 </TableCell>
                                 <TableCell className="text-center">
                                   <span className="text-xs font-bold text-emerald-600">{rep._count?.clientes || 0}</span>
@@ -1581,7 +1581,7 @@ export default function Admin() {
                                         </h4>
                                         <div className="flex gap-2">
                                           <Button size="sm" className="gap-1.5 h-8 text-xs font-semibold" onClick={() => handleUpdateRep(rep.code)}>
-                                            <Save className="w-3.5 h-3.5" /> Salvar Altera├º├Áes
+                                            <Save className="w-3.5 h-3.5" /> Salvar Alterações
                                           </Button>
                                           <Button size="sm" variant="ghost" className="h-8 text-xs font-semibold" onClick={() => setEditingCode(null)}>
                                             Cancelar
@@ -1595,7 +1595,7 @@ export default function Admin() {
                                           <Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className="h-9 text-xs bg-background" />
                                         </div>
                                         <div className="md:col-span-2 space-y-1.5">
-                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Raz├úo Social / Nome Completo</Label>
+                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Razão Social / Nome Completo</Label>
                                           <Input value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} className="h-9 text-xs bg-background" />
                                         </div>
                                       </div>
@@ -1610,14 +1610,14 @@ export default function Admin() {
                                           <Input value={editForm.contato} onChange={e => setEditForm(f => ({ ...f, contato: e.target.value }))} className="h-9 text-xs bg-background" />
                                         </div>
                                         <div className="space-y-1.5">
-                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Comiss├úo %</Label>
+                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Comissão %</Label>
                                           <Input type="number" step="0.01" value={editForm.comissao} onChange={e => setEditForm(f => ({ ...f, comissao: e.target.value }))} className="h-9 text-xs bg-background" />
                                         </div>
                                       </div>
 
                                       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                         <div className="md:col-span-2 space-y-1.5">
-                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Endere├ºo</Label>
+                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Endereço</Label>
                                           <Input value={editForm.endereco} onChange={e => setEditForm(f => ({ ...f, endereco: e.target.value }))} className="h-9 text-xs bg-background" />
                                         </div>
                                         <div className="space-y-1.5">
@@ -1663,7 +1663,7 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ÔòÉÔòÉ TERRIT├ôRIOS ÔòÉÔòÉ */}
+          {/* ━━ TERRIT├ôRIOS ━━ */}
           {activeTab === 'territories' && (() => {
             const computedTerritories = (() => {
               const map = new globalThis.Map<string, { municipio: string, uf: string, repCodes: Set<string>, clientCount: number }>();
@@ -1753,12 +1753,12 @@ export default function Admin() {
             );
           })()}
 
-          {/* ÔòÉÔòÉ GRUPOS ÔòÉÔòÉ */}
+          {/* ━━ GRUPOS ━━ */}
           {activeTab === 'groups' && (
             <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
               <div className="xl:col-span-2">
                 <Card className="border-border/40">
-                  <CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-sm"><div className="w-7 h-7 bg-primary/15 rounded-md flex items-center justify-center"><UsersRound className="w-3.5 h-3.5 text-primary" /></div>Novo Grupo</CardTitle><CardDescription className="text-xs">Agrupe representantes por regi├úo ou crit├®rio</CardDescription></CardHeader>
+                  <CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-sm"><div className="w-7 h-7 bg-primary/15 rounded-md flex items-center justify-center"><UsersRound className="w-3.5 h-3.5 text-primary" /></div>Novo Grupo</CardTitle><CardDescription className="text-xs">Agrupe representantes por região ou critério</CardDescription></CardHeader>
                   <CardContent><form onSubmit={handleCreateGroup} className="space-y-3"><div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Nome do Grupo *</label><Input placeholder="Ex: Rio de Janeiro" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} required /></div><Button className="w-full gap-2" type="submit"><Plus className="w-4 h-4" />Criar Grupo</Button></form></CardContent>
                 </Card>
               </div>
@@ -1779,7 +1779,7 @@ export default function Admin() {
                             </div>
                           </div>
                           {expandedGroup === g.id && (<div className="mt-3 ml-11 space-y-3"><p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Selecione os representantes</p><MultiRepSelect reps={reps} value={groupAddReps} onChange={setGroupAddReps} /><div className="flex gap-2"><Button size="sm" className="gap-1.5 h-7 text-xs" onClick={() => handleSaveGroupReps(g.id)}><Save className="w-3 h-3" />Salvar</Button><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setExpandedGroup(null)}>Cancelar</Button></div></div>)}
-                          {g.repCodes.length > 0 && expandedGroup !== g.id && (<div className="mt-2 ml-11 flex flex-wrap gap-1">{g.repCodes.map(code => { const r = reps.find(r => r.code === code); return r ? (<span key={code} className="text-[10px] bg-secondary px-2 py-0.5 rounded-full font-medium text-muted-foreground">{r.code} ÔÇö {r.name}</span>) : null; })}</div>)}
+                          {g.repCodes.length > 0 && expandedGroup !== g.id && (<div className="mt-2 ml-11 flex flex-wrap gap-1">{g.repCodes.map(code => { const r = reps.find(r => r.code === code); return r ? (<span key={code} className="text-[10px] bg-secondary px-2 py-0.5 rounded-full font-medium text-muted-foreground">{r.code} — {r.name}</span>) : null; })}</div>)}
                         </div>
                       ))}</div>
                     )}
@@ -1789,24 +1789,24 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ÔòÉÔòÉ NOTIFICA├ç├òES ÔòÉÔòÉ */}
+          {/* ━━ NOTIFICA├çÕES ━━ */}
           {activeTab === 'notifications' && (
             <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
               <div className="xl:col-span-2">
                 <Card className="border-border/40">
-                  <CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-sm"><div className="w-7 h-7 bg-primary/15 rounded-md flex items-center justify-center"><Bell className="w-3.5 h-3.5 text-primary" /></div>Enviar Mensagem</CardTitle><CardDescription className="text-xs">Envie notifica├º├Áes para representantes</CardDescription></CardHeader>
+                  <CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-sm"><div className="w-7 h-7 bg-primary/15 rounded-md flex items-center justify-center"><Bell className="w-3.5 h-3.5 text-primary" /></div>Enviar Mensagem</CardTitle><CardDescription className="text-xs">Envie notificações para representantes</CardDescription></CardHeader>
                   <CardContent>
                     <form onSubmit={handleSendNotification} className="space-y-3">
-                      <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">T├¡tulo *</label><Input placeholder="Ex: Reuni├úo amanh├ú" value={notifTitle} onChange={e => setNotifTitle(e.target.value)} required /></div>
+                      <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Título *</label><Input placeholder="Ex: Reunião amanhã" value={notifTitle} onChange={e => setNotifTitle(e.target.value)} required /></div>
                       <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Mensagem *</label><textarea className="w-full min-h-[100px] px-3 py-2.5 bg-background border border-input rounded-md text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground" placeholder="Digite sua mensagem..." value={notifMessage} onChange={e => setNotifMessage(e.target.value)} required /></div>
-                      <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Destinat├írios</label>
+                      <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Destinatários</label>
                         <div className="flex gap-2">
                           <button type="button" onClick={() => setNotifTargetAll(true)} className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold border transition-all flex items-center justify-center gap-1.5 ${notifTargetAll ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground'}`}><Globe className="w-3.5 h-3.5" />Todos</button>
-                          <button type="button" onClick={() => setNotifTargetAll(false)} className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold border transition-all flex items-center justify-center gap-1.5 ${!notifTargetAll ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground'}`}><Users className="w-3.5 h-3.5" />Espec├¡ficos</button>
+                          <button type="button" onClick={() => setNotifTargetAll(false)} className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold border transition-all flex items-center justify-center gap-1.5 ${!notifTargetAll ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground'}`}><Users className="w-3.5 h-3.5" />Específicos</button>
                         </div>
                         {!notifTargetAll && (<div className="space-y-1 mt-2"><label className="text-[10px] text-muted-foreground">Selecione:</label><MultiRepSelect reps={reps} value={notifTargetReps} onChange={setNotifTargetReps} /></div>)}
                       </div>
-                      <Button className="w-full gap-2" type="submit"><Send className="w-4 h-4" />Enviar Notifica├º├úo</Button>
+                      <Button className="w-full gap-2" type="submit"><Send className="w-4 h-4" />Enviar Notificação</Button>
                     </form>
                   </CardContent>
                 </Card>
@@ -1820,7 +1820,7 @@ export default function Admin() {
                         <div key={n.id} className="px-4 py-3 hover:bg-secondary/20">
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-foreground">{n.title}</p><p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
-                              <span className={`mt-1.5 inline-block text-[10px] px-2 py-0.5 rounded-full font-medium ${n.targetAll ? 'bg-primary/15 text-primary' : 'bg-secondary text-muted-foreground'}`}>{n.targetAll ? 'Todos os representantes' : `${n.targetReps.length} rep(s) espec├¡fico(s)`}</span>
+                              <span className={`mt-1.5 inline-block text-[10px] px-2 py-0.5 rounded-full font-medium ${n.targetAll ? 'bg-primary/15 text-primary' : 'bg-secondary text-muted-foreground'}`}>{n.targetAll ? 'Todos os representantes' : `${n.targetReps.length} rep(s) específico(s)`}</span>
                             </div>
                             <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">{new Date(n.sentAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
@@ -1833,16 +1833,16 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ÔòÉÔòÉ AUDITORIA ÔòÉÔòÉ */}
+          {/* ━━ AUDITORIA ━━ */}
           {activeTab === 'audit' && (
             <div className="space-y-4">
               <Card className="border-border/40">
                 <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><Filter className="w-4 h-4 text-primary" />Filtros</CardTitle></CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-3 items-center">
-                    <select className="h-9 px-3 bg-background border border-input rounded-md text-sm" value={auditFilterRep} onChange={e => setAuditFilterRep(e.target.value)}><option value="">Todos os Representantes</option>{reps.map(r => <option key={r.code} value={r.code}>{r.code} ÔÇö {r.name}</option>)}</select>
+                    <select className="h-9 px-3 bg-background border border-input rounded-md text-sm" value={auditFilterRep} onChange={e => setAuditFilterRep(e.target.value)}><option value="">Todos os Representantes</option>{reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}</select>
                     <select className="h-9 px-3 bg-background border border-input rounded-md text-sm" value={auditFilterUF} onChange={e => setAuditFilterUF(e.target.value)}><option value="">Todos os Estados</option>{UF_DATA.map(u => <option key={u.sigla} value={u.sigla}>{u.sigla}</option>)}</select>
-                    <select className="h-9 px-3 bg-background border border-input rounded-md text-sm" value={auditFilterAction} onChange={e => setAuditFilterAction(e.target.value)}><option value="">Todas as A├º├Áes</option>{Object.entries(auditActionLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+                    <select className="h-9 px-3 bg-background border border-input rounded-md text-sm" value={auditFilterAction} onChange={e => setAuditFilterAction(e.target.value)}><option value="">Todas as Ações</option>{Object.entries(auditActionLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
                     <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => { setAuditFilterRep(''); setAuditFilterAction(''); setAuditFilterUF(''); }}><X className="w-3.5 h-3.5" />Limpar</Button>
                     <span className="ml-auto text-xs text-muted-foreground">{filteredAudit.length} de {auditLogs.length} registros</span>
                   </div>
@@ -1852,7 +1852,7 @@ export default function Admin() {
                 <CardContent className="p-0">
                   {filteredAudit.length === 0 ? (<div className="py-16 text-center text-muted-foreground"><ScrollText className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Nenhum registro encontrado</p></div>) : (
                     <div className="overflow-auto max-h-[calc(100vh-320px)]"><Table>
-                      <TableHeader><TableRow className="hover:bg-transparent border-border/40"><TableHead className="pl-4">Data/Hora</TableHead><TableHead>A├º├úo</TableHead><TableHead>Entidade</TableHead><TableHead>Detalhes</TableHead><TableHead className="w-20 pr-4">Por</TableHead></TableRow></TableHeader>
+                      <TableHeader><TableRow className="hover:bg-transparent border-border/40"><TableHead className="pl-4">Data/Hora</TableHead><TableHead>Ação</TableHead><TableHead>Entidade</TableHead><TableHead>Detalhes</TableHead><TableHead className="w-20 pr-4">Por</TableHead></TableRow></TableHeader>
                       <TableBody>{filteredAudit.map(log => (
                         <TableRow key={log.id} className="border-border/30 hover:bg-secondary/30">
                           <TableCell className="pl-4 text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">{new Date(log.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</TableCell>
@@ -1869,10 +1869,10 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ÔòÉÔòÉ INTERESSES ÔòÉÔòÉ */}
+          {/* ━━ INTERESSES ━━ */}
           {activeTab === 'interests' && (
             <div className="space-y-4">
-              {interests.length === 0 ? (<Card className="border-border/40"><CardContent className="py-20 text-center text-muted-foreground"><HandHeart className="w-12 h-12 mx-auto mb-4 opacity-20" /><p className="text-sm font-medium">Nenhuma solicita├º├úo recebida</p></CardContent></Card>) : (() => {
+              {interests.length === 0 ? (<Card className="border-border/40"><CardContent className="py-20 text-center text-muted-foreground"><HandHeart className="w-12 h-12 mx-auto mb-4 opacity-20" /><p className="text-sm font-medium">Nenhuma solicitação recebida</p></CardContent></Card>) : (() => {
                 const iGroups = [
                   { key: 'pending', label: 'Pendentes', icon: Clock, color: 'text-amber-400', badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30', items: interests.filter(i => i.status === 'pending') },
                   { key: 'accepted', label: 'Aceitas', icon: CheckCircle2, color: 'text-emerald-400', badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', items: interests.filter(i => i.status === 'accepted') },
@@ -1884,7 +1884,7 @@ export default function Admin() {
                     <Card className="border-border/40 overflow-hidden"><Table>
                       <TableHeader><TableRow className="hover:bg-transparent border-border/40">
                         <TableHead className="pl-4">Solicitante</TableHead><TableHead>├ürea</TableHead><TableHead className="w-20">Modo</TableHead><TableHead className="w-28">Data</TableHead>
-                        {key === 'pending' && <TableHead className="w-36 pr-4">A├º├úo</TableHead>}
+                        {key === 'pending' && <TableHead className="w-36 pr-4">Ação</TableHead>}
                       </TableRow></TableHeader>
                       <TableBody>{items.map(req => (
                         <TableRow key={req.id} className="border-border/30 hover:bg-secondary/30">
@@ -1905,14 +1905,14 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ÔòÉÔòÉ PERSONALIZA├ç├âO ÔòÉÔòÉ */}
+          {/* ━━ PERSONALIZA├ç├âO ━━ */}
           {activeTab === 'personal' && (
             <div className="max-w-3xl space-y-6">
               <Card className="border-border/40">
                 <CardHeader className="pb-4">
                   <CardTitle className="flex items-center gap-2 text-sm">
                     <div className="w-7 h-7 bg-primary/15 rounded-md flex items-center justify-center"><Palette className="w-3.5 h-3.5 text-primary" /></div>
-                    Personaliza├º├úo da Marca
+                    Personalização da Marca
                   </CardTitle>
                   <CardDescription className="text-xs">Configure a identidade visual do sistema (Logo e Nome)</CardDescription>
                 </CardHeader>
@@ -1921,7 +1921,7 @@ export default function Admin() {
                   {/* Logo Upload */}
                   <div className="space-y-3">
                     <label className="text-sm font-semibold text-foreground">Logo da Empresa</label>
-                    <p className="text-xs text-muted-foreground">Esta logo aparecer├í no menu lateral e na tela de login.</p>
+                    <p className="text-xs text-muted-foreground">Esta logo aparecerá no menu lateral e na tela de login.</p>
 
                     <div className="flex items-center gap-6 mt-3">
                       <div className="w-24 h-24 rounded-xl border-2 border-dashed border-border flex items-center justify-center bg-secondary/30 relative overflow-hidden group">
@@ -1947,7 +1947,7 @@ export default function Admin() {
                         <Button variant="outline" className="gap-2 w-full sm:w-auto" onClick={() => document.getElementById('logo-upload')?.click()}>
                           <Upload className="w-4 h-4" /> Enviar Nova Logo
                         </Button>
-                        <p className="text-[10px] text-muted-foreground">Formatos suportados: PNG, JPG ou SVG. Tamanho m├íximo: 2MB.<br />Recomendado: Imagens com fundo transparente.</p>
+                        <p className="text-[10px] text-muted-foreground">Formatos suportados: PNG, JPG ou SVG. Tamanho máximo: 2MB.<br />Recomendado: Imagens com fundo transparente.</p>
                       </div>
                     </div>
                   </div>
@@ -1957,9 +1957,9 @@ export default function Admin() {
                   {/* Nome da Empresa */}
                   <div className="space-y-3">
                     <label className="text-sm font-semibold text-foreground">Nome do Sistema / Empresa</label>
-                    <p className="text-xs text-muted-foreground">Aparecer├í junto com a logo em todo o sistema.</p>
+                    <p className="text-xs text-muted-foreground">Aparecerá junto com a logo em todo o sistema.</p>
                     <div className="flex max-w-sm gap-2">
-                      <Input value={brandNameDraft} onChange={e => setBrandNameDraft(e.target.value)} placeholder="Ex: Mapa Territ├│rio" className="flex-1" />
+                      <Input value={brandNameDraft} onChange={e => setBrandNameDraft(e.target.value)} placeholder="Ex: Mapa Território" className="flex-1" />
                       <Button onClick={handleSaveBrandName} className="gap-2"><Save className="w-4 h-4" /> Atualizar</Button>
                     </div>
                   </div>
@@ -1969,10 +1969,10 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ÔòÉÔòÉ BASE CLIENTE (Standalone) ÔòÉÔòÉ */}
+          {/* ━━ BASE CLIENTE (Standalone) ━━ */}
           {activeTab === 'baserotas' && <BaseClientePanel onSwitchToReps={() => setActiveTab('reps')} />}
 
-          {/* ÔòÉÔòÉ ROTAS (com contexto) ÔòÉÔòÉ */}
+          {/* ━━ ROTAS (com contexto) ━━ */}
           {['clusters', 'blocos', 'roteiros', 'agenda', 'densidade', 'leituraplanilha'].includes(activeTab) && (
             <RotasProvider>
               {activeTab === 'clusters' && <ClustersPanel />}
