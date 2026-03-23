@@ -1,0 +1,172 @@
+                    {/* Search + Filters */}
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Buscar por nome, código ou cidade..."
+                          className="pl-9 bg-background/50 border-border/40"
+                          value={repSearch}
+                          onChange={e => setRepSearch(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        {(['Todos', 'Ativos', 'Vagos'] as const).map(f => (
+                          <Button
+                            key={f}
+                            variant={repFilterStatus === f ? 'default' : 'outline'}
+                            size="sm"
+                            className="h-9 text-xs font-semibold"
+                            onClick={() => setRepFilterStatus(f)}
+                          >
+                            {f}
+                          </Button>
+                        ))}
+                        <select
+                          value={repFilterUF}
+                          onChange={e => setRepFilterUF(e.target.value)}
+                          className="h-9 px-3 rounded-md text-xs border border-input bg-background/50 text-foreground"
+                        >
+                          <option value="">Todos UF</option>
+                          {[...new Set(reps.filter(r => r.uf).map(r => r.uf!))].sort().map(uf => (
+                            <option key={uf} value={uf}>{uf}</option>
+                          ))}
+                        </select>
+                        {(repSearch || repFilterStatus !== 'Todos' || repFilterUF) && (
+                          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => { setRepSearch(''); setRepFilterStatus('Todos'); setRepFilterUF(''); }}>
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {reps.length === 0 ? (
+                    <div className="py-24 text-center text-muted-foreground">
+                      <Briefcase className="w-12 h-12 mx-auto mb-4 opacity-10" />
+                      <p className="text-sm">Nenhum representante cadastrado</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent border-border/40">
+                            <TableHead className="w-12 pl-6"></TableHead>
+                            <TableHead className="w-24">Código</TableHead>
+                            <TableHead>Representante</TableHead>
+                            <TableHead>Contato</TableHead>
+                            <TableHead>Localização</TableHead>
+                            <TableHead className="w-24 text-center">Comissão</TableHead>
+                            <TableHead className="w-24 text-center">Clientes</TableHead>
+                            <TableHead className="w-24 text-center">Territórios</TableHead>
+                            <TableHead className="w-20 pr-6 text-right">Ações</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(() => {
+                            const q = repSearch.toLowerCase();
+                            const filtered = reps.filter(rep => {
+                              if (repFilterStatus === 'Ativos' && rep.isVago) return false;
+                              if (repFilterStatus === 'Vagos' && !rep.isVago) return false;
+                              if (repFilterUF && rep.uf !== repFilterUF) return false;
+                              if (q) return (
+                                rep.code.toLowerCase().includes(q) ||
+                                rep.name.toLowerCase().includes(q) ||
+                                (rep.fullName || '').toLowerCase().includes(q) ||
+                                (rep.cidade || '').toLowerCase().includes(q)
+                              );
+                              return true;
+                            });
+                            if (filtered.length === 0) return (
+                              <TableRow><TableCell colSpan={9} className="py-16 text-center text-muted-foreground text-sm italic">Nenhum representante encontrado.</TableCell></TableRow>
+                            );
+                            return filtered.map(rep => (
+                              <TableRow key={rep.code} className="border-border/30 hover:bg-secondary/30 transition-colors">
+                                <TableCell className="pl-6">
+                                  <div className="w-3.5 h-3.5 rounded-full shadow-sm" style={{ background: getRepColor(rep) }} />
+                                </TableCell>
+                                <TableCell className="font-mono text-xs font-bold text-primary">{rep.code}</TableCell>
+                                <TableCell>
+                                  <div className="max-w-[200px]">
+                                    <p className="text-xs font-semibold truncate">{rep.name}</p>
+                                    <p className="text-[10px] text-muted-foreground truncate">{rep.fullName || '—'}</p>
+                                    {Boolean(rep.isVago) && <span className="text-[9px] bg-orange-500/10 text-orange-500 px-1 rounded font-bold uppercase tracking-tighter">VAGO</span>}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="space-y-0.5">
+                                    {rep.email && <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Mail className="w-3 h-3 text-primary/60" />{rep.email}</div>}
+                                    {rep.contato && <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Phone className="w-3 h-3 text-primary/60" />{rep.contato}</div>}
+                                    {!rep.email && !rep.contato && <span className="text-[10px] text-muted-foreground/40 italic">Sem contato</span>}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {rep.cidade ? (
+                                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                      <MapPinned className="w-3 h-3 text-primary/60" />
+                                      <span>{rep.cidade}{rep.uf ? `/${rep.uf}` : ''}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-muted-foreground/40 italic">Não informada</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {rep.comissao !== null && rep.comissao !== undefined ? (
+                                    <span className="text-xs font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full">{rep.comissao}%</span>
+                                  ) : '—'}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <span className="text-xs font-bold text-emerald-600">{rep._count?.clientes || 0}</span>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <span className="text-xs font-medium text-muted-foreground">{rep._count?.territories || 0}</span>
+                                </TableCell>
+                                <TableCell className="pr-6">
+                                  <div className="flex gap-1 justify-end">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 hover:bg-primary/10 hover:text-primary transition-colors"
+                                      onClick={() => {
+                                        setEditingCode(rep.code);
+                                        setEditForm({
+                                          name: rep.name,
+                                          fullName: rep.fullName || '',
+                                          isVago: !!rep.isVago,
+                                          colorIndex: rep.colorIndex || 1,
+                                          email: rep.email || '',
+                                          contato: rep.contato || '',
+                                          endereco: rep.endereco || '',
+                                          bairro: rep.bairro || '',
+                                          cidade: rep.cidade || '',
+                                          uf: rep.uf || '',
+                                          cep: rep.cep || '',
+                                          comissao: rep.comissao?.toString() || ''
+                                        });
+                                        setIsRepEditModalOpen(true);
+                                      }}
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                                      onClick={() => handleDeleteRep(rep.code, rep.name)}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ));
+                          })()}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}

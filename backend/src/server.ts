@@ -5,6 +5,7 @@ import pc from 'picocolors';
 
 import authRoutes from './routes/auth.routes';
 import adminRoutes from './routes/admin.routes';
+import geocodeRoutes from './routes/geocode.routes'; // Added this line
 import interestRoutes from './routes/interest.routes';
 import planilhaRoutes from './routes/planilha.routes';
 import clientesRoutes from './routes/clientes.routes';
@@ -19,6 +20,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 app.use('/api', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/geocode', geocodeRoutes); // Added this line
 app.use('/api/interest', interestRoutes);
 app.use('/api', planilhaRoutes);
 app.use('/api/clientes', clientesRoutes);

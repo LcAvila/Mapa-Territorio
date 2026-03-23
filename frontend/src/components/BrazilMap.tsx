@@ -63,14 +63,13 @@ function MapController({ center, zoom, flyToLocation, selectedUF }: { center: [n
       return;
     }
 
-    // Only follow state 'center/zoom' if we DON'T have a manual search location active
-    // AND we don't have a specific geoJson state to zoom into (which uses ZoomToFeature)
-    const hasGeoZoom = !!(flyToLocation || centerLat !== -14.2); // Simple heuristic
-
-    if (!hasFlyTo && !isNaN(centerLat) && !isNaN(centerLng) && !selectedUF) {
-      map.flyTo([centerLat, centerLng], zoom, { duration: 2.0, easeLinearity: 0.25 });
+    // Se houver uma UF selecionada, seguimos a visão dela.
+    // Mas se não houver UF (visão Brasil), não forçamos a visão a cada render,
+    // pois isso mataria o zoom manual do usuário.
+    if (selectedUF && !hasFlyTo) {
+        map.flyTo(center, zoom, { duration: 1.5, easeLinearity: 0.25 });
     }
-  }, [map, centerLat, centerLng, zoom, hasFlyTo, center, selectedUF, flyToLocation]); 
+  }, [map, center, zoom, hasFlyTo, selectedUF]); 
 
   // Handle manual address search navigation
   useEffect(() => {
@@ -527,11 +526,17 @@ export default function BrazilMap({
       <MapContainer
         center={center} zoom={zoom}
         className="w-full h-full"
-        zoomControl={true} attributionControl={false}
+        zoomControl={true}
+        scrollWheelZoom={true}
+        dragging={true}
+        doubleClickZoom={true}
+        boxZoom={true}
+        keyboard={true}
+        attributionControl={false}
         style={{ background: "hsl(220, 20%, 8%)" }}
         minZoom={2}
         maxBounds={[[-90, -180], [90, 180]]}
-        maxBoundsViscosity={1.0}
+        maxBoundsViscosity={0.5}
       >
         <AttributionControl prefix={false} />
         <MapController center={center} zoom={zoom} flyToLocation={flyToLocation} selectedUF={selectedUF} />

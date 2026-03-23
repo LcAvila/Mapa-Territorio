@@ -305,11 +305,13 @@ const Index = () => {
         {selectedUF && (
           <div className="absolute bottom-4 left-4 z-[1000]">
             <MapLegend
+              selectedUF={selectedUF}
               modo={modo}
               filtroRepresentante={filtroRepresentante}
               onFilterRep={setFiltroRepresentante}
               mostrarVagos={mostrarVagos}
               onToggleVagos={() => setMostrarVagos(!mostrarVagos)}
+              clients={apiClientes}
             />
           </div>
         )}

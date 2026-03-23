@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../prisma';
 import { authenticate, requirePermission } from '../middlewares/auth';
 import { logUserActivity } from '../utils/logger';
+import { geocodeAddress } from '../utils/geocoding';
 
 const router = Router();
 
@@ -45,7 +46,7 @@ router.get('/', requirePermission('clients', 'view'), async (req, res) => {
 // ---------------------------------------------------------
 router.post('/', requirePermission('clients', 'edit'), async (req, res) => {
   try {
-    const { 
+    let { 
       codigo_cliente, 
       nome_cliente, 
       nome_abreviado, 
@@ -59,6 +60,20 @@ router.post('/', requirePermission('clients', 'edit'), async (req, res) => {
       latitude,
       longitude
     } = req.body;
+
+    // Se latitude ou longitude não forem informados, tentar geocodificar automatimente
+    if ((!latitude || !longitude) && (endereco_completo || (cidade && uf))) {
+      const searchAddress = endereco_completo || `${bairro ? bairro + ', ' : ''}${cidade}, ${uf}, Brasil`;
+      const coords = await geocodeAddress(searchAddress);
+      
+      if (coords) {
+        latitude = coords.lat;
+        longitude = coords.lng;
+        console.log(`[Geocode] Coordenadas obtidas para "${searchAddress}": ${latitude}, ${longitude}`);
+      } else {
+        console.warn(`[Geocode] Não foi possível encontrar coordenadas para "${searchAddress}"`);
+      }
+    }
 
     if (!nome_cliente) {
       return res.status(400).json({ message: 'O nome do cliente é obrigatório.' });
@@ -87,8 +102,8 @@ router.post('/', requirePermission('clients', 'edit'), async (req, res) => {
         bairro,
         cep,
         endereco_completo,
-        latitude: latitude ? parseFloat(latitude) : null,
-        longitude: longitude ? parseFloat(longitude) : null,
+        latitude: latitude ? parseFloat(latitude.toString()) : null,
+        longitude: longitude ? parseFloat(longitude.toString()) : null,
         repCode: req.body.repCode || null,
         supervisorName: req.body.supervisorName || null,
         classificacao: req.body.classificacao || null,
