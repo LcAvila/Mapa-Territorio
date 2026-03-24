@@ -97,13 +97,24 @@ export default function MiniMapBrasil({ territories, reps, filterUF, filterRep, 
   }, [territories]);
 
   const getStateColor = (uf: string): string => {
-    if (filterUF && uf !== filterUF) return 'hsl(220 15% 22%)';
-    if (filterRep && ufRepMap[uf] !== filterRep) return 'hsl(220 15% 22%)';
+    const isSelected = filterUF === uf;
     const repCode = ufRepMap[uf];
-    if (!repCode) return 'hsl(220 15% 22%)';
-    const rep = reps.find(r => r.code === repCode);
-    if (!rep || rep.isVago) return 'hsl(0 0% 38%)';
-    return REP_COLOR_PALETTE[rep.colorIndex] || 'hsl(220 15% 28%)';
+    
+    // Se não tiver cobertura, sempre cinza escuro
+    if (!repCode) return 'hsl(220 15% 20%)';
+    
+    // Se houver filtro de representante, prioriza a cor dele
+    if (filterRep) {
+      if (ufRepMap[uf] !== filterRep) return 'hsl(220 15% 20%)';
+      const rep = reps.find(r => r.code === filterRep);
+      return rep ? REP_COLOR_PALETTE[rep.colorIndex] : '#888';
+    }
+
+    // Se o estado estiver selecionado (clicado), destaca com a cor de sotaque
+    if (isSelected) return 'hsl(var(--admin-sidebar-accent))';
+
+    // Para os demais estados com cobertura, usa um cinza sutil (estilo "o outro mapa")
+    return 'hsl(220 15% 28%)';
   };
 
   if (!geoData || !geoData.features) {
@@ -132,8 +143,8 @@ export default function MiniMapBrasil({ territories, reps, filterUF, filterRep, 
               key={i}
               d={path}
               fill={color}
-              stroke={isHovered || isActive ? 'hsl(var(--admin-sidebar-accent))' : 'hsl(220 15% 30%)'}
-              strokeWidth={isHovered || isActive ? 1.5 : 0.5}
+              stroke={isHovered || isActive ? 'hsl(var(--admin-sidebar-accent))' : 'hsl(220 15% 45%)'}
+              strokeWidth={isHovered || isActive ? 1.5 : 0.8}
               style={{ cursor: 'pointer', transition: 'fill 0.2s, stroke 0.2s' }}
               onMouseEnter={() => setHoveredUF(uf)}
               onMouseLeave={() => setHoveredUF(null)}
@@ -153,7 +164,7 @@ export default function MiniMapBrasil({ territories, reps, filterUF, filterRep, 
           border: '1px solid hsl(var(--admin-sidebar-accent) / 0.4)',
         }}>
           {hoveredUF}
-          {ufRepMap[hoveredUF] && (
+          {filterRep && ufRepMap[hoveredUF] && (
             <span style={{ opacity: 0.7, fontWeight: 400, marginLeft: 6 }}>
               {reps.find(r => r.code === ufRepMap[hoveredUF])?.name || ufRepMap[hoveredUF]}
             </span>

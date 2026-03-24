@@ -1273,3 +1273,14 @@
     min-width: 180px;
 }
 
+
+/* Map Hover Glow Effect */
+.map-hover-effect {
+  cursor: pointer !important;
+  transition: filter 0.25s ease, stroke-width 0.25s ease !important;
+}
+
+.map-hover-effect:hover {
+  filter: brightness(1.25) saturate(1.5) drop-shadow(0 0 8px hsl(var(--primary) / 0.4)) !important;
+  stroke-width: 2.5px !important;
+}

@@ -404,9 +404,22 @@ export default function BrazilMap({
     const f = feature as GeoJSONFeature;
     const uf = getUFByCode(Number(f?.properties?.codarea));
     if (!uf) return;
+
+    if (layer instanceof L.Path) {
+      const el = layer.getElement();
+      if (el) el.classList.add('map-hover-effect');
+    }
+
     (layer as L.Path).on({
-      mouseover: (e) => { e.target.setStyle({ fillOpacity: 0.3, weight: 2.5 }); e.target.bindTooltip(uf.nome, { sticky: true }).openTooltip(); },
-      mouseout: (e) => { e.target.setStyle(stateStyle(f)); e.target.closeTooltip(); },
+      mouseover: (e) => { 
+        e.target.bringToFront(); 
+        e.target.setStyle({ fillColor: 'hsl(168, 70%, 45%)', fillOpacity: 0.5, weight: 2.5 });
+        e.target.bindTooltip(uf.nome, { sticky: true }).openTooltip(); 
+      },
+      mouseout: (e) => { 
+        e.target.setStyle(stateStyle(f));
+        e.target.closeTooltip(); 
+      },
       click: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
         onSelectUF(uf.sigla);
@@ -443,9 +456,21 @@ export default function BrazilMap({
           : `<strong>${name}</strong><br/><em>Sem responsável</em>`;
     }
 
+    if (layer instanceof L.Path) {
+      const el = layer.getElement();
+      if (el) el.classList.add('map-hover-effect');
+    }
+
     (layer as L.Path).on({
-      mouseover: (e) => { e.target.setStyle({ fillOpacity: 0.8, weight: 3 }); e.target.bindTooltip(tooltipHtml, { sticky: true }).openTooltip(); e.target.bringToFront(); },
-      mouseout: (e) => { e.target.setStyle(municipioStyle(f)); e.target.closeTooltip(); },
+      mouseover: (e) => { 
+        e.target.bringToFront(); 
+        e.target.setStyle({ fillColor: 'hsl(168, 70%, 45%)', fillOpacity: 0.8, weight: 3 });
+        e.target.bindTooltip(tooltipHtml, { sticky: true }).openTooltip(); 
+      },
+      mouseout: (e) => { 
+        e.target.setStyle(municipioStyle(f));
+        e.target.closeTooltip(); 
+      },
       click: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
         onSelectMunicipio(name, selectedUF);
