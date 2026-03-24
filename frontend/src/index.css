@@ -1277,7 +1277,7 @@
 /* Map Hover Glow Effect */
 .map-hover-effect {
   cursor: pointer !important;
-  transition: filter 0.25s ease, stroke-width 0.25s ease !important;
+  transition: filter 0.25s ease, stroke-width 0.25s ease, stroke 0.25s ease, fill 0.25s ease !important;
 }
 
 .map-hover-effect:hover {

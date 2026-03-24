@@ -311,8 +311,10 @@ export default function BrazilMap({
     const isSelected = uf && selectedUF === uf.sigla;
     return {
       fillColor: isSelected ? "hsl(168, 70%, 45%)" : "hsl(220, 15%, 25%)",
-      weight: 1.5, opacity: 1, color: "hsl(220, 15%, 35%)",
-      fillOpacity: isSelected ? 0.4 : 0.6,
+      weight: isSelected ? 2 : 1.5,
+      opacity: 1, 
+      color: isSelected ? "hsl(var(--admin-sidebar-accent))" : "hsl(220, 15%, 35%)",
+      fillOpacity: isSelected ? 0.15 : 0.6,
     };
   }, [selectedUF]);
 
@@ -372,7 +374,7 @@ export default function BrazilMap({
       fillColor: "transparent" as const,
       weight: isSel ? 2 : 0.5,
       opacity: isSel ? 1 : 0.2,
-      color: isSel ? "hsl(168, 70%, 45%)" : "hsl(220, 15%, 25%)",
+      color: isSel ? "hsl(var(--admin-sidebar-accent))" : "hsl(220, 15%, 25%)",
       fillOpacity: 0
     };
   }, [selectedUF]);
@@ -413,7 +415,7 @@ export default function BrazilMap({
     (layer as L.Path).on({
       mouseover: (e) => { 
         e.target.bringToFront(); 
-        e.target.setStyle({ fillColor: 'hsl(168, 70%, 45%)', fillOpacity: 0.5, weight: 2.5 });
+        e.target.setStyle({ color: 'hsl(var(--admin-sidebar-accent))', fillOpacity: 0.3, weight: 2.5 });
         e.target.bindTooltip(uf.nome, { sticky: true }).openTooltip(); 
       },
       mouseout: (e) => { 
@@ -464,7 +466,7 @@ export default function BrazilMap({
     (layer as L.Path).on({
       mouseover: (e) => { 
         e.target.bringToFront(); 
-        e.target.setStyle({ fillColor: 'hsl(168, 70%, 45%)', fillOpacity: 0.8, weight: 3 });
+        e.target.setStyle({ color: 'hsl(var(--admin-sidebar-accent))', fillOpacity: 0.6, weight: 3 });
         e.target.bindTooltip(tooltipHtml, { sticky: true }).openTooltip(); 
       },
       mouseout: (e) => { 
