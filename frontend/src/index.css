@@ -1284,3 +1284,7 @@
   filter: brightness(1.25) saturate(1.5) drop-shadow(0 0 8px hsl(var(--primary) / 0.4)) !important;
   stroke-width: 2.5px !important;
 }
+/* Fix for custom Leaflet topPane pointer events */
+.leaflet-topPane-pane {
+  pointer-events: auto !important;
+}

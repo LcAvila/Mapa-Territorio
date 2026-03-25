@@ -9,6 +9,7 @@ import geocodeRoutes from './routes/geocode.routes'; // Added this line
 import interestRoutes from './routes/interest.routes';
 import planilhaRoutes from './routes/planilha.routes';
 import clientesRoutes from './routes/clientes.routes';
+import locationRoutes from './routes/location.routes';
 import { prisma } from './prisma';
 
 const app = express();
@@ -20,8 +21,9 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 app.use('/api', authRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/geocode', geocodeRoutes); // Added this line
+app.use('/api/geocode', geocodeRoutes); 
 app.use('/api/interest', interestRoutes);
+app.use('/api/location', locationRoutes); // Must be BEFORE /api planilhaRoutes (which has global auth middleware)
 app.use('/api', planilhaRoutes);
 app.use('/api/clientes', clientesRoutes);
 

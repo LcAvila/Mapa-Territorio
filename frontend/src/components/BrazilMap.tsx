@@ -1,9 +1,9 @@
-import { RotateCcw, Loader } from "lucide-react";
+import { RotateCcw, Loader, Layers } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useCallback, useRef, useState, useMemo } from "react";
 import {
   MapContainer, TileLayer, GeoJSON, useMap,
-  AttributionControl, CircleMarker, Tooltip as LeafletTooltip
+  AttributionControl, CircleMarker, Tooltip as LeafletTooltip, Pane
 } from "react-leaflet";
 import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -12,7 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { booleanPointInPolygon, point as turfPoint } from "@turf/turf";
 import {
   useStatesGeoJSON, useMunicipiosGeoJSON, useMunicipioNames,
-  useNeighborhoodsGeoJSON
+  useNeighborhoodsGeoJSON, useStatesMetadata, useCitiesMetadata
 } from "@/hooks/use-geo-data";
 import { useAuth } from "@/contexts/AuthContext";
 import { getUFByCode, getUFBySigla } from "@/data/uf-codes";
@@ -42,6 +42,7 @@ interface BrazilMapProps {
   searchResultGeo?: GeoJSONFeatureCollection | GeoJSONFeature | null;
   selectedClients?: Cliente[];
   onSelectClients?: (clients: Cliente[]) => void;
+  onResetMap?: () => void;
 }
 
 const API_BASE = "http://localhost:3001";
@@ -65,8 +66,8 @@ function MapController({ center, zoom, flyToLocation, selectedUF }: { center: [n
 
     // Se houver uma UF selecionada, seguimos a visão dela.
     // Mas se não houver UF (visão Brasil), não forçamos a visão a cada render,
-    // pois isso mataria o zoom manual do usuário.
-    if (selectedUF && !hasFlyTo) {
+    // pois isso mataria o zoom manual do usuário, a não ser que tenha havido um flyToLocation.
+    if ((selectedUF && !hasFlyTo) || (!selectedUF && hasFlyTo)) {
         map.flyTo(center, zoom, { duration: 1.5, easeLinearity: 0.25 });
     }
   }, [map, center, zoom, hasFlyTo, selectedUF]); 
@@ -110,12 +111,23 @@ function MapAnimationController({ onMoveStart, onMoveEnd }: { onMoveStart: () =>
 }
 
 // ─── Map event handler for global clicks (deselect on background click) ────
-function MapEventHandler({ onBackgroundClick }: { onBackgroundClick: () => void }) {
+function MapEventHandler({ onBackgroundClick, onBackgroundDblClick }: { onBackgroundClick: () => void; onBackgroundDblClick: () => void }) {
   const map = useMap();
   useEffect(() => {
-    map.on("click", onBackgroundClick);
-    return () => { map.off("click", onBackgroundClick); };
-  }, [map, onBackgroundClick]);
+    map.on("click", (e) => {
+      // Small delay to allow click vs dblclick distinction if needed, 
+      // but here we just pass it through
+      onBackgroundClick();
+    });
+    map.on("dblclick", (e) => {
+      L.DomEvent.stopPropagation(e);
+      onBackgroundDblClick();
+    });
+    return () => { 
+      map.off("click", onBackgroundClick); 
+      map.off("dblclick", onBackgroundDblClick);
+    };
+  }, [map, onBackgroundClick, onBackgroundDblClick]);
   return null;
 }
 
@@ -159,95 +171,6 @@ function HeatmapLayer({ points }: { points: [number, number, number][] }) {
   return null;
 }
 
-// ─── Speed Lines Overlay (Falling Effect) ──────────────────────────────────
-function SpeedLinesOverlay({ active }: { active: boolean }) {
-  if (!active) return null;
-
-  return (
-    <div className="absolute inset-0 z-[2000] pointer-events-none overflow-hidden flex items-center justify-center">
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="w-full h-full relative"
-      >
-        {/* Deep background glow pulse */}
-        <div className="absolute inset-0 bg-primary/5 backdrop-blur-[2px]" />
-
-        {/* Dense Star Dust / Particles */}
-        {[...Array(80)].map((_, i) => (
-          <motion.div
-            key={`dot-${i}`}
-            initial={{ 
-              x: "50%", y: "50%", 
-              scale: 0, opacity: 0 
-            }}
-            animate={{ 
-              x: `${50 + (Math.random() * 140 - 70)}%`,
-              y: `${50 + (Math.random() * 140 - 70)}%`,
-              scale: [0, Math.random() * 2 + 1, 0],
-              opacity: [0, 0.8, 0]
-            }}
-            transition={{
-              duration: 0.8 + Math.random() * 0.7,
-              repeat: Infinity,
-              delay: Math.random() * 1,
-              ease: "easeOut"
-            }}
-            className="absolute w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_white]"
-          />
-        ))}
-
-        {/* Intense Speed lines radiating from center */}
-        {[...Array(60)].map((_, i) => (
-          <motion.div
-            key={`r-${i}`}
-            initial={{ 
-              scaleX: 0, 
-              opacity: 0,
-              rotate: (i * 6), // More density
-              x: 0,
-              y: 0
-            }}
-            animate={{ 
-              scaleX: [0, 2.5, 0],
-              opacity: [0, 0.7, 0],
-              x: [0, (Math.cos(i * 6 * Math.PI / 180) * 1200)],
-              y: [0, (Math.sin(i * 6 * Math.PI / 180) * 1200)]
-            }}
-            transition={{
-              duration: 0.5 + Math.random() * 0.3,
-              repeat: Infinity,
-              delay: Math.random() * 0.4,
-              ease: "circIn"
-            }}
-            className="absolute w-48 h-[1px] bg-gradient-to-r from-transparent via-white/70 to-transparent"
-            style={{ transformOrigin: "left center" }}
-          />
-        ))}
-        
-        {/* High-speed vertical falling streaks */}
-        {[...Array(40)].map((_, i) => (
-          <motion.div
-            key={`v-${i}`}
-            initial={{ y: -800, x: (Math.random() * 120 - 10) + "%", opacity: 0 }}
-            animate={{ y: 2000, opacity: [0, 0.5, 0] }}
-            transition={{
-              duration: 0.3 + Math.random() * 0.2,
-              repeat: Infinity,
-              delay: Math.random() * 0.3,
-              ease: "linear"
-            }}
-            className="absolute w-[1.5px] h-96 bg-gradient-to-b from-transparent via-white/30 to-transparent"
-          />
-        ))}
-
-        {/* Radial Vignette effect */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/40" />
-      </motion.div>
-    </div>
-  );
-}
 
 
 // ─── Main BrazilMap Component ─────────────────────────────────────────────────
@@ -257,9 +180,10 @@ export default function BrazilMap({
   municipioCodeForBairros, onDeactivateBairros, selectedMunicipioName, showClientes, showHeatmap,
   onContextMenuState, onContextMenuMunicipio,
   flyToLocation, searchResultGeo,
-  selectedClients = [], onSelectClients
+  selectedClients = [], onSelectClients, onResetMap
 }: BrazilMapProps) {
   const { role, estado_end, token, repCode: loggedRepCode } = useAuth();
+  const { data: statesMetadata } = useStatesMetadata();
   const { data: statesGeo } = useStatesGeoJSON();
   const { data: apiReps = [] } = useApiRepresentatives(!!token);
   const { data: apiTerritories = [] } = useApiTerritories(!!token);
@@ -268,24 +192,38 @@ export default function BrazilMap({
   const { data: apiClientes = [] } = useApiClientes(effectiveRepFilter);
 
   const [isMapMoving, setIsMapMoving] = useState(false);
+  const [selectedNeighborhood, setSelectedNeighborhood] = useState<string | null>(null);
+  const [mapTheme, setMapTheme] = useState<'dark' | 'dark-labels' | 'light' | 'satellite' | 'osm'>('dark');
+  const [showThemePicker, setShowThemePicker] = useState(false);
+
+  const MAP_THEMES = {
+    'dark':        { label: 'Escuro',          url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', opacity: 0.4 },
+    'dark-labels': { label: 'Escuro + Labels', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',       opacity: 0.5 },
+    'light':       { label: 'Claro',           url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',       opacity: 0.9 },
+    'satellite':   { label: 'Satélite',        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opacity: 1.0 },
+    'osm':         { label: 'OpenStreetMap',   url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                  opacity: 1.0 },
+  } as const;
 
   const ufInfo = selectedUF ? getUFBySigla(selectedUF) : null;
+  const { data: citiesMetadata } = useCitiesMetadata(selectedUF);
   const { data: municipiosGeo } = useMunicipiosGeoJSON(ufInfo?.codigo ?? null);
-  const { data: municipioNames } = useMunicipioNames(ufInfo?.codigo ?? null);
-  const { data: neighborhoodsGeo, isLoading: loadingNeighborhoods } = useNeighborhoodsGeoJSON(municipioCodeForBairros || null);
+  const { data: neighborhoodsGeo, isLoading: loadingNeighborhoods } = useNeighborhoodsGeoJSON(
+    municipioCodeForBairros || null,
+    selectedMunicipioName || undefined,
+    selectedUF || undefined
+  );
 
   const center: [number, number] = ufInfo ? ufInfo.center : [-14.2, -51.9];
   const zoom = ufInfo ? ufInfo.zoom : 4;
 
   const munGeo = useMemo(() => {
-    if (!municipiosGeo || !selectedMunicipioName || !municipioNames) return null;
-    const entry = Object.entries(municipioNames).find(
-      ([, name]) => (name as string).toLowerCase() === selectedMunicipioName.toLowerCase()
+    if (!municipiosGeo || !selectedMunicipioName || !citiesMetadata || !Array.isArray(citiesMetadata)) return null;
+    const city = citiesMetadata.find(
+      (c: { name: string; ibgeCode: number | string }) => c.name.toLowerCase() === selectedMunicipioName.toLowerCase()
     );
-    if (!entry) return null;
-    const [codArea] = entry;
-    return (municipiosGeo.features as GeoJSONFeature[])?.find((f) => String(f.properties?.codarea) === codArea) || null;
-  }, [municipiosGeo, selectedMunicipioName, municipioNames]);
+    if (!city) return null;
+    return (municipiosGeo.features as GeoJSONFeature[])?.find((f) => String(f.properties?.codarea) === String(city.ibgeCode)) || null;
+  }, [municipiosGeo, selectedMunicipioName, citiesMetadata]);
 
   const stateGeo = useMemo(() => {
     if (!statesGeo || !selectedUF) return null;
@@ -295,48 +233,60 @@ export default function BrazilMap({
     }) || null;
   }, [statesGeo, selectedUF]);
 
+  const neighborhoodGeo = useMemo(() => {
+    if (!neighborhoodsGeo || !selectedNeighborhood) return null;
+    return neighborhoodsGeo.features.find(f => f.properties?.nome === selectedNeighborhood) || null;
+  }, [neighborhoodsGeo, selectedNeighborhood]);
+
   // ── Styles ──────────────────────────────────────────────────────────────────
-  const neighborhoodStyle = useCallback((_feature: unknown) => ({
-    fillColor: "hsl(168, 60%, 40%)",
-    weight: 1.5,
-    opacity: 1,
-    color: "hsl(168, 70%, 65%)",
-    fillOpacity: 0.18,
-    dashArray: "4 3",
-  }), []);
+  const neighborhoodStyle = useCallback((feature: unknown) => {
+    const isSelected = (feature as GeoJSONFeature).properties?.nome === selectedNeighborhood;
+    const hideSelection = isMapMoving && isSelected;
+
+    return {
+      fillColor: isSelected ? "hsl(168, 60%, 40%)" : "transparent",
+      weight: isSelected ? 2.5 : 1.5,
+      opacity: 1,
+      color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : "hsl(168, 70%, 65%)",
+      fillOpacity: isSelected ? 0.2 : 0.05,
+      dashArray: isSelected ? undefined : "4 3",
+    };
+  }, [selectedNeighborhood, isMapMoving]);
 
   const stateStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
-    const uf = getUFByCode(Number(f?.properties?.codarea));
+    const ufCode = Number(f?.properties?.codarea);
+    const uf = getUFByCode(ufCode);
     const isSelected = uf && selectedUF === uf.sigla;
+    const hideSelection = isMapMoving && isSelected;
+
     return {
       fillColor: isSelected ? "hsl(168, 70%, 45%)" : "hsl(220, 15%, 25%)",
       weight: isSelected ? 2 : 1.5,
       opacity: 1, 
-      color: isSelected ? "hsl(var(--admin-sidebar-accent))" : "hsl(220, 15%, 35%)",
+      color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : "hsl(220, 15%, 35%)",
       fillOpacity: isSelected ? 0.15 : 0.6,
     };
-  }, [selectedUF]);
+  }, [selectedUF, isMapMoving]);
 
   const municipioStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
     const blank = { fillColor: "hsl(220, 15%, 20%)", weight: 1, opacity: 0.6, color: "hsl(220, 15%, 28%)", fillOpacity: 0.4 };
-    if (!municipioNames || !selectedUF) return blank;
+    if (!citiesMetadata || !Array.isArray(citiesMetadata) || !selectedUF) return blank;
 
     const codArea = f?.properties?.codarea;
     if (!codArea) return blank;
-    const name = (municipioNames[String(codArea)] as string) || "";
+    const city = citiesMetadata.find((c: { ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea));
+    const name = city?.name || "";
     const reps = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
 
     // Only highlight if the search query is a specific word that matches name/rep
-    // We avoid highlighting every polygon if the search is a broad address search
     if (searchQuery && searchQuery.length > 2) {
       const q = searchQuery.toLowerCase();
       const repNames = reps.map(c => apiReps.find(r => r.code === c)?.name || "").join(" ").toLowerCase();
       const isMatch = name.toLowerCase().includes(q) || reps.join(" ").toLowerCase().includes(q) || repNames.includes(q);
       
       if (isMatch) {
-         // Fix "yellow screen" by reducing fillOpacity and removing fill if a client is selected
          const hasSelection = (selectedClients || []).length > 0;
          return { 
            fillColor: "hsl(45, 90%, 55%)", 
@@ -364,47 +314,66 @@ export default function BrazilMap({
       fillOpacity: rep.isVago ? 0.3 : 0.55,
       dashArray: rep.isVago ? "6 4" : undefined,
     };
-  }, [municipioNames, selectedUF, modo, filtroRepresentante, mostrarVagos, searchQuery, apiTerritories, apiReps, selectedClients]);
+  }, [citiesMetadata, selectedUF, modo, filtroRepresentante, mostrarVagos, searchQuery, apiTerritories, apiReps, selectedClients]);
 
   const stateOutlineStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
     const uf = getUFByCode(Number(f?.properties?.codarea));
     const isSel = uf && selectedUF === uf.sigla;
+    const hideSelection = isMapMoving && isSel;
+
     return {
       fillColor: "transparent" as const,
       weight: isSel ? 2 : 0.5,
       opacity: isSel ? 1 : 0.2,
-      color: isSel ? "hsl(var(--admin-sidebar-accent))" : "hsl(220, 15%, 25%)",
+      color: isSel && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : "hsl(220, 15%, 25%)",
       fillOpacity: 0
     };
-  }, [selectedUF]);
+  }, [selectedUF, isMapMoving]);
 
   const targetMunicipioStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
     const codArea = f?.properties?.codarea;
-    const name = (municipioNames?.[String(codArea)] as string) || "";
+    const city = Array.isArray(citiesMetadata) ? citiesMetadata?.find((c: { ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea)) : undefined;
+    const name = city?.name || "";
     const isTarget = name.toLowerCase() === (selectedMunicipioName || "").toLowerCase();
     return isTarget
       ? { fillColor: "transparent", weight: 2.5, opacity: 1, color: "hsl(168, 70%, 70%)", fillOpacity: 0 }
       : { fillColor: "transparent", weight: 0, opacity: 0, color: "transparent", fillOpacity: 0 };
-  }, [municipioNames, selectedMunicipioName]);
+  }, [citiesMetadata, selectedMunicipioName]);
 
   const onEachNeighborhood = useCallback((feature: unknown, layer: L.Layer) => {
     const f = feature as GeoJSONFeature;
-    const nameList = [
-      f.properties?.nome,
-      f.properties?.name,
-      f.properties?.NM_DIST,
-      f.properties?.NM_SUBDIST
-    ];
-    const name = nameList.find(n => n) || "Bairro";
-    layer.bindTooltip(`<strong>${name}</strong>`, { sticky: true, direction: "top" });
-  }, []);
+    const name = f.properties?.nome || "Bairro";
+    
+    if (layer instanceof L.Path) {
+      const el = layer.getElement();
+      if (el) el.classList.add('map-hover-effect');
+    }
+
+    (layer as L.Path).on({
+      mouseover: (e) => {
+        e.target.bringToFront();
+        e.target.setStyle({ color: 'hsl(var(--admin-sidebar-accent))', fillOpacity: 0.35, weight: 2.5 });
+        e.target.bindTooltip(`<strong>${name}</strong>`, { sticky: true, direction: "top" }).openTooltip();
+      },
+      mouseout: (e) => {
+        e.target.setStyle(neighborhoodStyle(f));
+        e.target.closeTooltip();
+      },
+      click: (e: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(e);
+        setSelectedNeighborhood(name);
+      }
+    });
+  }, [neighborhoodStyle]);
 
   // ── Event handlers ──────────────────────────────────────────────────────────
   const onEachState = useCallback((feature: unknown, layer: L.Layer) => {
     const f = feature as GeoJSONFeature;
-    const uf = getUFByCode(Number(f?.properties?.codarea));
+    const ufCode = Number(f?.properties?.codarea);
+    const ufMeta = Array.isArray(statesMetadata) ? statesMetadata?.find((s: { id: number }) => s.id === ufCode) : undefined;
+    const uf = getUFByCode(ufCode);
     if (!uf) return;
 
     if (layer instanceof L.Path) {
@@ -414,7 +383,6 @@ export default function BrazilMap({
 
     (layer as L.Path).on({
       mouseover: (e) => { 
-        e.target.bringToFront(); 
         e.target.setStyle({ color: 'hsl(var(--admin-sidebar-accent))', fillOpacity: 0.3, weight: 2.5 });
         e.target.bindTooltip(uf.nome, { sticky: true }).openTooltip(); 
       },
@@ -432,14 +400,15 @@ export default function BrazilMap({
         onContextMenuState?.(uf.nome, uf.sigla, e.originalEvent.clientX, e.originalEvent.clientY);
       },
     });
-  }, [stateStyle, onSelectUF, onContextMenuState]);
+  }, [stateStyle, onSelectUF, onContextMenuState, statesMetadata]);
 
   const onEachMunicipio = useCallback((feature: unknown, layer: L.Layer) => {
     const f = feature as GeoJSONFeature;
-    if (!municipioNames || !selectedUF) return;
+    if (!citiesMetadata || !Array.isArray(citiesMetadata) || !selectedUF) return;
     const codArea = f?.properties?.codarea;
     if (!codArea) return;
-    const name = (municipioNames[String(codArea)] as string) || `Município ${codArea}`;
+    const city = citiesMetadata.find((c: { name: string; ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea));
+    const name = city?.name || `Município ${codArea}`;
     const reps = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
     
     // Role-based restrictions mapping
@@ -465,7 +434,6 @@ export default function BrazilMap({
 
     (layer as L.Path).on({
       mouseover: (e) => { 
-        e.target.bringToFront(); 
         e.target.setStyle({ color: 'hsl(var(--admin-sidebar-accent))', fillOpacity: 0.6, weight: 3 });
         e.target.bindTooltip(tooltipHtml, { sticky: true }).openTooltip(); 
       },
@@ -477,23 +445,24 @@ export default function BrazilMap({
         L.DomEvent.stopPropagation(e);
         onSelectMunicipio(name, selectedUF);
       },
+      dblclick: (e: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(e);
+        onSelectUF("");
+        if (onResetMap) onResetMap();
+      },
       contextmenu: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
         e.originalEvent.preventDefault();
         onContextMenuMunicipio?.(name, selectedUF, e.originalEvent.clientX, e.originalEvent.clientY);
       },
     });
-  }, [municipioNames, selectedUF, modo, municipioStyle, onSelectMunicipio, apiTerritories, apiReps, onContextMenuMunicipio, role, estado_end]);
+  }, [citiesMetadata, selectedUF, modo, municipioStyle, onSelectMunicipio, apiTerritories, apiReps, onContextMenuMunicipio, role, estado_end, onResetMap, onSelectUF]);
 
-  // ── Neighborhood label markers — names are now baked into feature.properties.nome ───
+  // ── Neighborhood label markers — names from Brasil Aberto metadata if possible ───
   const markers: Array<{ center: L.LatLng; name: string }> = [];
   if (neighborhoodsGeo?.features) {
     for (const feature of neighborhoodsGeo.features) {
-      const name = feature.properties?.nome
-        || feature.properties?.name
-        || feature.properties?.NM_DIST
-        || feature.properties?.NM_SUBDIST
-        || null;
+      const name = feature.properties?.nome || "Bairro";
       if (!name || !feature.geometry) continue;
       try {
         const bounds = L.geoJSON(feature).getBounds();
@@ -503,8 +472,7 @@ export default function BrazilMap({
   }
 
 
-  // Filter clients: if UF is selected, show only that UF's clients and ensure they are within the state geometry.
-  // If no UF is selected, show all clients that are within Brazil's boundaries.
+  // Filter clients
   const visibleClientes = useMemo(() => {
     if (!(showClientes || showHeatmap) || !apiClientes || !statesGeo) return [];
 
@@ -516,19 +484,14 @@ export default function BrazilMap({
       });
       if (stateFeature) filterGeometry = stateFeature as unknown as GeoJSONFeature;
     } else {
-      // For Brazil view, any point in any state is fine
       filterGeometry = statesGeo as unknown as GeoJSONFeatureCollection; 
     }
 
     return apiClientes.filter(c => {
       if (!c.latitude || !c.longitude) return false;
       if (selectedUF && c.uf !== selectedUF) return false;
-
-      // If no UF is selected, we assume any geocoded client is "visible" in Brazil view.
-      // This saves O(N * 27) polygon checks every render.
       if (!selectedUF) return true;
 
-      // Point-in-polygon check (only when filtered by UF)
       try {
         const pt = turfPoint([c.longitude, c.latitude]);
         if (filterGeometry) {
@@ -541,22 +504,34 @@ export default function BrazilMap({
     });
   }, [showClientes, showHeatmap, apiClientes, statesGeo, selectedUF]);
 
-  const heatmapPoints: [number, number, number][] = showHeatmap 
-    ? visibleClientes.map(c => [c.latitude!, c.longitude!, 1])
-    : [];
+  const heatmapPoints: [number, number, number][] = useMemo(() => 
+    showHeatmap ? visibleClientes.map(c => [c.latitude!, c.longitude!, 1]) : [],
+  [showHeatmap, visibleClientes]);
+
+  const handleBack = useCallback(() => {
+    if (selectedNeighborhood) {
+      setSelectedNeighborhood(null);
+    } else if (municipioCodeForBairros) {
+       onDeactivateBairros?.();
+    } else if (selectedUF) {
+       onSelectUF("");
+       if (onResetMap) onResetMap();
+    }
+  }, [selectedNeighborhood, municipioCodeForBairros, selectedUF, onDeactivateBairros, onSelectUF, onResetMap]);
+
+  const handleBackgroundDblClick = useCallback(() => {
+    handleBack();
+  }, [handleBack]);
 
   return (
     <div className="w-full h-full relative overflow-hidden bg-background">
-      <AnimatePresence>
-        {isMapMoving && <SpeedLinesOverlay active={true} />}
-      </AnimatePresence>
       <MapContainer
         center={center} zoom={zoom}
         className="w-full h-full"
         zoomControl={true}
         scrollWheelZoom={true}
         dragging={true}
-        doubleClickZoom={true}
+        doubleClickZoom={false}
         boxZoom={true}
         keyboard={true}
         attributionControl={false}
@@ -571,19 +546,21 @@ export default function BrazilMap({
           onMoveStart={() => setIsMapMoving(true)} 
           onMoveEnd={() => setIsMapMoving(false)} 
         />
-        <MapEventHandler onBackgroundClick={() => selectedUF && onSelectUF("")} />
+        <MapEventHandler 
+          onBackgroundClick={() => { /* Do nothing on single click */ }} 
+          onBackgroundDblClick={handleBackgroundDblClick}
+        />
 
         {/* Auto-zoom to features when selected */}
-        {munGeo && <ZoomToFeature geoJson={munGeo} maxZoom={13} />}
-        {!munGeo && stateGeo && <ZoomToFeature geoJson={stateGeo} maxZoom={ufInfo?.zoom || 7} />}
+        {neighborhoodGeo && <ZoomToFeature geoJson={neighborhoodGeo} maxZoom={16} />}
+        {!neighborhoodGeo && munGeo && <ZoomToFeature geoJson={munGeo} maxZoom={13} />}
+        {!neighborhoodGeo && !munGeo && stateGeo && <ZoomToFeature geoJson={stateGeo} maxZoom={ufInfo?.zoom || 7} />}
 
         <TileLayer
-          url={municipioCodeForBairros || flyToLocation
-            ? "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            : "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"
-          }
+          key={mapTheme}
+          url={MAP_THEMES[mapTheme].url}
           attribution="Desenvolvido por Lucas Ávila"
-          opacity={municipioCodeForBairros || flyToLocation ? 1 : 0.4}
+          opacity={MAP_THEMES[mapTheme].opacity}
           className={isMapMoving ? "map-motion-blur" : ""}
         />
 
@@ -603,7 +580,7 @@ export default function BrazilMap({
           />
         )}
 
-        {/* States */}
+        {/* States layer (Level 1) */}
         {statesGeo && !selectedUF && (
           <GeoJSON key="states" data={statesGeo} style={stateStyle} onEachFeature={onEachState} />
         )}
@@ -611,23 +588,26 @@ export default function BrazilMap({
           <GeoJSON key={`states-outline-${selectedUF}`} data={statesGeo} style={stateOutlineStyle} />
         )}
 
-        {/* Municipalities */}
-        {municipiosGeo && selectedUF && municipioNames && !municipioCodeForBairros && (
-          <GeoJSON
-            key={`muns-${selectedUF}-${modo}-${filtroRepresentante}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}`}
-            data={municipiosGeo} style={municipioStyle} onEachFeature={onEachMunicipio}
-          />
+        {/* Municipalities layer (Level 2) - Always show when a state is selected */}
+        {municipiosGeo && selectedUF && citiesMetadata && (
+          <Pane name="municipiosPane" style={{ zIndex: 400 }}>
+            <GeoJSON
+              key={`muns-${selectedUF}-${modo}-${filtroRepresentante}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}`}
+              data={municipiosGeo} style={municipioStyle} onEachFeature={onEachMunicipio}
+            />
+          </Pane>
         )}
 
-        {/* ── Neighborhood mode ── */}
+        {/* Bairros layer (Level 3) */}
         {municipioCodeForBairros && (
-          <>
-            {/* Show selected municipality boundary only — no dark overlay */}
-            {municipiosGeo && selectedUF && municipioNames && (
+          <Pane name="bairrosPane" style={{ zIndex: 450 }}>
+            {/* Show selected municipality boundary */}
+            {municipiosGeo && selectedUF && citiesMetadata && (
               <GeoJSON
                 key={`muns-bg-${municipioCodeForBairros}`}
                 data={municipiosGeo}
                 style={targetMunicipioStyle}
+                interactive={false}
               />
             )}
 
@@ -641,8 +621,8 @@ export default function BrazilMap({
               />
             )}
 
-            {/* Label markers on top of each neighborhood polygon */}
-            {markers.map((m, i) => (
+            {/* Label markers */}
+            {!isMapMoving && markers.map((m, i) => (
               <CircleMarker
                 key={`nhood-marker-${i}`}
                 center={m.center}
@@ -677,24 +657,27 @@ export default function BrazilMap({
                 </motion.div>
               )}
             </AnimatePresence>
-          </>
+          </Pane>
         )}
 
-        {/* ── Heatmap Layer ── */}
+        {/* Heatmap Layer */}
         {showHeatmap && <HeatmapLayer points={heatmapPoints} />}
 
-        {/* ── Client Pins ── */}
-        {showClientes && visibleClientes.map((cliente) => {
-          const isSelected = selectedClients.some(c => c.id_cliente === cliente.id_cliente);
-          const rep = getRepByCode(cliente.repCode as string, apiReps);
-          const repColor = rep ? getRepColor(rep) : "hsl(190, 100%, 50%)";
-          
-          return (
-            <CircleMarker
-              key={`cliente-${cliente.id_cliente}`}
-              center={[cliente.latitude, cliente.longitude]}
-              radius={isSelected ? 6 : 4}
-              pathOptions={{
+        {/* Client Pins */}
+        {showClientes && (
+          <Pane name="topPane" style={{ zIndex: 700, pointerEvents: 'auto' }}>
+            {visibleClientes.map((cliente) => {
+              const isSelected = selectedClients.some(c => c.id_cliente === cliente.id_cliente);
+              const rep = getRepByCode(cliente.repCode as string, apiReps);
+              const repColor = rep ? getRepColor(rep) : "hsl(190, 100%, 50%)";
+              
+              return (
+                <CircleMarker
+                  key={`cliente-${cliente.id_cliente}`}
+                  center={[cliente.latitude!, cliente.longitude!]}
+                  radius={isSelected ? 6 : 4}
+                  pathOptions={{
+                pane: "markerPane", // Elevates it above SVG polygons
                 fillColor: isSelected ? "hsl(45, 100%, 50%)" : repColor,
                 color: isSelected ? "white" : (rep ? repColor : "hsl(190, 100%, 30%)"),
                 weight: isSelected ? 3 : 2,
@@ -721,7 +704,7 @@ export default function BrazilMap({
                 }
               }}
             >
-              <LeafletTooltip direction="top" className="custom-tooltip">
+              <LeafletTooltip direction="top" className="custom-tooltip" pane="topPane">
                 <div className="space-y-1">
                   <div className="flex items-center justify-between gap-4">
                     <span className="font-bold text-sm text-primary">{cliente.nome_cliente}</span>
@@ -741,25 +724,28 @@ export default function BrazilMap({
             </CircleMarker>
           );
         })}
+        </Pane>
+      )}
+
       </MapContainer>
 
-      {/* Deactivate button */}
+      {/* Universal Back button for hierarchy navigation */}
       <AnimatePresence>
-        {municipioCodeForBairros && onDeactivateBairros && (
+        {(selectedUF || municipioCodeForBairros || selectedNeighborhood) && (
           <motion.div 
             initial={{ x: -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -20, opacity: 0 }}
-            className="absolute top-4 left-4 z-[1000]"
+            className="absolute top-4 left-14 z-[1000]"
           >
             <button
-              onClick={onDeactivateBairros}
+              onClick={handleBack}
               className="flex items-center gap-2 px-3 py-2 bg-card/95 backdrop-blur-sm border border-border text-foreground text-xs font-semibold rounded-md shadow-lg hover:bg-secondary transition-all"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              Voltar aos Municípios
+              {selectedNeighborhood ? "Voltar ao Município" : (municipioCodeForBairros ? "Voltar ao Estado" : "Voltar ao Brasil")}
             </button>
-            {markers.length > 0 && (
+            {municipioCodeForBairros && markers.length > 0 && (
               <div className="mt-2 px-3 py-1.5 bg-card/80 backdrop-blur-sm border border-border/50 rounded-md text-[10px] text-muted-foreground">
                 {markers.length} bairro(s) carregado(s)
               </div>
@@ -767,8 +753,45 @@ export default function BrazilMap({
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Map Theme Picker */}
+      <div className="absolute bottom-6 right-3 z-[1000]">
+        <div className="relative">
+          <button
+            onClick={() => setShowThemePicker(p => !p)}
+            className="flex items-center gap-1.5 px-2.5 py-2 bg-card/95 backdrop-blur-sm border border-border text-foreground text-xs font-semibold rounded-md shadow-lg hover:bg-secondary transition-all"
+            title="Tema do mapa"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{MAP_THEMES[mapTheme].label}</span>
+          </button>
+          {showThemePicker && (
+            <motion.div
+              initial={{ opacity: 0, y: 6, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 6, scale: 0.95 }}
+              className="absolute bottom-full mb-2 right-0 bg-card/95 backdrop-blur-sm border border-border rounded-lg shadow-xl overflow-hidden min-w-[160px]"
+            >
+              {(Object.entries(MAP_THEMES) as [typeof mapTheme, typeof MAP_THEMES[typeof mapTheme]][]).map(([key, theme]) => (
+                <button
+                  key={key}
+                  onClick={() => { setMapTheme(key); setShowThemePicker(false); }}
+                  className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-center gap-2 ${
+                    mapTheme === key
+                      ? 'bg-primary/20 text-primary font-semibold'
+                      : 'text-foreground hover:bg-secondary'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full border flex-shrink-0 ${
+                    mapTheme === key ? 'bg-primary border-primary' : 'border-muted-foreground'
+                  }`} />
+                  {theme.label}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </div>
+      </div>
 
-      {/* Invisible overlay to catch contextmenu on background */}
       <div
         className="absolute inset-0 pointer-events-none z-[500]"
         onContextMenu={(e) => {

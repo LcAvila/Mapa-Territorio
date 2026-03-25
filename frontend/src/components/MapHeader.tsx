@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck, Users, Flame, Filter, X } from "lucide-react";
+import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck, Users, Flame, Filter, X, UserCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { UF_DATA } from "@/data/uf-codes";
 import { Representative, Cliente, SearchSuggestion } from "@/hooks/use-api-data";
@@ -32,6 +32,8 @@ interface MapHeaderProps {
   onToggleClientes?: () => void;
   showHeatmap?: boolean;
   onToggleHeatmap?: () => void;
+  showReps?: boolean;
+  onToggleReps?: () => void;
   onSearchEnter?: (q: string) => void;
   suggestions?: SearchSuggestion[];
   onSelectSuggestion?: (item: SearchSuggestion) => void;
@@ -46,6 +48,7 @@ export default function MapHeader({
   selectedUF, onSelectUF, 
   searchQuery, onSearchChange, isAuthenticated, role, logout,
   showClientes, onToggleClientes, showHeatmap, onToggleHeatmap,
+  showReps, onToggleReps,
   onSearchEnter, suggestions, onSelectSuggestion,
   reps, clients, filtroRepresentante, onFilterRep, onSelectClient
 }: MapHeaderProps) {
@@ -175,6 +178,17 @@ export default function MapHeader({
           <Flame className="w-4 h-4" />
           <span className="hidden md:inline text-xs font-semibold">Calor</span>
         </Button>
+        {role === 'admin' && (
+          <Button
+            variant={showReps ? "default" : "ghost"}
+            size="sm"
+            onClick={onToggleReps}
+            className={`h-8 gap-2 px-3 ${showReps ? 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700' : 'text-muted-foreground hover:bg-background'}`}
+          >
+            <UserCheck className="w-4 h-4" />
+            <span className="hidden md:inline text-xs font-semibold">Representantes</span>
+          </Button>
+        )}
 
         <div className="w-[1px] h-4 bg-border/50 mx-1" />
 
@@ -197,23 +211,25 @@ export default function MapHeader({
                 )}
               </div>
 
-              {/* Rep Filter */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Representante</label>
-                <div className="relative">
-                  <select 
-                    value={filtroRepresentante || ""}
-                    onChange={(e) => onFilterRep(e.target.value || null)}
-                    className="w-full bg-secondary text-foreground text-xs pl-3 pr-8 py-2 rounded-md border border-border appearance-none cursor-pointer"
-                  >
-                    <option value="">Todos os Representantes</option>
-                    {reps.filter(r => !r.isVago).sort((a,b) => a.name.localeCompare(b.name)).map(r => (
-                      <option key={r.code} value={r.code}>{r.code} — {r.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+              {/* Rep Filter - Admins Only */}
+              {role === 'admin' && (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Representante</label>
+                  <div className="relative">
+                    <select 
+                      value={filtroRepresentante || ""}
+                      onChange={(e) => onFilterRep(e.target.value || null)}
+                      className="w-full bg-secondary text-foreground text-xs pl-3 pr-8 py-2 rounded-md border border-border appearance-none cursor-pointer"
+                    >
+                      <option value="">Todos os Representantes</option>
+                      {reps.filter(r => !r.isVago).sort((a,b) => a.name.localeCompare(b.name)).map(r => (
+                        <option key={r.code} value={r.code}>{r.code} — {r.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Municipality Filter */}
               {selectedUF && (

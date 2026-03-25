@@ -22,7 +22,7 @@ export default function MapLegend({
   onToggleVagos,
   clients,
 }: MapLegendProps) {
-  const { token } = useAuth();
+  const { token, role, repCode } = useAuth();
   const { data: representatives = [] } = useApiRepresentatives(!!token);
 
   // Get the set of repCodes that have clients in the selected UF
@@ -31,7 +31,9 @@ export default function MapLegend({
     : null;
 
   // Filter reps: if a UF is selected, show only those who have clients there
+  // Also, if not an admin, restrict the list ENTIRELY to the user's repCode.
   const relevantReps = representatives.filter(rep => {
+    if (role !== 'admin' && rep.code !== repCode) return false;
     if (!repCodesInUF) return true;
     return repCodesInUF.has(rep.code);
   });
@@ -72,7 +74,7 @@ export default function MapLegend({
           activeReps.map((rep) => (
             <button
               key={rep.code}
-              onClick={() => onFilterRep(filtroRepresentante === rep.code ? null : rep.code)}
+              onClick={() => role === 'admin' ? onFilterRep(filtroRepresentante === rep.code ? null : rep.code) : undefined}
               className={`w-full group flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-all duration-300 relative overflow-hidden ${
                 filtroRepresentante === rep.code
                   ? "bg-primary/20 border-primary/40 shadow-inner"
@@ -121,7 +123,7 @@ export default function MapLegend({
           </button>
         )}
 
-        {filtroRepresentante && (
+        {filtroRepresentante && role === 'admin' && (
           <button
             onClick={() => onFilterRep(null)}
             className="w-full h-8 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-lg transition-all border border-transparent hover:border-primary/20"

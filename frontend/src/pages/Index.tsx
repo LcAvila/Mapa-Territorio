@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import BrazilMap from "@/components/BrazilMap";
 import MapHeader from "@/components/MapHeader";
@@ -11,20 +11,28 @@ import { getUFBySigla } from "@/data/uf-codes";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import ClientDetailPanel from "@/components/ClientDetailPanel";
+import RepresentativePanel from "@/components/RepresentativePanel";
 import { useApiRepresentatives, useApiClientes, useApiTerritories, Cliente, SearchSuggestion, GeoJSONFeature, Representative } from "@/hooks/use-api-data";
 
 const Index = () => {
-  const { isAuthenticated, role, logout } = useAuth();
+  const { isAuthenticated, role, logout, repCode } = useAuth();
   const navigate = useNavigate();
   const [selectedUF, setSelectedUF] = useState<string | null>(null);
   const [modo, setModo] = useState<"planejamento" | "atendimento">("planejamento");
-  const [filtroRepresentante, setFiltroRepresentante] = useState<string | null>(null);
+  const [filtroRepresentante, setFiltroRepresentante] = useState<string | null>(role !== 'admin' && repCode ? repCode : null);
+
+  useEffect(() => {
+    if (role !== 'admin' && repCode) {
+      setFiltroRepresentante(repCode);
+    }
+  }, [role, repCode]);
   const [mostrarVagos, setMostrarVagos] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMunicipio, setSelectedMunicipio] = useState<{ nome: string; uf: string; id?: number } | null>(null);
   const [municipioCodeForBairros, setMunicipioCodeForBairros] = useState<number | null>(null);
   const [showClientes, setShowClientes] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
+  const [showReps, setShowReps] = useState(false);
   const [flyToLocation, setFlyToLocation] = useState<{ center: [number, number]; zoom: number } | null>(null);
   
   const [searchSuggestions, setSearchSuggestions] = useState<SearchSuggestion[]>([]);
@@ -259,6 +267,8 @@ const Index = () => {
         onToggleClientes={() => setShowClientes(!showClientes)}
         showHeatmap={showHeatmap}
         onToggleHeatmap={() => setShowHeatmap(!showHeatmap)}
+        showReps={showReps}
+        onToggleReps={() => setShowReps(!showReps)}
         onSearchEnter={handleAddressSearch}
         suggestions={searchSuggestions}
         onSelectSuggestion={handleSelectSuggestion}
@@ -299,6 +309,7 @@ const Index = () => {
           searchResultGeo={searchResultGeo}
           selectedClients={selectedClients}
           onSelectClients={setSelectedClients}
+          onResetMap={() => setFlyToLocation({ center: [-14.2, -51.9], zoom: 4 })}
         />
 
         {/* Legend overlay - bottom left */}
@@ -334,10 +345,16 @@ const Index = () => {
           </div>
         )}
 
-        {/* Client detail panel - right (floating lower or same area) */}
+        {/* Client detail panel */}
         <AnimatePresence>
           {selectedClients.length > 0 && (
-            <div className={`absolute ${selectedMunicipio ? 'top-[440px]' : 'top-4'} right-4 z-[1001]`}>
+            <motion.div 
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: showReps ? -290 : 0, opacity: 1 }}
+              exit={{ x: 20, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className={`absolute ${selectedMunicipio ? 'top-[440px]' : 'top-4'} right-4 z-[1002]`}
+            >
               <ClientDetailPanel
                 clients={selectedClients}
                 onClose={() => setSelectedClients([])}
@@ -346,6 +363,31 @@ const Index = () => {
                     center: [client.latitude, client.longitude],
                     zoom: 17
                   });
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Representative Panel */}
+        <AnimatePresence>
+          {showReps && (
+            <div className="absolute top-4 right-4 z-[1001]">
+              <RepresentativePanel
+                reps={apiReps as Representative[]}
+                clients={apiClientes}
+                territories={apiTerritories}
+                selectedRep={filtroRepresentante}
+                onSelectRep={(code) => {
+                  setFiltroRepresentante(code);
+                  // Show clients on map when a rep is selected
+                  if (code) setShowClientes(true);
+                }}
+                onClose={() => setShowReps(false)}
+                onZoomToRep={(rep) => {
+                  // The existing useEffect in Index handles zoom-to-rep when filtroRepresentante changes
+                  setFiltroRepresentante(rep.code);
+                  setShowClientes(true);
                 }}
               />
             </div>
