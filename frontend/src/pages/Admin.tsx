@@ -247,7 +247,7 @@ export default function Admin() {
 
   const { role } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>('comunidade');
-  const [expandedMenus, setExpandedMenus] = useState<string[]>(['settings', 'rotas_menu']);
+  const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
 
   // ── Brand / Personalização ────────────────────────────────────────────────
   const [brandLogo, setBrandLogo] = useState<string>(() => localStorage.getItem('brand_logo') || '');
