@@ -62,12 +62,20 @@ async function main() {
     let repCode = repCodeMatch ? repCodeMatch[1] : null;
 
     if (repCode) {
-      const repExists = await prisma.representative.findUnique({ where: { code: repCode } });
+      const repExists = await prisma.user.findUnique({ where: { repCode } });
       if (!repExists) {
-        // Try creating the representative if it doesn't exist (extracted from Repres string)
+        // Try creating the representative via User model if it doesn't exist
         const namePart = represRaw.replace(/^\d+\s*-\s*/, '').trim();
-        await prisma.representative.create({
-          data: { code: repCode, name: namePart }
+        const defaultPassword = await bcrypt.hash('123456', 10);
+        await prisma.user.create({
+          data: { 
+            repCode, 
+            full_name: namePart,
+            username: `rep_${repCode}`,
+            password: defaultPassword,
+            role: 'representante',
+            tipo: 'representante'
+          }
         });
       }
     }

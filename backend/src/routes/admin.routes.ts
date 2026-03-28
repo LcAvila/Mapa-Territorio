@@ -17,8 +17,9 @@ const requireAdminMiddleware = (req: any, res: any, next: any) => {
 };
 
 const PUBLIC_USER_FIELDS = { 
-  id: true, username: true, role: true, repCode: true, tipo: true, 
-  full_name: true, cpf_cnpj: true, telefone: true, photo: true, 
+  id: true, username: true, role: true, repCode: true, code: true, tipo: true, 
+  full_name: true, cpf_cnpj: true, telefone: true, cargo: true, company_name: true, groupId: true,
+  photo: true, birth_date: true, colorIndex: true, comissao: true, isVago: true,
   created_at: true, last_active: true 
 };
 
@@ -45,28 +46,75 @@ router.get('/users', requirePermission('users', 'view'), async (req, res) => {
   res.json(users);
 });
 
-router.post('/users', requireAdminMiddleware, async (req, res) => {
-  const { username, password, role, tipo, full_name, repCode, photo } = req.body;
-  const existing = await prisma.user.findUnique({ where: { username } });
-  if (existing) return res.status(409).json({ message: 'Username já existe' });
+router.post('/users', requirePermission('users', 'edit'), async (req, res) => {
+  const { username, password, role, tipo, full_name, repCode, code, photo, colorIndex, comissao, isVago, telefone, cpf_cnpj, birth_date, cargo, company_name, groupId } = req.body;
   
-  const hashedPassword = password ? await bcrypt.hash(password, 10) : await bcrypt.hash('123456', 10);
-  const user = await prisma.user.create({ data: { username, password: hashedPassword, role: role || 'user', tipo: tipo || 'representante', full_name, repCode, photo }, select: PUBLIC_USER_FIELDS });
+  if (!code) return res.status(400).json({ message: 'Código é obrigatório' });
+
+  const existing = await prisma.user.findFirst({ 
+    where: { code } 
+  });
+  if (existing) {
+    return res.status(409).json({ message: `Código já existe` });
+  }
+  
+  // Password validation
+  if (password) {
+    const { validatePasswordStrength } = require('../middlewares/security');
+    if (!validatePasswordStrength(password)) {
+      return res.status(400).json({ message: 'A senha deve conter letras maiúsculas, minúsculas, números e símbolos.' });
+    }
+  }
+
+  const hashedPassword = password ? await bcrypt.hash(password, 10) : await bcrypt.hash('Mapa@123', 10);
+  const user = await prisma.user.create({ 
+    data: { 
+      username: username || code, 
+      password: hashedPassword, 
+      role: role || 'user', 
+      tipo: tipo || 'cliente', 
+      full_name, 
+      repCode, 
+      code,
+      photo,
+      telefone,
+      cpf_cnpj,
+      cargo,
+      company_name,
+      groupId: groupId ? Number(groupId) : null,
+      birth_date: birth_date ? new Date(birth_date) : null,
+      colorIndex: colorIndex !== undefined ? Number(colorIndex) : 0,
+      comissao: comissao ? parseFloat(comissao) : null,
+      isVago: isVago ? 1 : 0
+    }, 
+    select: PUBLIC_USER_FIELDS 
+  });
   res.status(201).json(user);
 });
 
-router.put('/users/:id', requireAdminMiddleware, async (req, res) => {
+router.put('/users/:id', requirePermission('users', 'edit'), async (req, res) => {
   const id = Number(req.params.id);
-  const { username, password, role, repCode, tipo, full_name, photo } = req.body;
+  const { username, password, role, repCode, tipo, full_name, photo, colorIndex, comissao, isVago, telefone, cpf_cnpj, birth_date, cargo, company_name, groupId } = req.body;
   
   const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ message: 'Usuário não encontrado' });
   
-  const usernameCheck = await prisma.user.findFirst({ where: { username, id: { not: id } } });
-  if (usernameCheck) return res.status(409).json({ message: 'Username já em uso' });
-  
-  const data: any = { username, role, repCode, tipo, full_name };
+  const data: any = { 
+    username, role, repCode, tipo, full_name, telefone, cpf_cnpj, cargo, company_name,
+    groupId: groupId !== undefined ? (groupId ? Number(groupId) : null) : undefined,
+    birth_date: birth_date ? new Date(birth_date) : undefined,
+    colorIndex: colorIndex !== undefined ? Number(colorIndex) : undefined,
+    comissao: comissao !== undefined ? (comissao ? parseFloat(comissao) : null) : undefined,
+    isVago: isVago !== undefined ? (isVago ? 1 : 0) : undefined
+  };
+
+  // NOTE: 'code' is purposely excluded from data to prevent editing after creation.
+
   if (password) {
+    const { validatePasswordStrength } = require('../middlewares/security');
+    if (!validatePasswordStrength(password)) {
+      return res.status(400).json({ message: 'A senha deve conter letras maiúsculas, minúsculas, números e símbolos.' });
+    }
     data.password = await bcrypt.hash(password, 10);
     // @ts-ignore
     data.token_version = { increment: 1 };
@@ -86,82 +134,49 @@ router.delete('/users/:id', requireAdminMiddleware, async (req, res) => {
   res.json({ message: 'Usuário excluído com sucesso' });
 });
 
-// --- REPS ---
-router.post('/reps', requireAdminMiddleware, async (req, res) => {
-  const { code, name, fullName, email, contato, endereco, bairro, cidade, uf, cep, comissao, isVago } = req.body;
-  if (!code) return res.status(400).json({ message: 'Código é obrigatório' });
-  
-  try {
-    const rep = await prisma.representative.create({ 
-      data: { 
-        code, 
-        name, 
-        fullName, 
-        email, 
-        contato, 
-        endereco, 
-        bairro, 
-        cidade, 
-        uf, 
-        cep, 
-        comissao: comissao ? parseFloat(comissao) : null,
-        isVago: isVago ? 1 : 0, 
-        colorIndex: req.body.colorIndex !== undefined ? Number(req.body.colorIndex) : Math.floor(Math.random() * 12) + 1
-      } 
-    });
-    res.json(rep);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao criar representante' });
-  }
-});
-
+// --- REPS (Now based on Users filtering) ---
 router.get('/reps', requirePermission('reps', 'view'), async (req, res) => {
   const user = (req as any).user;
-  const where: any = {};
+  const where: any = {
+    OR: [
+      { tipo: 'representante' },
+      { role: 'user' }, // Adjusting to return all potential representatives
+      { NOT: { repCode: null } }
+    ]
+  };
+
   if (user && user.role === 'representante' && user.repCode) {
-    where.code = user.repCode;
+    where.repCode = user.repCode;
   }
 
-  const reps = await prisma.representative.findMany({ 
+  const reps = await prisma.user.findMany({ 
     where,
-    include: {
+    select: {
+      repCode: true,
+      full_name: true,
+      username: true,
+      colorIndex: true,
+      isVago: true,
+      comissao: true,
       _count: {
         select: { clientes: true, territories: true }
       }
     },
-    orderBy: { code: 'asc' } 
+    orderBy: { repCode: 'asc' } 
   });
-  res.json(reps);
-});
 
-router.put('/reps/:code', requireAdminMiddleware, async (req, res) => {
-  const { code } = req.params;
-  const { name, fullName, email, contato, endereco, bairro, cidade, uf, cep, comissao, isVago } = req.body;
-  
-  try {
-    const rep = await prisma.representative.update({
-      where: { code },
-      data: { 
-        name, 
-        fullName, 
-        email, 
-        contato, 
-        endereco, 
-        bairro, 
-        cidade, 
-        uf, 
-        cep, 
-        comissao: comissao ? parseFloat(comissao) : null,
-        isVago: isVago ? 1 : 0,
-        colorIndex: req.body.colorIndex !== undefined ? Number(req.body.colorIndex) : undefined
-      }
-    });
-    res.json(rep);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao atualizar representante' });
-  }
+  // Map to the Representative format the frontend expects
+  const formattedReps = reps.map(r => ({
+    code: r.repCode || '',
+    name: r.full_name || r.username,
+    fullName: r.full_name,
+    colorIndex: r.colorIndex,
+    isVago: r.isVago,
+    comissao: r.comissao,
+    _count: r._count
+  })).filter(r => r.code !== ''); // Ensure only those with repCode are treated as reps
+
+  res.json(formattedReps);
 });
 
 // --- TERRITORIES ---
@@ -202,6 +217,11 @@ router.post('/bairros/import', requireAdminMiddleware, async (req, res) => {
 router.get('/modules', async (req, res) => {
   const modules = await (prisma as any).module.findMany({ orderBy: { name: 'asc' } });
   res.json(modules);
+});
+
+router.get('/groups', async (req, res) => {
+  const groups = await prisma.group.findMany({ orderBy: { name: 'asc' } });
+  res.json(groups);
 });
 
 router.get('/users/:id/permissions', async (req, res) => {

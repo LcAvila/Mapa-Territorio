@@ -1,47 +1,78 @@
 /// <reference types="node" />
 import { PrismaClient } from '@prisma/client';
-import * as xlsx from 'xlsx';
-import * as path from 'path';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const excelPath = path.resolve(__dirname, '../../frontend/public/Representantes/Tabela Representantes.xlsx');
-  console.log('Lendo arquivo Excel:', excelPath);
+  console.log('Iniciando seed de limpeza e configuração...');
 
-  const workbook = xlsx.readFile(excelPath);
-  const sheetName = workbook.SheetNames[0];
-  const worksheet = workbook.Sheets[sheetName];
-  
-  // Converte para JSON
-  const data: any[] = xlsx.utils.sheet_to_json(worksheet);
+  // Create Admin if not exists
+  const adminPassword = await bcrypt.hash('avila123', 10);
+  await prisma.user.upsert({
+    where: { username: 'admin' },
+    update: {},
+    create: {
+      username: 'admin',
+      password: adminPassword,
+      full_name: 'Administrador',
+      role: 'admin',
+      tipo: 'admin'
+    }
+  });
+  console.log('Administrador garantido!');
 
-  console.log(`Encontrados ${data.length} registros no Excel.`);
+  // --- MÓDULOS DO SISTEMA ---
+  const modules = [
+    { id: 'dashboard', name: 'DashboardPrincipal' },
+    { id: 'mapa', name: 'MapaInterativo' },
+    { id: 'users', name: 'GerenciamentoUsuarios' },
+    { id: 'clientes', name: 'CadastroClientes' },
+    { id: 'territories', name: 'GestaoTerritorios' },
+    { id: 'reps', name: 'EquipeRepresentantes' },
+    { id: 'logistica', name: 'PlanejamentoLogistico' }
+  ];
 
-  for (const row of data) {
-    const code = String(row['cod-rep']);
-    const name = row['nome-abrev'] || null;
-    const fullName = row['nome'] || null;
-
-    if (!code || code === 'undefined') continue;
-
-    await prisma.representative.upsert({
-      where: { code },
-      update: {
-        name,
-        fullName,
-      },
-      create: {
-        code,
-        name,
-        fullName,
-        isVago: 0,
-        colorIndex: 0,
-      },
+  for (const mod of modules) {
+    await prisma.module.upsert({
+      where: { id: mod.id },
+      update: { name: mod.name },
+      create: mod
     });
   }
+  console.log('Módulos sincronizados!');
 
-  console.log('Seed de representantes concluído com sucesso!');
+  // --- PERMISSÕES ADMIN ---
+  const adminUser = await prisma.user.findUnique({ where: { username: 'admin' } });
+  if (adminUser) {
+    for (const mod of modules) {
+      await (prisma as any).userPermission.upsert({
+        where: {
+          userId_moduleId: {
+            userId: adminUser.id,
+            moduleId: mod.id
+          }
+        },
+        update: { canView: true, canEdit: true },
+        create: {
+          userId: adminUser.id,
+          moduleId: mod.id,
+          canView: true,
+          canEdit: true
+        }
+      });
+    }
+    console.log('Permissões do administrador configuradas!');
+  }
+
+  // Criar grupo padrão se não existir
+  await prisma.group.upsert({
+    where: { name: 'Geral' },
+    update: {},
+    create: { name: 'Geral' }
+  });
+
+  console.log('Seed concluído com sucesso!');
 }
 
 main()

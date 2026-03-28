@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as xlsx from 'xlsx';
 import * as path from 'path';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -29,35 +30,44 @@ async function main() {
     const name = fullName.split(' ')[0]; // fallback short name
     
     try {
-      await prisma.representative.upsert({
-        where: { code },
-        update: {
-          fullName,
-          endereco: row[1] || null,
-          bairro: row[2] || null,
-          cidade: row[3] || null,
-          uf: row[4] || null,
-          cep: String(row[5] || ''),
-          email: row[6] || null,
-          contato: row[7] || null,
-          comissao: row[9] ? parseFloat(row[9]) : null
-        },
-        create: {
-          code,
-          name,
-          fullName,
-          endereco: row[1] || null,
-          bairro: row[2] || null,
-          cidade: row[3] || null,
-          uf: row[4] || null,
-          cep: String(row[5] || ''),
-          email: row[6] || null,
-          contato: row[7] || null,
-          comissao: row[9] ? parseFloat(row[9]) : null,
-          isVago: 0,
-          colorIndex: Math.floor(Math.random() * 20)
-        }
-      });
+      const defaultPassword = await bcrypt.hash('123456', 10);
+      const existing = await prisma.user.findUnique({ where: { repCode: code } });
+      
+      if (existing) {
+        await prisma.user.update({
+          where: { repCode: code },
+          data: {
+            full_name: fullName,
+            logradouro: row[1] || null,
+            bairro_end: row[2] || null,
+            cidade: row[3] || null,
+            estado_end: row[4] || null,
+            cep: String(row[5] || ''),
+            telefone: row[7] || null,
+            comissao: row[9] ? parseFloat(row[9]) : null
+          }
+        });
+      } else {
+        await prisma.user.create({
+          data: {
+            repCode: code,
+            username: `rep_${code}`,
+            password: defaultPassword,
+            full_name: fullName,
+            logradouro: row[1] || null,
+            bairro_end: row[2] || null,
+            cidade: row[3] || null,
+            estado_end: row[4] || null,
+            cep: String(row[5] || ''),
+            telefone: row[7] || null,
+            comissao: row[9] ? parseFloat(row[9]) : null,
+            isVago: 0,
+            colorIndex: Math.floor(Math.random() * 20),
+            role: 'representante',
+            tipo: 'representante'
+          }
+        });
+      }
       count++;
     } catch (e) {
       console.error(`Erro ao importar representante ${code}:`, e);

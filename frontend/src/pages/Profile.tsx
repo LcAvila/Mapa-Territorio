@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { Camera, Save, ArrowLeft, User, MapPin, Phone, FileText, Lock, ShieldCheck, Loader2, Building2, ChevronDown } from 'lucide-react';
+import { Camera, Save, ArrowLeft, User, MapPin, Phone, FileText, Lock, ShieldCheck, Loader2, Building2, ChevronDown, Fingerprint } from 'lucide-react';
 
 const API = 'http://localhost:3001';
 
@@ -29,6 +29,8 @@ interface UserProfile {
     estado_end: string | null;
     photo: string | null;
     created_at: string;
+    birth_date: string | null;
+    code: string | null;
 }
 
 const TIPO_LABELS: Record<string, string> = {
@@ -61,7 +63,7 @@ export default function Profile() {
         cep: '', logradouro: '', numero: '', complemento: '',
         bairro_end: '', cidade: '', estado_end: '',
         password: '', confirm_password: '',
-        photo: '',
+        photo: '', birth_date: '',
     });
 
     const authHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
@@ -84,6 +86,7 @@ export default function Profile() {
                     cidade: data.cidade || '',
                     estado_end: data.estado_end || '',
                     photo: data.photo || '',
+                    birth_date: data.birth_date ? new Date(data.birth_date).toISOString().split('T')[0] : '',
                 }));
             })
             .catch(() => toast.error('Erro ao carregar perfil'))
@@ -144,8 +147,17 @@ export default function Profile() {
             cidade: form.cidade,
             estado_end: form.estado_end,
             photo: form.photo || null,
+            birth_date: form.birth_date || null,
         };
-        if (form.password) body.password = form.password;
+        if (form.password) {
+            const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{6,}$/;
+            if (!passwordRegex.test(form.password)) {
+                toast.error('A senha deve conter letras maiúsculas, minúsculas, números e símbolos.');
+                setSaving(false);
+                return;
+            }
+            body.password = form.password;
+        }
 
         try {
             const res = await fetch(`${API}/api/me`, {
@@ -228,7 +240,15 @@ export default function Profile() {
                                 {/* Identity */}
                                 <div className="flex-1 space-y-4">
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Código / Login</label>
+                                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Código Único (ID)</label>
+                                        <div className="flex items-center gap-2 px-3 py-2.5 bg-primary/10 rounded-lg border border-primary/20">
+                                            <Fingerprint className="w-3.5 h-3.5 text-primary" />
+                                            <span className="text-sm font-mono font-bold text-primary">{profile?.code}</span>
+                                            <span className="text-[10px] text-muted-foreground ml-auto">(imutável)</span>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">E-mail / Login</label>
                                         <div className="flex items-center gap-2 px-3 py-2.5 bg-secondary/50 rounded-lg border border-border/40">
                                             <Lock className="w-3.5 h-3.5 text-muted-foreground" />
                                             <span className="text-sm font-mono font-bold text-foreground">{profile?.username}</span>
@@ -296,6 +316,15 @@ export default function Profile() {
                                                     onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))}
                                                 />
                                             </div>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">Data de Nascimento</label>
+                                            <Input
+                                                type="date"
+                                                value={form.birth_date}
+                                                onChange={e => setForm(f => ({ ...f, birth_date: e.target.value }))}
+                                                className="bg-secondary border-border/40 text-foreground focus-visible:ring-primary/50"
+                                            />
                                         </div>
                                     </div>
                                 </CardContent>

@@ -25,20 +25,19 @@ async function main() {
     // Derive repCode from the login itself: REP010 → strip 'REP' → '010' → remove leading zeros → '10'
     const repCode = username.replace(/^REP/i, '').replace(/^0+/, '') || '0';
 
-    // Verify the representative exists in the DB
-    const rep = await prisma.representative.findUnique({ where: { code: repCode } });
-    if (!rep) {
-      console.warn(`WARNING: No representative found for code "${repCode}" (login: ${username}). Skipping.`);
-      continue;
-    }
+    // Verify the representative exists in the DB (now via User model)
+    const rep = await prisma.user.findUnique({ where: { repCode } });
 
     const existing = await prisma.user.findUnique({ where: { username } });
+    const hashedPassword = await bcrypt.hash(passwordRaw, 10);
+
     if (existing) {
       console.log(`Updating existing user ${username} → repCode=${repCode}`);
       await prisma.user.update({
         where: { id: existing.id },
         data: {
           repCode,
+          password: hashedPassword,
           full_name: fullName || existing.full_name,
           role: 'representante',
           tipo: 'representante',
@@ -47,7 +46,22 @@ async function main() {
       continue;
     }
 
-    const hashedPassword = await bcrypt.hash(passwordRaw, 10);
+    if (rep) {
+      console.log(`Updating existing representative by repCode ${repCode} to new username ${username}`);
+      await prisma.user.update({
+        where: { id: rep.id },
+        data: {
+          username,
+          password: hashedPassword,
+          full_name: fullName || rep.full_name,
+          role: 'representante',
+          tipo: 'representante',
+        }
+      });
+      continue;
+    }
+
+    // Attempt to create if neither exist.
     await prisma.user.create({
       data: {
         username,
@@ -58,7 +72,7 @@ async function main() {
         repCode,
       }
     });
-    console.log(`Created user ${username} → repCode=${repCode} (${rep.name})`);
+    console.log(`Created user ${username} → repCode=${repCode}`);
   }
 
   console.log('Done!');

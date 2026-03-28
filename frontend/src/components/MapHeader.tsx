@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck, Users, Flame, Filter, X, UserCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { UF_DATA } from "@/data/uf-codes";
@@ -21,10 +21,10 @@ interface AdminNotification {
 }
 
 interface MapHeaderProps {
-  selectedUF: string | null;
-  onSelectUF: (uf: string | null) => void;
-  searchQuery: string;
-  onSearchChange: (q: string) => void;
+  selectedUF?: string | null;
+  onSelectUF?: (uf: string | null) => void;
+  searchQuery?: string;
+  onSearchChange?: (q: string) => void;
   isAuthenticated: boolean;
   role: string | null;
   logout: () => void;
@@ -37,11 +37,12 @@ interface MapHeaderProps {
   onSearchEnter?: (q: string) => void;
   suggestions?: SearchSuggestion[];
   onSelectSuggestion?: (item: SearchSuggestion) => void;
-  reps: Representative[];
-  clients: Cliente[];
-  filtroRepresentante: string | null;
-  onFilterRep: (code: string | null) => void;
+  reps?: Representative[];
+  clients?: Cliente[];
+  filtroRepresentante?: string | null;
+  onFilterRep?: (code: string | null) => void;
   onSelectClient?: (client: Cliente) => void;
+  minimal?: boolean;
 }
 
 export default function MapHeader({
@@ -50,9 +51,11 @@ export default function MapHeader({
   showClientes, onToggleClientes, showHeatmap, onToggleHeatmap,
   showReps, onToggleReps,
   onSearchEnter, suggestions, onSelectSuggestion,
-  reps, clients, filtroRepresentante, onFilterRep, onSelectClient
+  reps = [], clients = [], filtroRepresentante, onFilterRep, onSelectClient,
+  minimal = false
 }: MapHeaderProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { repCode, userName } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
@@ -94,15 +97,29 @@ export default function MapHeader({
   return (
     <header className="bg-card border-b border-border px-4 py-3 flex items-center gap-4 flex-wrap">
       {/* Logo / Title */}
-      <div className="flex items-center gap-2 mr-4">
+      <div className="flex items-center gap-2 mr-4 cursor-pointer" onClick={() => navigate('/mapa')}>
         <MapPin className="w-5 h-5 text-primary" />
         <h1 className="text-base font-bold text-foreground tracking-tight">
           Territórios de Vendas
         </h1>
       </div>
 
+      {/* Navigation Links */}
+      {isAuthenticated && (
+        <div className="hidden md:flex items-center gap-1 mr-4">
+           <Button variant="ghost" size="sm" onClick={() => navigate('/')} className={`gap-2 ${location.pathname === '/' ? 'bg-secondary' : ''}`}>
+             <Users className="w-4 h-4" /> Comunidade
+           </Button>
+           <Button variant="ghost" size="sm" onClick={() => navigate('/mapa')} className={`gap-2 ${location.pathname === '/mapa' ? 'bg-secondary' : ''}`}>
+             <MapPin className="w-4 h-4" /> Mapa
+           </Button>
+        </div>
+      )}
+
       {/* UF Selector */}
-      <div className="relative">
+      {!minimal && (
+        <>
+        <div className="relative">
         <select
           value={selectedUF || ""}
           onChange={(e) => onSelectUF(e.target.value || null)}
@@ -119,7 +136,7 @@ export default function MapHeader({
       </div>
 
       {/* General Search Bar */}
-      <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto order-last sm:order-none w-full sm:w-auto mt-2 sm:mt-0 relative">
+        <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto order-last sm:order-none w-full sm:w-auto mt-2 sm:mt-0 relative">
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
@@ -159,7 +176,7 @@ export default function MapHeader({
       </div>
 
       {/* Map Layers & Advanced Filters */}
-      <div className="flex items-center gap-2 bg-secondary/50 rounded-lg p-1 border border-border/50">
+        <div className="flex items-center gap-2 bg-secondary/50 rounded-lg p-1 border border-border/50">
         <Button
           variant={showClientes ? "default" : "ghost"}
           size="sm"
@@ -274,6 +291,8 @@ export default function MapHeader({
           </PopoverContent>
         </Popover>
       </div>
+      </>
+      )}
 
       {/* Auth / Admin */}
       <div className="flex items-center gap-2 ml-auto lg:ml-0">
@@ -295,11 +314,9 @@ export default function MapHeader({
               </div>
             )}
             
-            {role === 'admin' && (
-              <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="gap-2 h-8 px-2">
-                <Settings className="w-4 h-4" /> <span className="hidden sm:inline">Admin</span>
-              </Button>
-            )}
+            <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="gap-2 h-8 px-2">
+              <Settings className="w-4 h-4" /> <span className="hidden sm:inline">{role === 'admin' ? 'Admin' : 'Painel'}</span>
+            </Button>
             <Button variant="ghost" size="sm" onClick={logout} className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10">
               <LogOut className="w-4 h-4" />
             </Button>

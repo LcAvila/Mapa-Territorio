@@ -59,8 +59,18 @@ export const requirePermission = (moduleId: string, level: 'view' | 'edit' = 'vi
   return async (req: AuthRequest, res: ExResponse, next: ExNextFunction) => {
     if (!req.user) return res.status(401).json({ message: 'Não autenticado' });
     
-    // Admin has full access
-    if (req.user.role === 'admin') return next();
+    // Admin and Supervisor have full access bypass
+    if (req.user.role === 'admin' || req.user.role === 'supervisor') return next();
+
+    // Representatives have default view access to their data modules
+    const DEFAULT_REP_VIEW_MODULES = ['clients', 'reps', 'territories', 'interests', 'groups'];
+    const isRep = req.user.role === 'representante' || (req.user as any).type === 'representante' || (req.user as any).tipo === 'representante';
+
+    if (isRep && level === 'view' && DEFAULT_REP_VIEW_MODULES.includes(moduleId)) {
+      return next();
+    }
+
+    console.log(`[Permission] Manual check for User ${req.user.id} (${req.user.role}/${(req.user as any).type}): ${moduleId}.${level}`);
 
     try {
       // Import prisma dynamically to avoid circular dependencies if any

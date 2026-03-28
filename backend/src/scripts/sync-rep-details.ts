@@ -27,14 +27,20 @@ async function main() {
 
     const repCode = username.replace(/^REP/i, '').replace(/^0+/, '') || '0';
 
-    // Update user record
-    const user = await prisma.user.findUnique({ where: { username } });
+    // Update user record (since Representative was merged into User)
+    let user = await prisma.user.findUnique({ where: { username } });
+    
+    // Fallback to checking by repCode if not found by username
+    if (!user && repCode) {
+      user = await prisma.user.findUnique({ where: { repCode } });
+    }
+
     if (user) {
       await prisma.user.update({
         where: { id: user.id },
         data: {
           full_name: fullName || user.full_name,
-          telefone: telefone || user.telefone,
+          telefone: telefone || contato || user.telefone,
           cidade: cidade || user.cidade,
           estado_end: estado || user.estado_end,
           cep: cep ? String(cep).padStart(8, '0') : user.cep,
@@ -42,26 +48,9 @@ async function main() {
           bairro_end: bairro || user.bairro_end,
         }
       });
-      console.log(`Updated user ${username}`);
-    }
-
-    // Update representative record
-    const rep = await prisma.representative.findUnique({ where: { code: repCode } });
-    if (rep) {
-      await prisma.representative.update({
-        where: { code: repCode },
-        data: {
-          fullName: fullName || rep.fullName,
-          email: email || rep.email,
-          contato: contato || rep.contato,
-          cidade: cidade || rep.cidade,
-          uf: estado || rep.uf,
-          cep: cep ? String(cep).padStart(8, '0') : rep.cep,
-          endereco: endereco || rep.endereco,
-          bairro: bairro || rep.bairro,
-        }
-      });
-      console.log(`Updated rep ${repCode} (${fullName})`);
+      console.log(`Updated user ${user.username} (repCode: ${repCode})`);
+    } else {
+      console.log(`User not found for username ${username} or repCode ${repCode}`);
     }
   }
 

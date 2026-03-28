@@ -6,9 +6,14 @@ const API_BASE = 'http://localhost:3001';
 export interface Representative {
   code: string;
   name: string;
-  fullName: string;
-  isVago: boolean;
+  fullName?: string;
+  isVago: boolean | number;
   colorIndex: number;
+  comissao?: number;
+  _count?: {
+    clientes: number;
+    territories: number;
+  };
 }
 
 export interface TerritoryAssignment {

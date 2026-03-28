@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 
-export interface ClienteData { 
-  id_cliente?: number; 
-  codigo_cliente?: string; 
-  nome_cliente?: string; 
-  nome_abreviado?: string; 
-  uf?: string; 
-  cidade?: string; 
-  repCode?: string; 
-  [key: string]: unknown; 
+export interface ClienteData {
+  id_cliente?: number;
+  codigo_cliente?: string;
+  nome_cliente?: string;
+  nome_abreviado?: string;
+  uf?: string;
+  cidade?: string;
+  repCode?: string;
+  [key: string]: unknown;
 }
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,14 +43,15 @@ import { LeituraPlanilhaPanel } from '../components/admin/rotas/LeituraPlanilhaP
 import { RotasProvider } from '../contexts/RotasContext';
 import MiniMapBrasil from '../components/admin/MiniMapBrasil';
 import UserProfileManager from '../components/admin/users/UserProfileManager';
+import { SocialFeedPanel } from '../components/admin/SocialFeedPanel';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
-interface Representative { 
-  code: string; 
-  name: string; 
-  fullName: string; 
-  isVago: boolean; 
-  colorIndex: number; 
+interface Representative {
+  code: string;
+  name: string;
+  fullName: string;
+  isVago: boolean;
+  colorIndex: number;
   email?: string;
   contato?: string;
   endereco?: string;
@@ -62,7 +63,7 @@ interface Representative {
   _count?: { clientes: number; territories: number; };
 }
 interface Territory { id: number; municipio: string; uf: string; repCode: string; modo: string; }
-interface SystemUser { id: number; username: string; role: string; repCode: string | null; fullName?: string; full_name?: string; document?: string; cpf_cnpj?: string; documentType?: 'cpf' | 'cnpj'; companyName?: string; age?: number; email?: string; photo?: string; last_active?: string; }
+interface SystemUser { id: number; username: string; role: string; repCode: string | null; code?: string; fullName?: string; full_name?: string; document?: string; cpf_cnpj?: string; documentType?: 'cpf' | 'cnpj'; companyName?: string; company_name?: string; birth_date?: string; birthDate?: string; telefone?: string; email?: string; photo?: string; cargo?: string; groupId?: number; last_active?: string; }
 interface InterestRequest { id: number; nome: string; email: string | null; telefone: string | null; empresa: string | null; municipio: string; uf: string; modo: string | null; observacoes: string | null; status: 'pending' | 'accepted' | 'rejected'; created_at: string; }
 
 interface Group { id: string; name: string; repCodes: string[]; createdAt: string; }
@@ -70,7 +71,7 @@ interface Notification { id: string; title: string; message: string; targetAll: 
 interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; repCode?: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; }
 interface ModulePermission { userId: number; moduleId: string; canView: boolean; canEdit: boolean; }
 
-type TabId = 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha';
+type TabId = 'comunidade' | 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha';
 
 interface NavItem {
   id: TabId | 'settings' | 'rotas_menu';
@@ -142,6 +143,55 @@ function SearchableSelect({ options, value, onChange, placeholder, disabled = fa
   );
 }
 
+// ─── Custom Select (No Search) ────────────────────────────────────────────────
+function CustomSelect({ options, value, onChange, placeholder, disabled = false, className = '' }:
+  { options: { value: string; label: string }[]; value: string; onChange: (v: string) => void; placeholder: string; disabled?: boolean; className?: string; }) {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+  const selected = options.find(o => String(o.value) === String(value));
+  
+  useEffect(() => { 
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }; 
+    document.addEventListener('mousedown', h); 
+    return () => document.removeEventListener('mousedown', h); 
+  }, []);
+
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <button 
+        type="button" 
+        disabled={disabled} 
+        onClick={() => setOpen(!open)}
+        className={`w-full h-10 flex items-center justify-between px-3 py-2 bg-background border rounded-md text-sm transition-colors ${disabled ? 'opacity-50 cursor-not-allowed border-border' : 'border-border/50 hover:border-primary/50 cursor-pointer'} ${open ? 'ring-1 ring-primary border-primary/50' : ''}`}
+      >
+        <span className={selected ? 'text-foreground font-medium' : 'text-muted-foreground'}>
+          {selected ? selected.label : placeholder}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      
+      {open && (
+        <div className="absolute z-[100] w-full mt-1 bg-popover/95 backdrop-blur-md border border-border shadow-2xl rounded-md overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+          <ul className="max-h-60 overflow-y-auto py-1">
+            {options.map(opt => (
+              <li key={opt.value}>
+                <button 
+                  type="button" 
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/80 flex items-center justify-between transition-colors ${String(opt.value) === String(value) ? 'text-primary bg-primary/10 font-bold' : 'text-foreground'}`}
+                  onClick={() => { onChange(opt.value); setOpen(false); }}
+                >
+                  <span>{opt.label}</span>
+                  {String(opt.value) === String(value) && <Check className="w-4 h-4" />}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MultiSelect for reps ─────────────────────────────────────────────────────
 function MultiRepSelect({ reps, value, onChange }: { reps: Representative[]; value: string[]; onChange: (v: string[]) => void; }) {
   const toggle = (code: string) => onChange(value.includes(code) ? value.filter(c => c !== code) : [...value, code]);
@@ -179,7 +229,7 @@ function ColorPicker({ value, onChange, disabled }: { value: number; onChange: (
 export default function Admin() {
   const { token, logout, repCode: myRepCode, userId } = useAuth();
   const navigate = useNavigate();
-  
+
   // Security: redirect if no token
   useEffect(() => {
     if (!token) navigate('/login');
@@ -194,10 +244,9 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
-  
+
   const { role } = useAuth();
-  
-  const [activeTab, setActiveTab] = useState<TabId>(role === 'supervisor' ? 'baserotas' : 'dashboard');
+  const [activeTab, setActiveTab] = useState<TabId>('comunidade');
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['settings', 'rotas_menu']);
 
   // ── Brand / Personalização ────────────────────────────────────────────────
@@ -243,9 +292,9 @@ export default function Admin() {
   const saveAuditLogs = (a: AuditLog[]) => { setAuditLogs(a); LS.set('admin_audit', a); };
 
   // ── Auth & Permissions ──────────────────────────────────────────────────
-  const authHeaders = useMemo(() => ({ 
-    'Content-Type': 'application/json', 
-    'Authorization': `Bearer ${token}` 
+  const authHeaders = useMemo(() => ({
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
   }), [token]);
 
   const [myPermissions, setMyPermissions] = useState<ModulePermission[]>([]);
@@ -282,20 +331,31 @@ export default function Admin() {
 
   // ── Reps form ──────────────────────────────────────────────────────────────
   const [editingCode, setEditingCode] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ 
-    name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '', 
-    endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: '' 
+  const [editForm, setEditForm] = useState({
+    name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '',
+    endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: ''
   });
-  const [newRep, setNewRep] = useState({ 
-    code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '', 
-    endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: '' 
+  const [newRep, setNewRep] = useState({
+    code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '',
+    endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: ''
   });
 
-  // ── Users form (enhanced) ─────────────────────────────────────────────────
-  const [newUser, setNewUser] = useState({ fullName: '', email: '', password: '', confirmPassword: '', role: 'user' as 'user' | 'supervisor' | 'admin', repCode: '', documentType: 'cpf' as 'cpf' | 'cnpj', document: '', companyName: '', age: '', photo: '' });
+  const [newUser, setNewUser] = useState({
+    fullName: '', email: '', password: '', confirmPassword: '',
+    role: 'user' as 'user' | 'supervisor' | 'admin',
+    repCode: '', code: '', documentType: 'cpf' as 'cpf' | 'cnpj',
+    document: '', companyName: '', birthDate: '', telefone: '', photo: '',
+    cargo: '', groupId: '', tipo: 'normal' as 'normal' | 'representante' | 'promotor' | 'supervisor', colorIndex: 0
+  });
+  const [groupsData, setGroupsData] = useState<{ id: number, name: string }[]>([]);
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
-  const [editUserForm, setEditUserForm] = useState({ username: '', fullName: '', document: '', password: '', confirmPassword: '', role: 'user' as 'user' | 'supervisor' | 'admin', repCode: '', photo: '' });
+  const [editUserForm, setEditUserForm] = useState({
+    username: '', fullName: '', document: '', password: '', confirmPassword: '',
+    role: 'user' as 'user' | 'supervisor' | 'admin',
+    repCode: '', code: '', photo: '', telefone: '', birthDate: '',
+    cargo: '', companyName: '', groupId: ''
+  });
   const [showEditPwd, setShowEditPwd] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [userSearch, setUserSearch] = useState('');
@@ -306,17 +366,17 @@ export default function Admin() {
       const name = (u.full_name || u.fullName || u.username).toLowerCase();
       const email = u.username.toLowerCase();
       const search = userSearch.toLowerCase();
-      
+
       const matchesSearch = name.includes(search) || email.includes(search);
       if (!matchesSearch) return false;
-      
+
       if (userFilterOnline) {
         const rawLastActive = u.last_active || (u as SystemUser & { lastActive?: string }).lastActive;
         const lastDate = rawLastActive ? new Date(rawLastActive) : null;
         const isOnline = (u.id === userId) || (lastDate && !isNaN(lastDate.getTime()) && (Date.now() - lastDate.getTime()) < 300000);
         return isOnline;
       }
-      
+
       return true;
     });
   }, [users, userSearch, userFilterOnline, userId]);
@@ -368,6 +428,13 @@ export default function Admin() {
 
 
   // ── Fetch all API data ─────────────────────────────────────────────────────
+  const fetchGroups = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/admin/groups`, { headers: authHeaders });
+      if (res.ok) setGroupsData(await res.json());
+    } catch (error) { console.error('Error fetching groups:', error); }
+  }, [authHeaders]);
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -378,7 +445,7 @@ export default function Admin() {
         fetch(`${API}/api/interest`, { headers: authHeaders }),
         fetch(`${API}/api/clientes`, { headers: authHeaders }),
       ]);
-      
+
       const responses = [rR, tR, uR, iR, cR];
       const unauth = responses.find(r => r.status === 401);
       if (unauth) {
@@ -394,11 +461,13 @@ export default function Admin() {
         setInterests(await iR.json());
         setClientes(await cR.json());
       }
+      // Also fetch groups
+      await fetchGroups();
     } catch (error) {
       console.error('Fetch error:', error);
     } finally { setLoading(false); }
-  }, [authHeaders, logout]); 
-  
+  }, [authHeaders, logout, fetchGroups]);
+
   const handleDownloadLogisticsPlan = async () => {
     try {
       setIsGeneratingPlan(true);
@@ -423,9 +492,9 @@ export default function Admin() {
     }
   };
 
-  useEffect(() => { 
-    fetchAll(); 
-    fetchMyPermissions(); 
+  useEffect(() => {
+    fetchAll();
+    fetchMyPermissions();
   }, [fetchAll, fetchMyPermissions]); // Now includes dependencies
 
 
@@ -460,22 +529,22 @@ export default function Admin() {
   const handleCreateRep = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRep.code.trim() || !newRep.name.trim()) { toast.error('Código e nome obrigatórios'); return; }
-    const res = await fetch(`${API}/api/admin/reps`, { 
-      method: 'POST', 
-      headers: authHeaders, 
-      body: JSON.stringify({ 
-        ...newRep, 
+    const res = await fetch(`${API}/api/admin/reps`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        ...newRep,
         fullName: newRep.fullName || newRep.name
-      }) 
+      })
     });
-    if (res.ok) { 
-      toast.success(`Representante ${newRep.code} cadastrado!`); 
-      addAudit('create_rep', 'Representante', newRep.code, `Criou rep ${newRep.code} — ${newRep.name}`); 
-      setNewRep({ 
-        code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '', 
-        endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: '' 
-      }); 
-      fetchAll(); 
+    if (res.ok) {
+      toast.success(`Representante ${newRep.code} cadastrado!`);
+      addAudit('create_rep', 'Representante', newRep.code, `Criou rep ${newRep.code} — ${newRep.name}`);
+      setNewRep({
+        code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '',
+        endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: ''
+      });
+      fetchAll();
     }
     else { const err = await res.json(); toast.error(err.message || 'Erro'); }
   };
@@ -491,19 +560,19 @@ export default function Admin() {
 
   const handleUpdateRep = async (code: string) => {
     if (!editForm.name.trim()) { toast.error('Nome obrigatório'); return; }
-    const res = await fetch(`${API}/api/admin/reps/${code}`, { 
-      method: 'PUT', 
-      headers: authHeaders, 
+    const res = await fetch(`${API}/api/admin/reps/${code}`, {
+      method: 'PUT',
+      headers: authHeaders,
       body: JSON.stringify({
         ...editForm,
         fullName: editForm.fullName || editForm.name
-      }) 
+      })
     });
-    if (res.ok) { 
-      toast.success('Atualizado!'); 
-      addAudit('update_rep', 'Representante', code, `Editou rep ${code}`); 
-      setEditingCode(null); 
-      fetchAll(); 
+    if (res.ok) {
+      toast.success('Atualizado!');
+      addAudit('update_rep', 'Representante', code, `Editou rep ${code}`);
+      setEditingCode(null);
+      fetchAll();
     }
     else toast.error('Erro ao atualizar');
   };
@@ -545,23 +614,46 @@ export default function Admin() {
   // ── Users CRUD ────────────────────────────────────────────────────────────
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUser.fullName.trim() || !newUser.email.trim() || !newUser.password.trim()) { toast.error('Nome, email e senha são obrigatórios'); return; }
-    if (!newUser.document.trim()) { toast.error('Documento é obrigatório'); return; }
-    if (newUser.password !== newUser.confirmPassword) { toast.error('As senhas não coincidem!'); return; }
-    const body: Record<string, string> = { username: newUser.email, password: newUser.password, role: newUser.role, fullName: newUser.fullName, email: newUser.email, document: newUser.document, documentType: newUser.documentType, age: newUser.age };
-    if (newUser.documentType === 'cnpj' && newUser.companyName) body.companyName = newUser.companyName;
-    if (newUser.repCode) body.repCode = newUser.repCode;
-    if (newUser.photo) body.photo = newUser.photo;
-    const res = await fetch(`${API}/api/admin/users`, { method: 'POST', headers: authHeaders, body: JSON.stringify(body) });
-    if (res.ok) { 
-      toast.success(`Usuário "${newUser.fullName}" criado!`); 
-      addAudit('create_user', 'Usuário', newUser.email, `Criou usuário ${newUser.fullName} (${newUser.email})`); 
-      setNewUser({ fullName: '', email: '', password: '', confirmPassword: '', role: 'user', repCode: '', documentType: 'cpf', document: '', companyName: '', age: '', photo: '' }); 
-      setNewRep({ code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '', endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: '' });
-      setIsUserModalOpen(false);
-      fetchAll(); 
+    if (!newUser.fullName.trim() || !newUser.password.trim() || !newUser.code.trim()) {
+      toast.error('Código, Nome e Senha são obrigatórios'); return;
     }
-    else { const err = await res.json(); toast.error(err.message || 'Erro'); }
+    if (newUser.password !== newUser.confirmPassword) { toast.error('As senhas não coincidem!'); return; }
+
+    const body: Record<string, string | number | null | boolean> = {
+      code: newUser.code,
+      full_name: newUser.fullName,
+      username: newUser.email || newUser.code,
+      password: newUser.password,
+      role: 'user', // Default per specification
+      tipo: 'cliente',
+      repCode: newUser.repCode || null,
+      telefone: newUser.telefone,
+      cpf_cnpj: newUser.document,
+      birth_date: newUser.birthDate || null,
+      cargo: newUser.cargo,
+      company_name: newUser.companyName,
+      groupId: newUser.groupId ? Number(newUser.groupId) : null,
+      photo: newUser.photo || null
+    };
+
+    try {
+      const res = await fetch(`${API}/api/admin/users`, { method: 'POST', headers: authHeaders, body: JSON.stringify(body) });
+      if (res.ok) {
+        toast.success(`Usuário "${newUser.fullName}" criado!`);
+        addAudit('create_user', 'Usuário', newUser.code, `Criou usuário ${newUser.fullName} (${newUser.code})`);
+        setNewUser({
+          fullName: '', email: '', password: '', confirmPassword: '',
+          role: 'user', repCode: '', code: '', documentType: 'cpf',
+          document: '', companyName: '', birthDate: '', telefone: '', photo: '',
+          cargo: '', groupId: '', tipo: 'normal', colorIndex: 0
+        });
+        setIsUserModalOpen(false);
+        fetchAll();
+      }
+      else { const err = await res.json(); toast.error(err.message || 'Erro'); }
+    } catch (err) {
+      toast.error('Erro ao criar usuário');
+    }
   };
 
   const handleDeleteUser = (id: number, username: string) => {
@@ -580,12 +672,12 @@ export default function Admin() {
     if (editUserForm.password.trim()) body.password = editUserForm.password;
     if (editUserForm.photo) body.photo = editUserForm.photo;
     const res = await fetch(`${API}/api/admin/users/${id}`, { method: 'PUT', headers: authHeaders, body: JSON.stringify(body) });
-    if (res.ok) { 
-      toast.success('Usuário atualizado!'); 
-      addAudit('update_user', 'Usuário', String(id), `Atualizou usuário ${editUserForm.username}`); 
-      setEditingUserId(null); 
+    if (res.ok) {
+      toast.success('Usuário atualizado!');
+      addAudit('update_user', 'Usuário', String(id), `Atualizou usuário ${editUserForm.username}`);
+      setEditingUserId(null);
       setIsUserModalOpen(false);
-      fetchAll(); 
+      fetchAll();
     }
     else { const err = await res.json(); toast.error(err.message || 'Erro'); }
   };
@@ -666,33 +758,38 @@ export default function Admin() {
   const displayPhoto = currentUser?.photo || '';
 
   const navItems: NavItem[] = [
+    { id: 'comunidade' as const, label: 'Comunidade', icon: Users, restrict: ['admin', 'supervisor', 'representante'] },
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard, restrict: ['admin', 'supervisor', 'representante'] },
     { id: 'reps' as const, label: 'Representantes', icon: Briefcase, count: reps.length, restrict: ['admin', 'supervisor'] },
     { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor'] },
     { id: 'territories' as const, label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin', 'supervisor'] },
-    { id: 'rotas_menu' as const, label: 'Rotas', icon: Truck, restrict: ['admin', 'supervisor'], subItems: [
+    {
+      id: 'rotas_menu' as const, label: 'Planejamento de Áreas', icon: Truck, restrict: ['admin', 'supervisor'], subItems: [
         { id: 'leituraplanilha' as const, label: 'Leitura Excel', icon: FileSpreadsheet },
         { id: 'clusters' as const, label: 'Clusters', icon: Layers },
         { id: 'blocos' as const, label: 'Blocos', icon: Grid3X3 },
         { id: 'roteiros' as const, label: 'Roteiros', icon: Map },
         { id: 'agenda' as const, label: 'Agenda', icon: Calendar },
         { id: 'densidade' as const, label: 'Densidade', icon: Activity },
-    ]},
+      ]
+    },
     { id: 'interests' as const, label: 'Interesses', icon: HandHeart, count: pendingInterests, badge: pendingInterests > 0, restrict: ['admin'] },
     { id: 'notifications' as const, label: 'Enviar Alerta', icon: Bell, count: notifications.length, restrict: ['admin'] },
-    { id: 'settings' as const, label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
+    {
+      id: 'settings' as const, label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
         { id: 'users' as const, label: 'Usuários', icon: UserPlus, count: users.length },
         { id: 'groups' as const, label: 'Grupos', icon: UsersRound, count: groups.length },
         { id: 'personal' as const, label: 'Personalização', icon: Palette },
         { id: 'audit' as const, label: 'Auditoria', icon: ScrollText, count: auditLogs.length },
-    ]}
+      ]
+    }
   ].filter(item => {
     // If it's a core section (like dashboard), allow or check specific permission if needed
     if (item.id === 'dashboard') return true;
-    
+
     // Check role-based restriction first
     if (item.restrict && !item.restrict.includes(role || '')) return false;
-    
+
     // Check modular permission for specific areas
     const moduleMap: Record<string, string> = {
       'baserotas': 'clients',
@@ -704,19 +801,19 @@ export default function Admin() {
       'audit': 'audit',
       'users': 'users'
     };
-    
+
     const moduleId = moduleMap[item.id as string];
     if (moduleId && role !== 'admin') {
-       return canAccess(moduleId);
+      return canAccess(moduleId);
     }
-    
+
     return true;
   });
 
   // Update activeTab if current one is restricted after permissions load
   useEffect(() => {
     if (loading || role === 'admin') return;
-    
+
     const isCurrentTabRestricted = !navItems.some(item => {
       if (item.id === activeTab) return true;
       if (item.subItems?.some(s => s.id === activeTab)) return true;
@@ -836,13 +933,7 @@ export default function Admin() {
           })}
         </nav>
 
-        {/* Footer buttons */}
-        <div className="admin-sidebar-footer">
-          <button className="admin-sidebar-footer-btn danger" onClick={() => { logout(); navigate('/login'); }}>
-            <LogOut style={{ width: 15, height: 15, flexShrink: 0 }} />
-            <span>Sair do sistema</span>
-          </button>
-        </div>
+        {/* Footer buttons removed to move logout to navbar */}
       </aside>
 
       {/* ━━ MAIN ━━ */}
@@ -889,10 +980,21 @@ export default function Admin() {
                 <span>{pendingInterests} pendente(s)</span>
               </div>
             )}
+            <button
+              className="admin-header-action-btn text-destructive hover:bg-destructive/10 border-destructive/20"
+              onClick={() => { logout(); navigate('/login'); }}
+              title="Sair do sistema"
+            >
+              <LogOut style={{ width: 15, height: 15 }} />
+              <span className="hidden sm:inline">Sair</span>
+            </button>
           </div>
         </header>
 
         <main className="admin-content">
+
+          {/* ━━ COMUNIDADE (Social Feed) ━━ */}
+          {activeTab === 'comunidade' && <SocialFeedPanel />}
 
           {/* ━━ DASHBOARD ━━ */}
           {activeTab === 'dashboard' && (() => {
@@ -1179,7 +1281,7 @@ export default function Admin() {
                         <Briefcase style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
                         <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>Representantes</span>
                       </div>
-                      <div style={{ padding: '8px 0' , maxHeight: 200, overflowY: 'auto' }}>
+                      <div style={{ padding: '8px 0', maxHeight: 200, overflowY: 'auto' }}>
                         {activeReps.length === 0 ? (
                           <p style={{ padding: '12px 16px', fontSize: '0.78rem', color: 'hsl(var(--muted-foreground))' }}>
                             Nenhum representante cadastrado
@@ -1261,14 +1363,14 @@ export default function Admin() {
                 <div className="flex w-full md:w-auto items-center gap-3">
                   <div className="relative flex-1 md:w-64">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input 
-                      placeholder="Buscar por nome ou email..." 
-                      className="pl-9 bg-background/50 border-border/40" 
+                    <Input
+                      placeholder="Buscar por nome ou email..."
+                      className="pl-9 bg-background/50 border-border/40"
                       value={userSearch}
                       onChange={(e) => setUserSearch(e.target.value)}
                     />
                   </div>
-                  <Button 
+                  <Button
                     variant={userFilterOnline ? "default" : "outline"}
                     className={`gap-2 ${userFilterOnline ? 'bg-emerald-500 hover:bg-emerald-600 border-emerald-500 text-white' : ''}`}
                     onClick={() => setUserFilterOnline(!userFilterOnline)}
@@ -1279,7 +1381,12 @@ export default function Admin() {
                   </Button>
                   <Button className="gap-2 shadow-lg shadow-primary/20" onClick={() => {
                     setEditingUserId(null);
-                    setNewUser({ fullName: '', email: '', password: '', confirmPassword: '', role: 'user', repCode: '', documentType: 'cpf', document: '', companyName: '', age: '', photo: '' });
+                    setNewUser({
+                      fullName: '', email: '', password: '', confirmPassword: '',
+                      role: 'user', repCode: '', code: '', documentType: 'cpf',
+                      document: '', companyName: '', birthDate: '', telefone: '', photo: '',
+                      cargo: '', groupId: '', tipo: 'normal', colorIndex: 0
+                    });
                     setIsUserModalOpen(true);
                   }}>
                     <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Novo Usuário</span>
@@ -1298,93 +1405,164 @@ export default function Admin() {
                     const lastDate = rawLastActive ? new Date(rawLastActive) : null;
                     const isOnline = (u.id === userId) || (lastDate && !isNaN(lastDate.getTime()) && (Date.now() - lastDate.getTime()) < 300000);
                     const lastActive = (lastDate && !isNaN(lastDate.getTime())) ? lastDate : null;
-                    
+
                     return (
-                    <Card key={u.id} className="group relative overflow-hidden border-border/40 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 transform hover:-translate-y-1">
-                      <div className={`h-1.5 w-full absolute top-0 left-0 ${u.role === 'admin' ? 'bg-amber-500' : u.role === 'supervisor' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
-                      <CardContent className="p-5">
-                        <div className="flex flex-col items-center text-center space-y-3">
-                          <div className="relative">
-                            <div className="w-16 h-16 rounded-2xl bg-secondary border border-border/50 flex items-center justify-center overflow-hidden transition-transform group-hover:scale-105 duration-300">
-                              {u.photo ? <img src={u.photo} alt="Avatar" className="w-full h-full object-cover" /> : <User className="w-8 h-8 text-muted-foreground/30" />}
+                      <Card key={u.id} className="group relative overflow-hidden border-border/40 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 transform hover:-translate-y-1">
+                        <div className={`h-1.5 w-full absolute top-0 left-0 ${u.role === 'admin' ? 'bg-amber-500' : u.role === 'supervisor' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                        <CardContent className="p-5">
+                          <div className="flex flex-col items-center text-center space-y-3">
+                            <div className="relative">
+                              <div className="w-16 h-16 rounded-2xl bg-secondary border border-border/50 flex items-center justify-center overflow-hidden transition-transform group-hover:scale-105 duration-300">
+                                {u.photo ? <img src={u.photo} alt="Avatar" className="w-full h-full object-cover" /> : <User className="w-8 h-8 text-muted-foreground/30" />}
+                              </div>
+                              <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-lg flex items-center justify-center border-2 border-card shadow-sm ${u.role === 'admin' ? 'bg-amber-500 text-white' : u.role === 'supervisor' ? 'bg-emerald-500 text-white' : 'bg-blue-500 text-white'}`}>
+                                {u.role === 'admin' ? <ShieldCheck className="w-3" /> : u.role === 'supervisor' ? <Briefcase className="w-3" /> : <User className="w-3" />}
+                              </div>
+                              {/* Online/Offline status dot */}
+                              <div className={`absolute -top-1 -left-1 w-3.5 h-3.5 rounded-full border-2 border-card shadow-sm ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40'}`} title={isOnline ? 'Online' : 'Offline'} />
                             </div>
-                            <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-lg flex items-center justify-center border-2 border-card shadow-sm ${u.role === 'admin' ? 'bg-amber-500 text-white' : u.role === 'supervisor' ? 'bg-emerald-500 text-white' : 'bg-blue-500 text-white'}`}>
-                              {u.role === 'admin' ? <ShieldCheck className="w-3" /> : u.role === 'supervisor' ? <Briefcase className="w-3" /> : <User className="w-3" />}
+                            <div className="space-y-0.5 w-full">
+                              <h3 className="font-bold text-sm truncate" title={u.full_name || u.fullName || u.username}>{u.full_name || u.fullName || u.username}</h3>
+                              <p className="text-[10px] text-muted-foreground truncate">{u.username}</p>
+                              {!isOnline && lastActive && (
+                                <p className="text-[9px] text-muted-foreground/60 italic mt-0.5">Visto em {lastActive.toLocaleDateString('pt-BR')} às {lastActive.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                              )}
                             </div>
-                            {/* Online/Offline status dot */}
-                            <div className={`absolute -top-1 -left-1 w-3.5 h-3.5 rounded-full border-2 border-card shadow-sm ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40'}`} title={isOnline ? 'Online' : 'Offline'} />
+                            <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+                              <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${u.role === 'admin' ? 'bg-amber-500/15 text-amber-500' : u.role === 'supervisor' ? 'bg-emerald-500/15 text-emerald-500' : 'bg-blue-500/15 text-blue-500'}`}>{u.role}</span>
+                              {u.repCode && <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase bg-secondary text-muted-foreground">Rep: {u.repCode}</span>}
+                            </div>
                           </div>
-                          <div className="space-y-0.5 w-full">
-                            <h3 className="font-bold text-sm truncate" title={u.full_name || u.fullName || u.username}>{u.full_name || u.fullName || u.username}</h3>
-                            <p className="text-[10px] text-muted-foreground truncate">{u.username}</p>
-                            {!isOnline && lastActive && (
-                              <p className="text-[9px] text-muted-foreground/60 italic mt-0.5">Visto em {lastActive.toLocaleDateString('pt-BR')} às {lastActive.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                          <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-border/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary" onClick={() => {
+                              setEditingUserId(u.id);
+                              setEditUserForm({
+                                username: u.username,
+                                fullName: u.full_name || u.fullName || '',
+                                document: u.document || u.cpf_cnpj || '',
+                                password: '',
+                                confirmPassword: '',
+                                role: u.role as 'user' | 'supervisor' | 'admin',
+                                repCode: u.repCode || '',
+                                code: u.code || '',
+                                photo: u.photo || '',
+                                telefone: u.telefone || '',
+                                birthDate: u.birth_date || u.birthDate || '',
+                                cargo: u.cargo || '',
+                                companyName: u.company_name || u.companyName || '',
+                                groupId: String(u.groupId || '')
+                              });
+                              setIsUserModalOpen(true);
+                            }}><Pencil className="w-4 h-4" /></Button>
+                            {role === 'admin' && u.id !== userId && (
+                              <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-orange-500/10 hover:text-orange-500" title="Derrubar Sessão" onClick={() => handleKickUser(u)}><LogOut className="w-4 h-4" /></Button>
                             )}
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteUser(u.id, u.username)}><Trash2 className="w-4 h-4" /></Button>
                           </div>
-                          <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
-                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${u.role === 'admin' ? 'bg-amber-500/15 text-amber-500' : u.role === 'supervisor' ? 'bg-emerald-500/15 text-emerald-500' : 'bg-blue-500/15 text-blue-500'}`}>{u.role}</span>
-                            {u.repCode && <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase bg-secondary text-muted-foreground">Rep: {u.repCode}</span>}
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-border/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary" onClick={() => { setEditingUserId(u.id); setEditUserForm({ username: u.username, fullName: u.full_name || u.fullName || '', document: u.document || u.cpf_cnpj || '', password: '', confirmPassword: '', role: u.role as 'user' | 'supervisor' | 'admin', repCode: u.repCode || '', photo: u.photo || '' }); setIsUserModalOpen(true); }}><Pencil className="w-4 h-4" /></Button>
-                          {role === 'admin' && u.id !== userId && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-orange-500/10 hover:text-orange-500" title="Derrubar Sessão" onClick={() => handleKickUser(u)}><LogOut className="w-4 h-4" /></Button>
-                          )}
-                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteUser(u.id, u.username)}><Trash2 className="w-4 h-4" /></Button>
-                        </div>
-                      </CardContent>
-                    </Card>
+                        </CardContent>
+                      </Card>
                     );
                   })}
                 </div>
               )}
 
               <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
-                <DialogContent className={editingUserId ? "max-w-6xl p-0 border-none bg-transparent shadow-none" : "max-w-xl max-h-[90vh] overflow-y-auto"}>
+                <DialogContent className={editingUserId ? "max-w-6xl p-0 border-none bg-transparent shadow-none" : "max-w-4xl"}>
                   {editingUserId ? (
                     <>
                       <DialogHeader className="sr-only">
                         <DialogTitle>Gerenciador de Perfil - {users.find(u => u.id === editingUserId)?.full_name || 'Usuário'}</DialogTitle>
                         <DialogDescription>Configurações de perfil, permissões e histórico do usuário.</DialogDescription>
                       </DialogHeader>
-                      <UserProfileManager 
-                      user={users.find(u => u.id === editingUserId)!}
-                      reps={reps}
-                      onUpdate={fetchAll}
-                      onClose={() => setIsUserModalOpen(false)}
-                    />
-                  </>
+                      <UserProfileManager
+                        user={users.find(u => u.id === editingUserId)!}
+                        reps={reps}
+                        onUpdate={fetchAll}
+                        onClose={() => setIsUserModalOpen(false)}
+                      />
+                    </>
                   ) : (
                     <>
-                      <DialogHeader>
+                      <DialogHeader className="pb-3 border-b border-border/40">
                         <DialogTitle className="flex items-center gap-2 text-xl"><UserPlus className="w-5 h-5 text-primary" /> Novo Usuário</DialogTitle>
                       </DialogHeader>
-                      <form onSubmit={(e) => { handleCreateUser(e); setIsUserModalOpen(false); }} className="space-y-4 pt-2">
-                        <div className="flex items-center gap-4">
-                          <label className="shrink-0 cursor-pointer w-20 h-20 rounded-2xl bg-secondary border-2 border-dashed border-border/60 flex items-center justify-center overflow-hidden hover:border-primary/50 transition-all">
-                            {newUser.photo ? <img src={newUser.photo} alt="Avatar" className="w-full h-full object-cover" /> : <Camera className="w-6 h-6 text-muted-foreground opacity-40" />}
-                            <input type="file" accept="image/*" className="hidden" onChange={e => handleUserPhotoUpload(e, false)} />
-                          </label>
-                          <div className="text-xs text-muted-foreground"><p className="font-bold text-foreground">Foto de Perfil</p><p>JPG, PNG. Máx 2MB.</p></div>
+                      <form onSubmit={(e) => { handleCreateUser(e); setIsUserModalOpen(false); }} className="pt-2">
+                        <div className="flex flex-col md:flex-row gap-6">
+                          
+                          {/* Coluna da Foto (menor) */}
+                          <div className="flex flex-col items-center gap-2 w-32 shrink-0 pt-2">
+                            <label className="cursor-pointer w-24 h-24 rounded-full bg-secondary border-2 border-dashed border-border/60 flex items-center justify-center overflow-hidden hover:border-primary/50 transition-all select-none group relative">
+                              {newUser.photo ? (
+                                <>
+                                  <img src={newUser.photo} alt="Avatar" className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Camera className="w-5 h-5 text-white" />
+                                  </div>
+                                </>
+                              ) : (
+                                <Camera className="w-8 h-8 text-muted-foreground opacity-40 group-hover:scale-110 transition-transform" />
+                              )}
+                              <input type="file" accept="image/*" className="hidden" onChange={e => handleUserPhotoUpload(e, false)} />
+                            </label>
+                            <div className="text-center">
+                              <p className="text-[10px] font-bold text-foreground mt-1">FOTO DE PERFIL</p>
+                              <p className="text-[9px] text-muted-foreground">Max 2MB</p>
+                            </div>
+                          </div>
+
+                          {/* Resto do Formulário em Grid */}
+                          <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-x-5 gap-y-4">
+                            
+                            {/* Linha 1 */}
+                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Código *</Label><Input value={newUser.code} onChange={e => setNewUser({ ...newUser, code: e.target.value })} required placeholder="Ex: CLI001" className="h-9 text-xs uppercase" /></div>
+                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Nome Completo *</Label><Input value={newUser.fullName} onChange={e => setNewUser({ ...newUser, fullName: e.target.value })} required className="h-9 text-xs" /></div>
+                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">E-mail</Label><Input type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} className="h-9 text-xs" /></div>
+                            
+                            {/* Linha 2 */}
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Tipo de Cadastro</Label>
+                              <CustomSelect options={[ { value: 'normal', label: 'Normal' }, { value: 'representante', label: 'Representante' }, { value: 'promotor', label: 'Promotor' }, { value: 'supervisor', label: 'Supervisor' } ]} value={newUser.tipo} onChange={v => setNewUser({ ...newUser, tipo: v as typeof newUser.tipo, repCode: '', colorIndex: 0 })} placeholder="Selecione..." className="h-9" />
+                            </div>
+                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Cargo</Label><Input value={newUser.cargo} onChange={e => setNewUser({ ...newUser, cargo: e.target.value })} placeholder="Ex: Gerente" className="h-9 text-xs" /></div>
+                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Nome da Empresa</Label><Input value={newUser.companyName} onChange={e => setNewUser({ ...newUser, companyName: e.target.value })} placeholder="Ex: Tech Soluções" className="h-9 text-xs" /></div>
+
+                            {/* Linha 3 */}
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Grupo</Label>
+                              <CustomSelect options={[ { value: '', label: '— Nenhum —' }, ...groupsData.map(g => ({ value: String(g.id), label: g.name })) ]} value={String(newUser.groupId)} onChange={v => setNewUser({ ...newUser, groupId: v })} placeholder="Selecione..." className="h-9" />
+                            </div>
+                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Telefone</Label><Input value={newUser.telefone} onChange={e => setNewUser({ ...newUser, telefone: e.target.value })} placeholder="(00) 00000-0000" className="h-9 text-xs" /></div>
+                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Data de Nasc.</Label><Input type="date" value={newUser.birthDate} onChange={e => setNewUser({ ...newUser, birthDate: e.target.value })} className="h-9 text-xs" /></div>
+
+                            {/* Linha 4 */}
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Tipo Doc</Label>
+                              <div className="flex gap-1 h-9">
+                                {(['cpf', 'cnpj'] as const).map(t => (
+                                  <button key={t} type="button" onClick={() => setNewUser({ ...newUser, documentType: t, document: '' })} className={`flex-1 rounded-md text-[10px] font-bold border transition-colors ${newUser.documentType === t ? 'bg-primary border-primary text-white' : 'border-border text-muted-foreground hover:bg-secondary'}`}>
+                                    {t.toUpperCase()}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{newUser.documentType.toUpperCase()} *</Label><Input value={newUser.document} onChange={e => setNewUser({ ...newUser, document: maskDoc(e.target.value, newUser.documentType) })} required className="h-9 text-xs" /></div>
+
+                            {/* Linha 5 (Senhas) */}
+                            <div className="space-y-1.5 md:col-start-1">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Senha *</Label>
+                              <div className="relative">
+                                <Input type={showNewPwd ? 'text' : 'password'} value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} required className="h-9 text-xs pr-9" />
+                                <button type="button" className="absolute right-2.5 top-1/2 -translate-y-1/2" onClick={() => setShowNewPwd(!showNewPwd)}>{showNewPwd ? <EyeOff className="w-3.5 h-3.5 hover:text-primary transition-colors" /> : <Eye className="w-3.5 h-3.5 hover:text-primary transition-colors" />}</button>
+                              </div>
+                            </div>
+                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Confirmar Senha *</Label><Input type={showNewPwd ? 'text' : 'password'} value={newUser.confirmPassword} onChange={e => setNewUser({ ...newUser, confirmPassword: e.target.value })} required className="h-9 text-xs" /></div>
+                          </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Nome Completo *</Label><Input value={newUser.fullName} onChange={e => setNewUser({ ...newUser, fullName: e.target.value })} required /></div>
-                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">E-mail (Username) *</Label><Input type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} required /></div>
+
+                        <div className="flex gap-3 pt-6 mt-4 border-t border-border/10 justify-end">
+                          <Button variant="ghost" type="button" onClick={() => setIsUserModalOpen(false)} className="w-32">Cancelar</Button>
+                          <Button type="submit" className="w-48 gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"><Save className="w-4 h-4" /> Cadastrar Usuário</Button>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Tipo Doc</Label><div className="flex gap-1">{(['cpf', 'cnpj'] as const).map(t => <button key={t} type="button" onClick={() => setNewUser({ ...newUser, documentType: t, document: '' })} className={`flex-1 py-1.5 rounded-lg text-xs font-bold border ${newUser.documentType === t ? 'bg-primary border-primary text-white' : 'border-border text-muted-foreground'}`}>{t.toUpperCase()}</button>)}</div></div>
-                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">{newUser.documentType.toUpperCase()} *</Label><Input value={newUser.document} onChange={e => setNewUser({ ...newUser, document: maskDoc(e.target.value, newUser.documentType) })} required /></div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Papel *</Label><select className="w-full h-10 px-3 bg-muted/40 border rounded-md text-sm" value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value as 'user' | 'supervisor' | 'admin' })}><option value="user">Usuário</option><option value="supervisor">Supervisor</option>{role === 'admin' && <option value="admin">Administrador</option>}</select></div>
-                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Rep. Vinculado</Label><select className="w-full h-10 px-3 bg-muted/40 border rounded-md text-sm" value={newUser.repCode} onChange={e => setNewUser({ ...newUser, repCode: e.target.value })}><option value="">— Nenhum —</option>{reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}</select></div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Senha *</Label><div className="relative"><Input type={showNewPwd ? 'text' : 'password'} value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} required className="pr-10" /><button type="button" className="absolute right-3 top-1/2 -translate-y-1/2" onClick={() => setShowNewPwd(!showNewPwd)}>{showNewPwd ? <EyeOff className="w-4 h-4 hover:text-primary transition-colors" /> : <Eye className="w-4 h-4 hover:text-primary transition-colors" />}</button></div></div>
-                          <div className="space-y-1"><Label className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">Confirmar *</Label><Input type={showNewPwd ? 'text' : 'password'} value={newUser.confirmPassword} onChange={e => setNewUser({ ...newUser, confirmPassword: e.target.value })} required /></div>
-                        </div>
-                        <div className="flex gap-3 pt-2"><Button variant="ghost" className="flex-1" type="button" onClick={() => setIsUserModalOpen(false)}>Cancelar</Button><Button className="flex-1 gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all" type="submit"><Save className="w-4 h-4" />Criar</Button></div>
                       </form>
                     </>
                   )}
@@ -1406,7 +1584,7 @@ export default function Admin() {
                       </CardTitle>
                       <p className="text-xs text-muted-foreground mt-1">Gerencie a equipe de representantes e suas informações de contato.</p>
                     </div>
-                    
+
                     <Dialog>
                       <DialogTrigger asChild>
                         <Button className="gap-2">
@@ -1427,7 +1605,7 @@ export default function Admin() {
                             <div className="space-y-1.5"><Label className="text-xs font-medium">Nome Curto *</Label><Input placeholder="Ex: AVILA" value={newRep.name} onChange={e => setNewRep({ ...newRep, name: e.target.value })} required /></div>
                           </div>
                           <div className="space-y-1.5"><Label className="text-xs font-medium">Razão Social / Nome Completo</Label><Input placeholder="Nome completo ou razão social" value={newRep.fullName} onChange={e => setNewRep({ ...newRep, fullName: e.target.value })} /></div>
-                          
+
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5"><Label className="text-xs font-medium">E-mail</Label><Input type="email" placeholder="email@exemplo.com" value={newRep.email} onChange={e => setNewRep({ ...newRep, email: e.target.value })} /></div>
                             <div className="space-y-1.5"><Label className="text-xs font-medium">Contato / Telefone</Label><Input placeholder="(00) 00000-0000" value={newRep.contato} onChange={e => setNewRep({ ...newRep, contato: e.target.value })} /></div>
@@ -1446,22 +1624,22 @@ export default function Admin() {
 
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5"><Label className="text-xs font-medium">% Comissão</Label><div className="relative"><Percent className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" /><Input type="number" step="0.01" className="pl-9" placeholder="0.00" value={newRep.comissao} onChange={e => setNewRep({ ...newRep, comissao: e.target.value })} /></div></div>
-                              <div className="flex items-end pb-1 gap-4">
-                                <label className="flex items-center gap-2.5 text-sm text-muted-foreground cursor-pointer select-none p-2 rounded-lg border border-border/50 hover:bg-secondary/30 transition-colors flex-1">
-                                  <input type="checkbox" checked={newRep.isVago} onChange={e => setNewRep({ ...newRep, isVago: e.target.checked })} className="rounded" />
-                                  <div><p className="text-xs font-medium text-foreground">Marcar como Vago</p></div>
-                                </label>
-                              </div>
+                            <div className="flex items-end pb-1 gap-4">
+                              <label className="flex items-center gap-2.5 text-sm text-muted-foreground cursor-pointer select-none p-2 rounded-lg border border-border/50 hover:bg-secondary/30 transition-colors flex-1">
+                                <input type="checkbox" checked={newRep.isVago} onChange={e => setNewRep({ ...newRep, isVago: e.target.checked })} className="rounded" />
+                                <div><p className="text-xs font-medium text-foreground">Marcar como Vago</p></div>
+                              </label>
+                            </div>
 
-                              <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-tight text-muted-foreground">Cor do Representante no Mapa</Label>
-                                <ColorPicker 
-                                  value={newRep.colorIndex} 
-                                  onChange={v => setNewRep({ ...newRep, colorIndex: v })} 
-                                  disabled={newRep.isVago}
-                                />
-                                {newRep.isVago && <p className="text-[10px] text-muted-foreground italic">Representantes vagos usam uma cor padrão (cinza).</p>}
-                              </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase tracking-tight text-muted-foreground">Cor do Representante no Mapa</Label>
+                              <ColorPicker
+                                value={newRep.colorIndex}
+                                onChange={v => setNewRep({ ...newRep, colorIndex: v })}
+                                disabled={newRep.isVago}
+                              />
+                              {newRep.isVago && <p className="text-[10px] text-muted-foreground italic">Representantes vagos usam uma cor padrão (cinza).</p>}
+                            </div>
                           </div>
 
                           <Button className="w-full gap-2 mt-2" type="submit"><Plus className="w-4 h-4" />Cadastrar Representante</Button>
@@ -1537,13 +1715,13 @@ export default function Admin() {
                                 </TableCell>
                                 <TableCell className="pr-6">
                                   <div className="flex gap-1 justify-end">
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon" 
-                                      className="h-8 w-8 hover:bg-primary/10 hover:text-primary transition-colors" 
-                                      onClick={() => editingCode === rep.code ? setEditingCode(null) : (setEditingCode(rep.code), setEditForm({ 
-                                        name: rep.name, 
-                                        fullName: rep.fullName || '', 
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 hover:bg-primary/10 hover:text-primary transition-colors"
+                                      onClick={() => editingCode === rep.code ? setEditingCode(null) : (setEditingCode(rep.code), setEditForm({
+                                        name: rep.name,
+                                        fullName: rep.fullName || '',
                                         isVago: !!rep.isVago,
                                         colorIndex: rep.colorIndex || 1,
                                         email: rep.email || '',
@@ -1558,10 +1736,10 @@ export default function Admin() {
                                     >
                                       {editingCode === rep.code ? <X className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
                                     </Button>
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon" 
-                                      className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive transition-colors" 
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive transition-colors"
                                       onClick={() => handleDeleteRep(rep.code, rep.name)}
                                     >
                                       <Trash2 className="w-4 h-4" />
@@ -1569,7 +1747,7 @@ export default function Admin() {
                                   </div>
                                 </TableCell>
                               </TableRow>
-                              
+
                               {editingCode === rep.code && (
                                 <TableRow className="bg-primary/5 border-border/30">
                                   <TableCell colSpan={9} className="py-6 px-8">
@@ -1632,7 +1810,7 @@ export default function Admin() {
                                           </div>
                                         </div>
                                       </div>
-                                      
+
                                       <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
                                         <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground transition-colors selection:bg-transparent">
                                           <input type="checkbox" checked={editForm.isVago} onChange={e => setEditForm(f => ({ ...f, isVago: e.target.checked }))} className="rounded border-border" />
@@ -1641,8 +1819,8 @@ export default function Admin() {
 
                                         <div className="flex-1 space-y-2">
                                           <Label className="text-[10px] font-bold text-muted-foreground uppercase">Escolher Cor no Mapa</Label>
-                                          <ColorPicker 
-                                            value={editForm.colorIndex} 
+                                          <ColorPicker
+                                            value={editForm.colorIndex}
                                             onChange={v => setEditForm(f => ({ ...f, colorIndex: v }))}
                                             disabled={editForm.isVago}
                                           />
@@ -1672,13 +1850,13 @@ export default function Admin() {
                 const city = c.cidade.trim();
                 const uf = c.uf.trim().toUpperCase();
                 const key = `${city}-${uf}`;
-                
+
                 if (!map.has(key)) map.set(key, { municipio: city, uf, repCodes: new Set(), clientCount: 0 });
                 const entry = map.get(key)!;
                 entry.clientCount++;
                 if (c.repCode) entry.repCodes.add(c.repCode);
               });
-              
+
               return Array.from(map.values()).map((t, idx) => ({
                 id: idx,
                 municipio: t.municipio,
@@ -1690,7 +1868,7 @@ export default function Admin() {
 
             const allUFs = [...new Set(computedTerritories.map(t => t.uf))].sort();
 
-            const filteredTerritories = filterUF 
+            const filteredTerritories = filterUF
               ? computedTerritories.filter(t => t.uf === filterUF)
               : computedTerritories;
 
@@ -1737,16 +1915,16 @@ export default function Admin() {
                       </div>
                     </CardContent>
                   </Card>
-                  
+
                   <div className="grid grid-cols-2 gap-3">
-                     <div className="admin-card text-center py-4 rounded-xl border border-border/50 bg-card">
-                       <p className="text-2xl font-black text-primary">{allUFs.length}</p>
-                       <p className="text-[10px] uppercase font-bold text-muted-foreground mt-1">Estados Atendidos</p>
-                     </div>
-                     <div className="admin-card text-center py-4 rounded-xl border border-border/50 bg-card">
-                       <p className="text-2xl font-black text-primary">{computedTerritories.length}</p>
-                       <p className="text-[10px] uppercase font-bold text-muted-foreground mt-1">Cidades Atendidas</p>
-                     </div>
+                    <div className="admin-card text-center py-4 rounded-xl border border-border/50 bg-card">
+                      <p className="text-2xl font-black text-primary">{allUFs.length}</p>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground mt-1">Estados Atendidos</p>
+                    </div>
+                    <div className="admin-card text-center py-4 rounded-xl border border-border/50 bg-card">
+                      <p className="text-2xl font-black text-primary">{computedTerritories.length}</p>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground mt-1">Cidades Atendidas</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1972,7 +2150,7 @@ export default function Admin() {
           {/* ━━ BASE CLIENTE (Standalone) ━━ */}
           {activeTab === 'baserotas' && <BaseClientePanel onSwitchToReps={() => setActiveTab('reps')} />}
 
-          {/* ━━ ROTAS (com contexto) ━━ */}
+          {/* ━━ PLANEJAMENTO DE ÁREAS (com contexto) ━━ */}
           {['clusters', 'blocos', 'roteiros', 'agenda', 'densidade', 'leituraplanilha'].includes(activeTab) && (
             <RotasProvider>
               {activeTab === 'clusters' && <ClustersPanel />}

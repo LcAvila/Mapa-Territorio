@@ -10,6 +10,8 @@ import interestRoutes from './routes/interest.routes';
 import planilhaRoutes from './routes/planilha.routes';
 import clientesRoutes from './routes/clientes.routes';
 import locationRoutes from './routes/location.routes';
+import feedRoutes from './routes/feed.routes';
+import birthdaysRoutes from './routes/birthdays.routes';
 import { prisma } from './prisma';
 
 const app = express();
@@ -26,6 +28,8 @@ app.use('/api/interest', interestRoutes);
 app.use('/api/location', locationRoutes); // Must be BEFORE /api planilhaRoutes (which has global auth middleware)
 app.use('/api', planilhaRoutes);
 app.use('/api/clientes', clientesRoutes);
+app.use('/api/feed', feedRoutes);
+app.use('/api/birthdays', birthdaysRoutes);
 
 async function bootstrap() {
     // Garantir que existe o usuário 'admin' do Prisma igual tinha no SQLite.

@@ -30,15 +30,22 @@ interface SystemUser {
   full_name?: string;
   fullName?: string;
   photo?: string;
-  email?: string;
-  document?: string;
-  cpf_cnpj?: string;
+  birth_date?: string;
   telefone?: string;
+  code?: string;
+  cpf_cnpj?: string;
   default_workspace?: string;
   inactivity_limit?: number;
   notif_email?: boolean;
   notif_sms?: boolean;
   notif_push?: boolean;
+  colorIndex?: number;
+  comissao?: number;
+  isVago?: number;
+  email?: string;
+  cargo?: string;
+  company_name?: string;
+  groupId?: number;
 }
 
 interface UserActivity {
@@ -68,6 +75,13 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
     role: user.role || 'user',
     repCode: user.repCode || '',
     photo: user.photo || '',
+    colorIndex: user.colorIndex ?? 0,
+    comissao: user.comissao ?? 0,
+    isVago: user.isVago ?? 0,
+    telefone: user.telefone || '',
+    birthDate: user.birth_date ? new Date(user.birth_date).toISOString().split('T')[0] : '',
+    code: user.code || '',
+    cpf_cnpj: user.cpf_cnpj || '',
     password: '',
     confirmPassword: '',
   });
@@ -129,6 +143,14 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
       return;
     }
 
+    if (formData.password) {
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{6,}$/;
+      if (!passwordRegex.test(formData.password)) {
+        toast.error('A senha deve conter letras maiúsculas, minúsculas, números e símbolos.');
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const res = await fetch(`${API}/api/admin/users/${user.id}`, {
@@ -140,6 +162,12 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
           role: formData.role,
           repCode: formData.repCode,
           photo: formData.photo,
+          colorIndex: formData.colorIndex,
+          comissao: formData.comissao,
+          isVago: formData.isVago,
+          telefone: formData.telefone,
+          birth_date: formData.birthDate,
+          cpf_cnpj: formData.cpf_cnpj,
           password: formData.password || undefined
         })
       });
@@ -298,6 +326,23 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
                 <Label>E-mail *</Label>
                 <Input value={formData.email} onChange={e => setFormData({...formData, email: e.target.value, username: e.target.value})} />
               </div>
+              <div className="field">
+                <Label>Código Único (ID)</Label>
+                <Input value={formData.code} disabled className="bg-muted/30 font-bold text-primary" />
+                <p className="text-[10px] text-muted-foreground italic">O código é imutável após a criação.</p>
+              </div>
+              <div className="field">
+                <Label>CPF / CNPJ</Label>
+                <Input value={formData.cpf_cnpj} onChange={e => setFormData({...formData, cpf_cnpj: e.target.value})} />
+              </div>
+              <div className="field">
+                <Label>Telefone</Label>
+                <Input value={formData.telefone} onChange={e => setFormData({...formData, telefone: e.target.value})} />
+              </div>
+              <div className="field">
+                <Label>Data de Nascimento</Label>
+                <Input type="date" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
+              </div>
               
               {showPwd && (
                 <div className="col-span-full grid grid-cols-2 gap-4 mt-4 p-4 rounded-lg bg-primary/5 border border-primary/10">
@@ -342,6 +387,49 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
                   {reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
                 </select>
               </div>
+
+              {formData.repCode && (
+                <>
+                  <div className="section-title mt-6">Dados do Representante</div>
+                  <div className="field">
+                    <Label>Comissão (%)</Label>
+                    <Input 
+                      type="number" 
+                      value={formData.comissao} 
+                      onChange={e => setFormData({...formData, comissao: parseFloat(e.target.value)})} 
+                      step="0.01"
+                    />
+                  </div>
+                  <div className="field">
+                    <Label>Status de Vago</Label>
+                    <select 
+                      className="w-full h-10 px-3 bg-background border rounded-md text-sm"
+                      value={formData.isVago} 
+                      onChange={e => setFormData({...formData, isVago: parseInt(e.target.value)})}
+                    >
+                      <option value={0}>Ativo</option>
+                      <option value={1}>Vago / Inativo</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <Label>Cor no Mapa</Label>
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="w-10 h-10 rounded border" 
+                        style={{ backgroundColor: `hsl(${(formData.colorIndex * 30) % 360}, 70%, 50%)` }} 
+                      />
+                      <Input 
+                        type="number" 
+                        value={formData.colorIndex} 
+                        onChange={e => setFormData({...formData, colorIndex: parseInt(e.target.value)})} 
+                        min={0} 
+                        max={12}
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">O índice de cor (1-12) define a cor das regiões no mapa.</p>
+                  </div>
+                </>
+              )}
             </FormGrid>
           )}
 

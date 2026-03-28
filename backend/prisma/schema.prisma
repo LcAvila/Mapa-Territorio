@@ -8,24 +8,33 @@ datasource db {
 }
 
 model User {
-  id          Int      @id @default(autoincrement())
-  username    String   @unique
-  password    String
-  role        String   @default("user") // admin, supervisor, user
-  tipo        String   @default("representante")
-  full_name   String?
-  cpf_cnpj    String?
-  telefone    String?
-  cep         String?
-  logradouro  String?
-  numero      String?
-  complemento String?
-  bairro_end  String?
-  cidade      String?
-  estado_end  String?
-  photo             String?
-  repCode           String?  
-  created_at        DateTime @default(now())
+  id           Int       @id @default(autoincrement())
+  username     String    @unique
+  password     String
+  role         String    @default("user") // admin, supervisor, user
+  tipo         String    @default("representante")
+  full_name    String?
+  cpf_cnpj     String?
+  telefone     String?
+  cargo        String?
+  company_name String?
+  cep          String?
+  logradouro   String?
+  numero       String?
+  complemento  String?
+  bairro_end   String?
+  cidade       String?
+  estado_end   String?
+  photo        String?
+  repCode      String?   @unique
+  code         String?   @unique
+  birth_date   DateTime?
+  groupId      Int?
+  group        Group?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  colorIndex   Int       @default(0)
+  comissao     Float?
+  isVago       Int       @default(0)
+  created_at   DateTime  @default(now())
 
   // Configurações e Notificações
   default_workspace String?  @default("admin")
@@ -45,13 +54,29 @@ model User {
   historicosVisitas HistoricoVisitas[]
   activities        UserActivity[]
 
+  // Relations following repCode
+  territories  Territory[]
+  bairros      Bairro[]
+  clientes     Cliente[]
+  FeedPost     FeedPost[]
+  FeedComment  FeedComment[]
+  FeedReaction FeedReaction[]
+
+  @@index([repCode])
   @@map("users")
 }
 
+model Group {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  users User[]
+
+  @@map("groups")
+}
+
 model Module {
-  id    String @id // e.g., "dashboard", "clients", "reps", "territories", "routes", "users", "audit"
-  name  String
-  
+  id          String           @id
+  name        String
   permissions UserPermission[]
 
   @@map("modules")
@@ -62,58 +87,33 @@ model UserPermission {
   moduleId String
   canView  Boolean @default(false)
   canEdit  Boolean @default(false)
-
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  module   Module  @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, moduleId])
   @@map("user_permissions")
 }
 
-model Representative {
-  code        String      @id
-  name        String?
-  fullName    String?
-  email       String?
-  contato     String?
-  endereco    String?
-  bairro      String?
-  cidade      String?
-  uf          String?
-  cep         String?
-  comissao    Float?
-  isVago      Int         @default(0) 
-  colorIndex  Int         @default(0)
-  
-  territories Territory[]
-  bairros     Bairro[]
-  clientes    Cliente[]
-
-  @@map("representatives")
-}
-
 model Territory {
-  id          Int             @id @default(autoincrement())
-  municipio   String?
-  uf          String?
-  modo        String?
-  
-  repCode     String?
-  rep         Representative? @relation(fields: [repCode], references: [code])
+  id        Int     @id @default(autoincrement())
+  municipio String?
+  uf        String?
+  modo      String?
+  repCode   String?
+  rep       User?   @relation(fields: [repCode], references: [repCode], onDelete: SetNull)
 
   @@map("territories")
 }
 
 model Bairro {
-  id          Int             @id @default(autoincrement())
-  bairro      String?
-  regiao      String?
-  municipio   String?
-  uf          String?
-  modo        String?
-  
-  repCode     String?
-  rep         Representative? @relation(fields: [repCode], references: [code])
+  id        Int     @id @default(autoincrement())
+  bairro    String?
+  regiao    String?
+  municipio String?
+  uf        String?
+  modo      String?
+  repCode   String?
+  rep       User?   @relation(fields: [repCode], references: [repCode], onDelete: SetNull)
 
   @@map("bairros")
 }
@@ -135,27 +135,22 @@ model InterestRequest {
 }
 
 model UserActivity {
-  id         Int      @id @default(autoincrement())
-  userId     Int
-  action     String   // e.g., "login", "profile_update", "query", "interest"
-  entity     String?  // e.g., "Cliente", "Representative", "User"
-  entityId   String?  // ID do registro envolvido
-  details    String?  // Descrição adicional
-  ipAddress  String?
-  timestamp  DateTime @default(now())
-
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  action    String
+  entity    String?
+  entityId  String?
+  details   String?
+  ipAddress String?
+  timestamp DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_activities")
 }
 
-// -----------------------------------------------------
-// MÓDULO ROTEIRIZAÇÃO COMERCIAL
-// -----------------------------------------------------
-
 model Cliente {
-  id_cliente        Int       @id @default(autoincrement())
-  codigo_cliente    String?   @unique
+  id_cliente        Int                    @id @default(autoincrement())
+  codigo_cliente    String?                @unique
   nome_cliente      String
   nome_abreviado    String?
   regiao            String?
@@ -167,40 +162,32 @@ model Cliente {
   cnpj              String?
   latitude          Float?
   longitude         Float?
-  status_ativo      Boolean   @default(true)
-  data_cadastro     DateTime  @default(now())
-  data_atualizacao  DateTime  @updatedAt
-
-  // Novos campos para roteirização e supervisão
+  status_ativo      Boolean                @default(true)
+  data_cadastro     DateTime               @default(now())
+  data_atualizacao  DateTime               @updatedAt
   supervisorName    String?
   classificacao     String?
   semana            String?
   prioridade        String?
-
-  // Relações
   repCode           String?
-  rep               Representative? @relation(fields: [repCode], references: [code])
-  
+  rep               User?                  @relation(fields: [repCode], references: [repCode], onDelete: SetNull)
   alocacoes         AlocacaoSupervisor[]
   classificacoes    ClassificacaoCliente[]
-  planejamentos     PlanejamentoVisitas[]
   distancias        DistanciasLogistica[]
   historicos        HistoricoVisitas[]
+  planejamentos     PlanejamentoVisitas[]
 
   @@map("clientes")
 }
 
-// Em vez de "Supervisores", usamos a tabela "User" (role: supervisor/admin) para centralizar a autenticação.
-
 model AlocacaoSupervisor {
-  id_alocacao   Int      @id @default(autoincrement())
+  id_alocacao   Int       @id @default(autoincrement())
   id_cliente    Int
   id_supervisor Int
   data_inicio   DateTime
   data_fim      DateTime?
-
-  cliente       Cliente  @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
-  supervisor    User     @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
+  cliente       Cliente   @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
+  supervisor    User      @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
 
   @@unique([id_cliente, id_supervisor, data_inicio], name: "unique_alocacao")
   @@map("alocacao_supervisor")
@@ -209,28 +196,26 @@ model AlocacaoSupervisor {
 model ClassificacaoCliente {
   id_classificacao   Int      @id @default(autoincrement())
   id_cliente         Int
-  classificacao      String?  // 'Estratégico', 'Forte', 'Médio', 'Pontual'
+  classificacao      String?
   data_classificacao DateTime
   responsavel        String?
   observacoes        String?
-
   cliente            Cliente  @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
 
   @@map("classificacao_cliente")
 }
 
 model PlanejamentoVisitas {
-  id_visita            Int      @id @default(autoincrement())
+  id_visita            Int       @id @default(autoincrement())
   id_cliente           Int
   id_supervisor        Int
-  semana               String?  // 'Semana 1', 'Semana 2', 'Semana 3', 'Semana 4'
+  semana               String?
   data_visita_prevista DateTime?
-  prioridade           String?  // 'Alta', 'Média', 'Normal'
-  status               String?  @default("Planejado") // 'Planejado', 'Concluído', 'Pendente', 'Cancelado'
+  prioridade           String?
+  status               String?   @default("Planejado")
   observacoes          String?
-
-  cliente              Cliente  @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
-  supervisor           User     @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
+  cliente              Cliente   @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
+  supervisor           User      @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
 
   @@map("planejamento_visitas")
 }
@@ -240,10 +225,9 @@ model DistanciasLogistica {
   id_cliente           Int
   id_supervisor        Int
   distancia_km         Float?
-  modo_transporte      String?  // 'Carro', 'Avião', 'Carro+Avião'
+  modo_transporte      String?
   tempo_estimado_horas Float?
   data_calculo         DateTime @default(now())
-
   cliente              Cliente  @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
   supervisor           User     @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
 
@@ -251,49 +235,47 @@ model DistanciasLogistica {
 }
 
 model BlocosViagem {
-  id_bloco       Int      @id @default(autoincrement())
-  codigo_bloco   String?  @unique
+  id_bloco       Int       @id @default(autoincrement())
+  codigo_bloco   String?   @unique
   id_supervisor  Int
   uf             String?
-  semana         String?  // 'Semana 1', 'Semana 2', 'Semana 3', 'Semana 4'
+  semana         String?
   total_clientes Int?
   estrategicos   Int?
   km_estimado    Float?
-  prioridade     String?  // 'Alta', 'Média', 'Normal'
+  prioridade     String?
   data_criacao   DateTime?
-
-  supervisor     User     @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
+  supervisor     User      @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
 
   @@map("blocos_viagem")
 }
 
 model ClustersCidades {
-  id_cluster          Int      @id @default(autoincrement())
-  uf                  String?
-  cidade              String?
-  tipo_cluster        String?  // 'Grande', 'Médio', 'Pequeno', 'Isolado'
-  total_clientes      Int?
-  densidade           Float?   // clientes por dia possível
+  id_cluster           Int      @id @default(autoincrement())
+  uf                   String?
+  cidade               String?
+  tipo_cluster         String?
+  total_clientes       Int?
+  densidade            Float?
   supervisor_principal String?
-  latitude            Float?   // Prisma ñ tem Point geográfico default, adaptado.
-  longitude           Float?
-  data_analise        DateTime @default(now())
+  latitude             Float?
+  longitude            Float?
+  data_analise         DateTime @default(now())
 
   @@map("clusters_cidades")
 }
 
 model HistoricoVisitas {
-  id_historico    Int      @id @default(autoincrement())
+  id_historico    Int       @id @default(autoincrement())
   id_cliente      Int
   id_supervisor   Int
   data_visita     DateTime?
-  resultado       String?  // 'Venda', 'Proposta', 'Sem Interesse', 'Não Encontrado'
+  resultado       String?
   valor_negocio   Float?
   proximo_contato DateTime?
   observacoes     String?
-
-  cliente         Cliente  @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
-  supervisor      User     @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
+  cliente         Cliente   @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
+  supervisor      User      @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
 
   @@map("historico_visitas")
 }
@@ -306,4 +288,43 @@ model ConfigSistema {
   data_atualizacao DateTime @updatedAt
 
   @@map("config_sistema")
+}
+
+model FeedPost {
+  id        Int            @id @default(autoincrement())
+  userId    Int
+  content   String
+  image     String?
+  sticker   String? // URL of the sticker if provided
+  createdAt DateTime       @default(now())
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments  FeedComment[]
+  reactions FeedReaction[]
+
+  @@map("feed_posts")
+}
+
+model FeedComment {
+  id        Int      @id @default(autoincrement())
+  postId    Int
+  userId    Int
+  content   String
+  sticker   String?
+  createdAt DateTime @default(now())
+  post      FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("feed_comments")
+}
+
+model FeedReaction {
+  id     Int      @id @default(autoincrement())
+  postId Int
+  userId Int
+  emoji  String
+  post   FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId, emoji])
+  @@map("feed_reactions")
 }

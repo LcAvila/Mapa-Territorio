@@ -141,9 +141,10 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
         repCode: '', supervisorName: '', classificacao: '', semana: '', prioridade: ''
       });
       fetchClientes();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      toast.error(error.message || 'Ocorreu um erro ao salvar o cliente.');
+      const message = error instanceof Error ? error.message : 'Ocorreu um erro ao salvar o cliente.';
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -183,9 +184,10 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
       if (!res.ok) throw new Error('Erro ao apagar cliente');
       toast.success('Cliente apagado com sucesso!');
       fetchClientes();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      toast.error(error.message || 'Erro ao apagar.');
+      const message = error instanceof Error ? error.message : 'Erro ao apagar.';
+      toast.error(message);
       setLoading(false);
     }
   };
@@ -287,7 +289,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
                   <div className="space-y-2">
                     <Label htmlFor="repCode">Representante</Label>
                     <div className="flex gap-2">
-                      <select id="repCode" name="repCode" value={formData.repCode} onChange={handleSelectChange as any} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                      <select id="repCode" name="repCode" value={formData.repCode} onChange={handleSelectChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
                         <option value="">— Selecione —</option>
                         {reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
                       </select>
@@ -313,7 +315,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
 
                   <div className="space-y-2">
                     <Label htmlFor="classificacao">Classificação</Label>
-                    <select id="classificacao" name="classificacao" value={formData.classificacao} onChange={handleSelectChange as any} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                    <select id="classificacao" name="classificacao" value={formData.classificacao} onChange={handleSelectChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
                       <option value="">— Selecione —</option>
                       <option value="Estratégico">Estratégico</option>
                       <option value="Forte">Forte</option>
@@ -324,7 +326,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
 
                   <div className="space-y-2">
                     <Label htmlFor="semana">Semana de Visita</Label>
-                    <select id="semana" name="semana" value={formData.semana} onChange={handleSelectChange as any} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                    <select id="semana" name="semana" value={formData.semana} onChange={handleSelectChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
                       <option value="">— Selecione —</option>
                       <option value="Semana 1">Semana 1</option>
                       <option value="Semana 2">Semana 2</option>
@@ -335,7 +337,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
 
                   <div className="space-y-2">
                     <Label htmlFor="prioridade">Prioridade</Label>
-                    <select id="prioridade" name="prioridade" value={formData.prioridade} onChange={handleSelectChange as any} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                    <select id="prioridade" name="prioridade" value={formData.prioridade} onChange={handleSelectChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
                       <option value="">— Selecione —</option>
                       <option value="Alta">Alta</option>
                       <option value="Média">Média</option>

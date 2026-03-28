@@ -31,17 +31,16 @@ export default function Login() {
                     data.token,
                     data.role,
                     data.user.full_name,
-                    data.tipo,
-                    data.repCode,
-                    data.estado_end,
+                    data.user.type,
+                    data.user.repCode,
+                    data.user.estado_end,
                     data.user.default_workspace,
                     data.user.inactivity_limit
                 );
                 toast.success(`Bem-vindo, ${data.user.full_name || 'Usuário'}!`);
                 
-                let target = data.user.default_workspace || (data.role === 'admin' || data.role === 'supervisor' ? 'admin' : '');
-                if (target === 'dashboard') target = 'admin';
-                setTimeout(() => navigate(`/${target}`), 400);
+                // Redirecionar TODOS os usuários para a Home Social, conforme solicitado
+                setTimeout(() => navigate('/'), 400);
             } else {
                 toast.error(data.message || 'Credenciais inválidas');
             }
@@ -110,14 +109,14 @@ export default function Login() {
                                 <span className="h-[1px] w-6 bg-primary/30" />
                             </div>
                             <h1 className="text-3xl font-bold tracking-tight text-foreground mb-1">{brandName}</h1>
-                            <p className="text-xs text-muted-foreground/70 font-medium">Plataforma de Inteligência Territorial</p>
+                            <p className="text-xs text-muted-foreground/70 font-medium">Autenticação por Código e Senha</p>
                         </motion.div>
                     </header>
 
                     <form onSubmit={handleSubmit} className="login-form space-y-6">
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="space-y-4">
                             <div className="login-field">
-                                <label className="login-label block mb-1.5" htmlFor="username">Identidade de Usuário</label>
+                                <label className="login-label block mb-1.5" htmlFor="username">Código de Acesso</label>
                                 <div className="login-input-wrap group">
                                     <User className="login-input-icon transition-colors group-focus-within:text-primary" />
                                     <input
@@ -125,7 +124,7 @@ export default function Login() {
                                         type="text"
                                         value={username}
                                         onChange={e => setUsername(e.target.value)}
-                                        placeholder="nome.sobrenome"
+                                        placeholder="Ex: CLI001"
                                         required
                                         autoComplete="username"
                                         className="login-input bg-black/20 border-white/5 focus:border-primary/50 transition-all"

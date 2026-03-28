@@ -25,7 +25,9 @@ async function main() {
   
   if (data.length <= 1) return;
 
-  const reps = await prisma.representative.findMany();
+  const reps = await prisma.user.findMany({
+    where: { tipo: 'representante' }
+  });
   console.log(`Temos ${reps.length} representantes no banco.`);
 
   let updatedCount = 0;
@@ -47,12 +49,12 @@ async function main() {
     let repCode = null;
     if (repName) {
       const foundRep = reps.find(r => {
-        const nameMatch = r.name ? repName.toLowerCase().includes(r.name.toLowerCase()) : false;
-        const fullNameMatch = r.fullName ? repName.toLowerCase().includes(r.fullName.toLowerCase()) : false;
+        const nameMatch = r.username ? repName.toLowerCase().includes(r.username.toLowerCase()) : false;
+        const fullNameMatch = r.full_name ? repName.toLowerCase().includes(r.full_name.toLowerCase()) : false;
         return nameMatch || fullNameMatch;
       });
       if (foundRep) {
-        repCode = foundRep.code;
+        repCode = foundRep.repCode;
       } else {
         repMismatch++;
       }
