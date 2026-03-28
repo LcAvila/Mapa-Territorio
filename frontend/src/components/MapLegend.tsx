@@ -1,6 +1,6 @@
 import { useApiRepresentatives, useApiTerritories, Cliente } from "@/hooks/use-api-data";
 import { getRepColor } from "@/data/representatives";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-context-core";
 import { Users, FilterX, MapPin } from "lucide-react";
 
 interface MapLegendProps {

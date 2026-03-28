@@ -3,7 +3,7 @@ import { getRepColor, getRepByCode } from "@/data/representatives";
 import { getMunicipioResponsaveis } from "@/data/territories";
 import { useMunicipioInfo } from "@/hooks/use-geo-data";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-context-core";
 import type { Representative } from "@/data/representatives";
 import type { TerritoryAssignment } from "@/data/territories";
 
@@ -55,7 +55,7 @@ export default function DetailPanel({
   const handleViewBairros = () => {
     if (!onViewBairros || !municipiosInfo) return;
     if (isBairrosActive) { onViewBairros(null); return; }
-    const mun = municipiosInfo.find((m: any) => m.nome.toLowerCase() === municipio.toLowerCase());
+    const mun = municipiosInfo.find((m: { nome: string; id: number }) => m.nome.toLowerCase() === municipio.toLowerCase());
     if (mun) onViewBairros(mun.id);
   };
 

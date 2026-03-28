@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck, Users, Flame, Filter, X, UserCheck } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-context-core";
 import { UF_DATA } from "@/data/uf-codes";
 import { Representative, Cliente, SearchSuggestion } from "@/hooks/use-api-data";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";

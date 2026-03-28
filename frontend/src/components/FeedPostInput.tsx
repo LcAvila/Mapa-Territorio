@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Smile, Send, X, Sticker } from 'lucide-react';
-import EmojiPicker from 'emoji-picker-react';
+import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { GiphyFetch } from '@giphy/js-fetch-api';
 import { Grid } from '@giphy/react-components';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/auth-context-core';
 import { toast } from 'sonner';
 import { Button } from './ui/button';
 
@@ -117,7 +117,7 @@ export default function FeedPostInput({ onPostCreated, defaultText = "" }: { onP
             <div className="absolute top-10 left-0 z-50 shadow-2xl">
                <EmojiPicker 
                  onEmojiClick={(emoji) => setContent(prev => prev + emoji.emoji)}
-                 theme={"dark" as any} 
+                 theme={Theme.DARK} 
                />
             </div>
           )}

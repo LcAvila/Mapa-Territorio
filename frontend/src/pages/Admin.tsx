@@ -11,7 +11,7 @@ export interface ClienteData {
   [key: string]: unknown;
 }
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/auth-context-core';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -44,6 +44,7 @@ import { RotasProvider } from '../contexts/RotasContext';
 import MiniMapBrasil from '../components/admin/MiniMapBrasil';
 import UserProfileManager from '../components/admin/users/UserProfileManager';
 import { SocialFeedPanel } from '../components/admin/SocialFeedPanel';
+import SpaceButton from '../components/admin/SpaceButton';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 interface Representative {
@@ -63,7 +64,7 @@ interface Representative {
   _count?: { clientes: number; territories: number; };
 }
 interface Territory { id: number; municipio: string; uf: string; repCode: string; modo: string; }
-interface SystemUser { id: number; username: string; role: string; repCode: string | null; code?: string; fullName?: string; full_name?: string; document?: string; cpf_cnpj?: string; documentType?: 'cpf' | 'cnpj'; companyName?: string; company_name?: string; birth_date?: string; birthDate?: string; telefone?: string; email?: string; photo?: string; cargo?: string; groupId?: number; last_active?: string; }
+interface SystemUser { id: number; username: string; role: string; repCode: string | null; code?: string; fullName?: string; full_name?: string; document?: string; cpf_cnpj?: string; documentType?: 'cpf' | 'cnpj'; companyName?: string; company_name?: string; birth_date?: string; birthDate?: string; telefone?: string; email?: string; photo?: string; cargo?: string; groupId?: number; last_active?: string; tipo?: string; }
 interface InterestRequest { id: number; nome: string; email: string | null; telefone: string | null; empresa: string | null; municipio: string; uf: string; modo: string | null; observacoes: string | null; status: 'pending' | 'accepted' | 'rejected'; created_at: string; }
 
 interface Group { id: string; name: string; repCodes: string[]; createdAt: string; }
@@ -74,7 +75,7 @@ interface ModulePermission { userId: number; moduleId: string; canView: boolean;
 type TabId = 'comunidade' | 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha';
 
 interface NavItem {
-  id: TabId | 'settings' | 'rotas_menu';
+  id: TabId | 'settings' | 'rotas_menu' | 'users_menu';
   label: string;
   icon: React.ElementType;
   count?: number;
@@ -336,7 +337,7 @@ export default function Admin() {
     endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: ''
   });
   const [newRep, setNewRep] = useState({
-    code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '',
+    userId: '', code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '',
     endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: ''
   });
 
@@ -541,7 +542,7 @@ export default function Admin() {
       toast.success(`Representante ${newRep.code} cadastrado!`);
       addAudit('create_rep', 'Representante', newRep.code, `Criou rep ${newRep.code} — ${newRep.name}`);
       setNewRep({
-        code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '',
+        userId: '', code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '',
         endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: ''
       });
       fetchAll();
@@ -760,7 +761,13 @@ export default function Admin() {
   const navItems: NavItem[] = [
     { id: 'comunidade' as const, label: 'Comunidade', icon: Users, restrict: ['admin', 'supervisor', 'representante'] },
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard, restrict: ['admin', 'supervisor', 'representante'] },
-    { id: 'reps' as const, label: 'Representantes', icon: Briefcase, count: reps.length, restrict: ['admin', 'supervisor'] },
+    {
+      id: 'users_menu' as const, label: 'Usuários', icon: UsersRound, restrict: ['admin', 'supervisor'], subItems: [
+        { id: 'users' as const, label: 'Lista de Usuários', icon: UserPlus, count: users.length },
+        { id: 'reps' as const, label: 'Representantes', icon: Briefcase, count: reps.length },
+        { id: 'groups' as const, label: 'Grupos', icon: UsersRound, count: groups.length },
+      ]
+    },
     { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor'] },
     { id: 'territories' as const, label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin', 'supervisor'] },
     {
@@ -777,8 +784,6 @@ export default function Admin() {
     { id: 'notifications' as const, label: 'Enviar Alerta', icon: Bell, count: notifications.length, restrict: ['admin'] },
     {
       id: 'settings' as const, label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
-        { id: 'users' as const, label: 'Usuários', icon: UserPlus, count: users.length },
-        { id: 'groups' as const, label: 'Grupos', icon: UsersRound, count: groups.length },
         { id: 'personal' as const, label: 'Personalização', icon: Palette },
         { id: 'audit' as const, label: 'Auditoria', icon: ScrollText, count: auditLogs.length },
       ]
@@ -796,6 +801,7 @@ export default function Admin() {
       'reps': 'reps',
       'territories': 'territories',
       'rotas_menu': 'routes',
+      'users_menu': 'users',
       'interests': 'interests',
       'notifications': 'notifications',
       'audit': 'audit',
@@ -970,10 +976,10 @@ export default function Admin() {
                 {isGeneratingPlan ? 'Gerando...' : 'Gerar Plano Logístico'}
               </button>
             )}
-            <button className="admin-header-action-btn" onClick={() => navigate('/')}>
-              <Map style={{ width: 15, height: 15 }} />
-              Ver Mapa
-            </button>
+            <SpaceButton 
+              onClick={() => navigate('/mapa')} 
+              label="Ver Mapa" 
+            />
             {pendingInterests > 0 && (
               <div className="admin-pending-badge">
                 <AlertCircle style={{ width: 13, height: 13 }} />
@@ -1598,52 +1604,99 @@ export default function Admin() {
                             <UserPlus className="w-5 h-5 text-primary" />
                             Novo Representante
                           </DialogTitle>
+                          <DialogDescription>
+                            Vincule um usuário do sistema para torná-lo um representante oficial.
+                          </DialogDescription>
                         </DialogHeader>
-                        <form onSubmit={(e) => { handleCreateRep(e); document.body.click(); }} className="space-y-4 pt-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1.5"><Label className="text-xs font-medium">Código *</Label><Input placeholder="Ex: REP001" value={newRep.code} onChange={e => setNewRep({ ...newRep, code: e.target.value })} required /></div>
-                            <div className="space-y-1.5"><Label className="text-xs font-medium">Nome Curto *</Label><Input placeholder="Ex: AVILA" value={newRep.name} onChange={e => setNewRep({ ...newRep, name: e.target.value })} required /></div>
-                          </div>
-                          <div className="space-y-1.5"><Label className="text-xs font-medium">Razão Social / Nome Completo</Label><Input placeholder="Nome completo ou razão social" value={newRep.fullName} onChange={e => setNewRep({ ...newRep, fullName: e.target.value })} /></div>
+                        
+                        {(() => {
+                          const availableUsers = users.filter(u => {
+                            const hasRepLink = reps.some(r => r.code === u.code || r.code === u.repCode);
+                            const isAlreadyRepRole = u.role === 'representante' || u.tipo === 'representante';
+                            return !hasRepLink && !isAlreadyRepRole;
+                          });
 
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1.5"><Label className="text-xs font-medium">E-mail</Label><Input type="email" placeholder="email@exemplo.com" value={newRep.email} onChange={e => setNewRep({ ...newRep, email: e.target.value })} /></div>
-                            <div className="space-y-1.5"><Label className="text-xs font-medium">Contato / Telefone</Label><Input placeholder="(00) 00000-0000" value={newRep.contato} onChange={e => setNewRep({ ...newRep, contato: e.target.value })} /></div>
-                          </div>
+                          const usedColorIndices = reps.filter(r => !r.isVago).map(r => r.colorIndex);
+                          const availableColors = Object.entries(REP_COLOR_PALETTE)
+                            .filter(([idx]) => !usedColorIndices.includes(Number(idx)))
+                            .map(([idx, color]) => ({ idx: Number(idx), color }));
 
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="col-span-2 space-y-1.5"><Label className="text-xs font-medium">Endereço</Label><Input placeholder="Rua, n├║mero, etc." value={newRep.endereco} onChange={e => setNewRep({ ...newRep, endereco: e.target.value })} /></div>
-                            <div className="space-y-1.5"><Label className="text-xs font-medium">CEP</Label><Input placeholder="00000-000" value={newRep.cep} onChange={e => setNewRep({ ...newRep, cep: e.target.value })} /></div>
-                          </div>
+                          return (
+                            <form onSubmit={(e) => { handleCreateRep(e); document.body.click(); }} className="space-y-6 pt-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Seleção de Usuário */}
+                                <div className="space-y-2">
+                                  <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Vincular Usuário *</Label>
+                                  <CustomSelect 
+                                    options={availableUsers.map(u => ({ 
+                                      value: String(u.id), 
+                                      label: `${u.code || u.username} — ${u.full_name || u.fullName || u.username}` 
+                                    }))} 
+                                    value={newRep.userId} 
+                                    onChange={id => {
+                                      const u = users.find(user => String(user.id) === id);
+                                      if (u) {
+                                        setNewRep({
+                                          ...newRep,
+                                          userId: id,
+                                          code: u.code || '',
+                                          name: (u.full_name || u.fullName || '').split(' ')[0] || u.username,
+                                          fullName: u.full_name || u.fullName || '',
+                                          email: u.email || u.username || '',
+                                          contato: u.telefone || '',
+                                          colorIndex: availableColors.length > 0 ? availableColors[0].idx : 1
+                                        });
+                                      }
+                                    }} 
+                                    placeholder="Selecione um usuário..." 
+                                  />
+                                  <p className="text-[10px] text-muted-foreground italic">Apenas usuários sem vínculo de representante aparecem aqui.</p>
+                                </div>
 
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="space-y-1.5"><Label className="text-xs font-medium">Bairro</Label><Input placeholder="Bairro" value={newRep.bairro} onChange={e => setNewRep({ ...newRep, bairro: e.target.value })} /></div>
-                            <div className="space-y-1.5"><Label className="text-xs font-medium">Cidade</Label><Input placeholder="Cidade" value={newRep.cidade} onChange={e => setNewRep({ ...newRep, cidade: e.target.value })} /></div>
-                            <div className="space-y-1.5"><Label className="text-xs font-medium">UF</Label><Input placeholder="UF" value={newRep.uf} onChange={e => setNewRep({ ...newRep, uf: e.target.value?.toUpperCase() })} maxLength={2} /></div>
-                          </div>
+                                {/* Seleção de Cor */}
+                                <div className="space-y-2">
+                                  <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Cor no Mapa *</Label>
+                                  <div className="grid grid-cols-6 gap-2 p-2 bg-secondary/10 rounded-lg border border-border/40">
+                                    {availableColors.length > 0 ? (
+                                      availableColors.map(({ idx, color }) => (
+                                        <button
+                                          key={idx}
+                                          type="button"
+                                          onClick={() => setNewRep({ ...newRep, colorIndex: idx })}
+                                          className={`w-6 h-6 rounded-full border-2 transition-all ${newRep.colorIndex === idx ? 'border-primary ring-2 ring-primary/20 scale-110 shadow-sm' : 'border-transparent hover:scale-110 opacity-60 hover:opacity-100'}`}
+                                          style={{ background: color }}
+                                          title={`Cor ${idx}`}
+                                        />
+                                      ))
+                                    ) : (
+                                      <p className="col-span-6 text-[10px] text-destructive font-medium p-1">Todas as cores estão em uso.</p>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground italic">Cores já utilizadas por outros representantes estão ocultas.</p>
+                                </div>
+                              </div>
 
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1.5"><Label className="text-xs font-medium">% Comissão</Label><div className="relative"><Percent className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" /><Input type="number" step="0.01" className="pl-9" placeholder="0.00" value={newRep.comissao} onChange={e => setNewRep({ ...newRep, comissao: e.target.value })} /></div></div>
-                            <div className="flex items-end pb-1 gap-4">
-                              <label className="flex items-center gap-2.5 text-sm text-muted-foreground cursor-pointer select-none p-2 rounded-lg border border-border/50 hover:bg-secondary/30 transition-colors flex-1">
-                                <input type="checkbox" checked={newRep.isVago} onChange={e => setNewRep({ ...newRep, isVago: e.target.checked })} className="rounded" />
-                                <div><p className="text-xs font-medium text-foreground">Marcar como Vago</p></div>
-                              </label>
-                            </div>
+                              <div className="grid grid-cols-2 gap-4 opacity-70">
+                                <div className="space-y-1.5"><Label className="text-xs font-medium">Código</Label><Input disabled value={newRep.code} /></div>
+                                <div className="space-y-1.5"><Label className="text-xs font-medium">Nome Curto</Label><Input disabled value={newRep.name} /></div>
+                              </div>
 
-                            <div className="space-y-2">
-                              <Label className="text-xs font-bold uppercase tracking-tight text-muted-foreground">Cor do Representante no Mapa</Label>
-                              <ColorPicker
-                                value={newRep.colorIndex}
-                                onChange={v => setNewRep({ ...newRep, colorIndex: v })}
-                                disabled={newRep.isVago}
-                              />
-                              {newRep.isVago && <p className="text-[10px] text-muted-foreground italic">Representantes vagos usam uma cor padrão (cinza).</p>}
-                            </div>
-                          </div>
-
-                          <Button className="w-full gap-2 mt-2" type="submit"><Plus className="w-4 h-4" />Cadastrar Representante</Button>
-                        </form>
+                              <div className="flex justify-between items-center pt-4 border-t border-border/10">
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className={newRep.userId && newRep.colorIndex ? "text-emerald-500 flex items-center gap-1" : "text-amber-500 flex items-center gap-1"}>
+                                    {newRep.userId && newRep.colorIndex ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                                    {newRep.userId && newRep.colorIndex ? "Pronto para cadastrar" : "Preencha os campos obrigatórios"}
+                                  </span>
+                                </div>
+                                <div className="flex gap-3">
+                                  <Button type="submit" disabled={!newRep.userId || !newRep.colorIndex} className="w-48 gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                                    <Save className="w-4 h-4" /> Finalizar Cadastro
+                                  </Button>
+                                </div>
+                              </div>
+                            </form>
+                          );
+                        })()}
                       </DialogContent>
                     </Dialog>
                   </div>

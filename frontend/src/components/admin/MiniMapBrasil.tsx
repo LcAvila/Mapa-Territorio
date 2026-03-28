@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { REP_COLOR_PALETTE } from '@/data/representatives';
+import { GeoJSONFeature, GeoJSONFeatureCollection } from '@/hooks/use-api-data';
 
 interface Territory { id: number; municipio: string; uf: string; repCode: string; modo: string; }
-interface Representative { code: string; name: string; fullName: string; isVago: boolean; colorIndex: number; }
+interface Representative { code: string; name: string; fullName?: string; isVago: boolean | number; colorIndex: number; }
+
+interface IBGEState {
+  id: number;
+  sigla: string;
+  nome: string;
+}
 
 interface MiniMapBrasilProps {
   territories: Territory[];
@@ -28,13 +35,15 @@ function ringToPath(ring: number[][], w: number, h: number): string {
   }).join(' ') + 'Z';
 }
 
-function featureToPath(geometry: any, w: number, h: number): string {
+function featureToPath(geometry: GeoJSONFeature['geometry'], w: number, h: number): string {
   if (!geometry) return '';
   if (geometry.type === 'Polygon') {
-    return geometry.coordinates.map((ring: number[][]) => ringToPath(ring, w, h)).join(' ');
+    const coords = geometry.coordinates as number[][][];
+    return coords.map((ring: number[][]) => ringToPath(ring, w, h)).join(' ');
   }
   if (geometry.type === 'MultiPolygon') {
-    return geometry.coordinates.flatMap((poly: number[][][]) =>
+    const coords = geometry.coordinates as number[][][][];
+    return coords.flatMap((poly: number[][][]) =>
       poly.map((ring: number[][]) => ringToPath(ring, w, h))
     ).join(' ');
   }
@@ -42,16 +51,16 @@ function featureToPath(geometry: any, w: number, h: number): string {
 }
 
 // Extract 2-letter UF sigla from GeoJSON feature properties
-function getUfFromFeature(feature: any, ufMap: Record<number, string>): string {
+function getUfFromFeature(feature: GeoJSONFeature, ufMap: Record<number, string>): string {
   const code = feature?.properties?.codarea ?? feature?.properties?.CD_UF ?? feature?.properties?.codigo;
   return code ? (ufMap[Number(code)] || '') : '';
 }
 
 export default function MiniMapBrasil({ territories, reps, filterUF, filterRep, onClickUF }: MiniMapBrasilProps) {
-  const [geoData, setGeoData] = useState<any>(null);
+  const [geoData, setGeoData] = useState<GeoJSONFeatureCollection | null>(null);
   const [ufMap, setUfMap] = useState<Record<number, string>>({}); // {codigo: sigla}
   const [hoveredUF, setHoveredUF] = useState<string | null>(null);
-  const cacheRef = useRef<any>(null);
+  const cacheRef = useRef<GeoJSONFeatureCollection | null>(null);
   const W = 320;
   const H = 280;
 
@@ -69,7 +78,7 @@ export default function MiniMapBrasil({ territories, reps, filterUF, filterRep, 
     // Also fetch UF name->sigla mapping
     fetch('https://servicodados.ibge.gov.br/api/v1/localidades/estados')
       .then(r => r.json())
-      .then((states: any[]) => {
+      .then((states: IBGEState[]) => {
         const map: Record<number, string> = {};
         states.forEach(s => { map[s.id] = s.sigla; });
         setUfMap(map);
@@ -131,7 +140,7 @@ export default function MiniMapBrasil({ territories, reps, filterUF, filterRep, 
         viewBox={`0 0 ${W} ${H}`}
         style={{ width: '100%', height: 'auto', display: 'block' }}
       >
-        {geoData.features.map((feature: any, i: number) => {
+        {geoData.features.map((feature: GeoJSONFeature, i: number) => {
           const uf = getUfFromFeature(feature, ufMap);
           const color = getStateColor(uf);
           const isHovered = hoveredUF === uf;

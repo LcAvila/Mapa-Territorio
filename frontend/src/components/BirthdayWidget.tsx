@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/auth-context-core';
 import { Cake, Gift } from 'lucide-react';
 import { Button } from './ui/button';
 import { format } from 'date-fns';

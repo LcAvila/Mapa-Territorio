@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-context-core";
 import BrazilMap from "@/components/BrazilMap";
 import MapHeader from "@/components/MapHeader";
 import MapLegend from "@/components/MapLegend";

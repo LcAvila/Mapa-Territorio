@@ -4,8 +4,8 @@
 export interface Representative {
   code: string;
   name: string;
-  fullName: string;
-  isVago: boolean;
+  fullName?: string;
+  isVago: boolean | number;
   colorIndex: number;
 }
 

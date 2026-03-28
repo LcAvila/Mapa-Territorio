@@ -1,21 +1,5 @@
-import React, { createContext, useContext, useState } from 'react';
-
-interface AuthContextType {
-    token: string | null;
-    role: string | null;
-    userId: number | null;
-    userName: string | null;
-    repCode: string | null;
-    tipo: string | null;
-    estado_end: string | null;
-    defaultWorkspace: string | null;
-    inactivityLimit: number | null;
-    login: (token: string, role: string, userName?: string, tipo?: string, repCode?: string, estado_end?: string, defaultWorkspace?: string, inactivityLimit?: number) => void;
-    logout: () => void;
-    isAuthenticated: boolean;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+import React, { useState } from 'react';
+import { AuthContext, AuthContextType } from './auth-context-core';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
@@ -82,8 +66,3 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
 }
 
-export function useAuth() {
-    const ctx = useContext(AuthContext);
-    if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
-    return ctx;
-}

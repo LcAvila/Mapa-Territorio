@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/auth-context-core';
 import FeedPostInput from '@/components/FeedPostInput';
 import FeedList from '@/components/FeedList';
 import BirthdayWidget from '@/components/BirthdayWidget';
@@ -46,7 +46,7 @@ export function SocialFeedPanel() {
         <div className="hidden lg:flex lg:col-span-3 flex-col gap-8">
           <div className="bg-card border border-border/50 rounded-3xl p-8 text-center shadow-xl shadow-black/5 backdrop-blur-sm">
             <div className="relative inline-block mb-6">
-              <div className="w-24 h-24 mx-auto rounded-3xl bg-gradient-to-tr from-primary/30 to-primary/10 flex items-center justify-center text-primary text-3xl font-bold uppercase shadow-inner rotate-3 hover:rotate-0 transition-transform duration-300">
+              <div className="w-24 h-24 mx-auto rounded-3xl bg-gradient-to-tr from-primary/30 to-primary/10 flex items-center justify-center text-primary text-3xl font-bold uppercase shadow-inner">
                 {userName?.charAt(0) || 'U'}
               </div>
               <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 border-4 border-card rounded-full shadow-sm" title="Online" />

@@ -14,7 +14,7 @@ import {
   useStatesGeoJSON, useMunicipiosGeoJSON, useMunicipioNames,
   useNeighborhoodsGeoJSON, useStatesMetadata, useCitiesMetadata
 } from "@/hooks/use-geo-data";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/auth-context-core";
 import { getUFByCode, getUFBySigla } from "@/data/uf-codes";
 import { getMunicipioResponsaveis } from "@/data/territories";
 import { getRepColor, getRepByCode } from "@/data/representatives";
