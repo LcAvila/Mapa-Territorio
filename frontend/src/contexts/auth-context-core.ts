@@ -10,7 +10,8 @@ export interface AuthContextType {
     estado_end: string | null;
     defaultWorkspace: string | null;
     inactivityLimit: number | null;
-    login: (token: string, role: string, userName?: string, tipo?: string, repCode?: string, estado_end?: string, defaultWorkspace?: string, inactivityLimit?: number) => void;
+    tokenVersion: number | null;
+    login: (token: string, userId: number, role: string, userName?: string, tipo?: string, repCode?: string, estado_end?: string, defaultWorkspace?: string, inactivityLimit?: number, tokenVersion?: number) => void;
     logout: () => void;
     isAuthenticated: boolean;
 }

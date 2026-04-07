@@ -2,8 +2,11 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-    const users = await prisma.user.findMany({ select: { id: true, username: true, repCode: true, code: true } });
-    console.log('All users in DB:', JSON.stringify(users, null, 2));
+    const territories = await prisma.territory.findMany({ 
+        orderBy: { id: 'desc' },
+        take: 5
+    });
+    console.log('Result:', JSON.stringify(territories, null, 2));
     process.exit(0);
 }
 

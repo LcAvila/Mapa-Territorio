@@ -2,8 +2,11 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-    const users = await prisma.user.findMany({ select: { id: true, username: true, repCode: true, code: true } });
-    console.log('All users in DB:', JSON.stringify(users, null, 2));
+    const updated = await prisma.user.updateMany({ 
+        where: { repCode: '' },
+        data: { repCode: null }
+    });
+    console.log('Fixed users count:', updated.count);
     process.exit(0);
 }
 

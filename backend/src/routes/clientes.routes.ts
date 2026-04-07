@@ -57,14 +57,16 @@ router.post('/', requirePermission('clients', 'edit'), async (req, res) => {
       bairro, 
       cep, 
       endereco_completo,
+      numero,
       latitude,
       longitude
     } = req.body;
 
     // Se latitude ou longitude não forem informados, tentar geocodificar automatimente
     if ((!latitude || !longitude) && (endereco_completo || (cidade && uf))) {
-      const searchAddress = endereco_completo || `${bairro ? bairro + ', ' : ''}${cidade}, ${uf}, Brasil`;
-      const coords = await geocodeAddress(searchAddress);
+      // Build a more precise search address including the number if available
+      const searchAddress = `${endereco_completo || ""}${numero ? ", " + numero : ""}${bairro ? ", " + bairro : ""}, ${cidade || ""}, ${uf || ""}`;
+      const coords = await geocodeAddress(searchAddress.trim());
       
       if (coords) {
         latitude = coords.lat;
@@ -102,6 +104,7 @@ router.post('/', requirePermission('clients', 'edit'), async (req, res) => {
         bairro,
         cep,
         endereco_completo,
+        numero: numero ? numero.toString() : null,
         latitude: latitude ? parseFloat(latitude.toString()) : null,
         longitude: longitude ? parseFloat(longitude.toString()) : null,
         repCode: req.body.repCode || null,
@@ -117,6 +120,64 @@ router.post('/', requirePermission('clients', 'edit'), async (req, res) => {
   } catch (error) {
     console.error('Erro ao criar cliente:', error);
     res.status(500).json({ message: 'Erro ao cadastrar o cliente.' });
+  }
+});
+
+// ---------------------------------------------------------
+// PUT /api/clientes/:id - Atualizar um cliente
+// ---------------------------------------------------------
+router.put('/:id', requirePermission('clients', 'edit'), async (req, res) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    let { 
+      codigo_cliente, nome_cliente, nome_abreviado, cnpj, regiao, uf, cidade, bairro, cep, 
+      endereco_completo, numero, latitude, longitude, repCode, supervisorName, 
+      classificacao, semana, prioridade, status_ativo 
+    } = req.body;
+
+    // FORCAR recalculação se endereço ou número foram enviados (evita usar coordenadas antigas e imprecisas)
+    if (endereco_completo || numero || cidade || uf || bairro) {
+      const searchAddress = `${endereco_completo || ""}${numero ? ", " + numero : ""}${bairro ? ", " + bairro : ""}, ${cidade || ""}, ${uf || ""}, Brasil`;
+      console.log(`[Geocode Update] Recalculando para: ${searchAddress.trim()}`);
+      const coords = await geocodeAddress(searchAddress.trim());
+      if (coords) {
+        latitude = coords.lat;
+        longitude = coords.lng;
+        console.log(`[Geocode Update] Novas coordenadas: ${latitude}, ${longitude}`);
+      }
+    }
+
+    const clienteAtualizado = await prisma.cliente.update({
+      where: { id_cliente: id },
+      data: {
+        codigo_cliente, nome_cliente, nome_abreviado, cnpj, regiao, uf, cidade, bairro, cep,
+        endereco_completo,
+        numero: numero ? numero.toString() : null,
+        latitude: latitude ? parseFloat(latitude.toString()) : null,
+        longitude: longitude ? parseFloat(longitude.toString()) : null,
+        repCode, supervisorName, classificacao, semana, prioridade,
+        status_ativo: status_ativo !== undefined ? status_ativo : true
+      }
+    });
+
+    res.json({ message: 'Cliente atualizado com sucesso!', cliente: clienteAtualizado });
+  } catch (error) {
+    console.error('Erro ao atualizar cliente:', error);
+    res.status(500).json({ message: 'Erro ao atualizar o cliente.' });
+  }
+});
+
+// ---------------------------------------------------------
+// DELETE /api/clientes/:id - Remover um cliente
+// ---------------------------------------------------------
+router.delete('/:id', requirePermission('clients', 'edit'), async (req, res) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    await prisma.cliente.delete({ where: { id_cliente: id } });
+    res.json({ message: 'Cliente removido com sucesso!' });
+  } catch (error) {
+    console.error('Erro ao deletar cliente:', error);
+    res.status(500).json({ message: 'Erro ao remover o cliente.' });
   }
 });
 

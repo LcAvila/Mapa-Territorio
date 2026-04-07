@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -129,6 +130,8 @@ model InterestRequest {
   modo        String?
   observacoes String?
   status      String   @default("pending")
+  userId      Int?
+  repCode     String?
   created_at  DateTime @default(now())
 
   @@map("interest_requests")
@@ -159,6 +162,7 @@ model Cliente {
   bairro            String?
   cep               String?
   endereco_completo String?
+  numero            String?
   cnpj              String?
   latitude          Float?
   longitude         Float?

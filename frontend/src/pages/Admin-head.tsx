@@ -201,7 +201,7 @@ export default function Admin() {
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['settings', 'rotas_menu']);
 
   // ── Brand / Personalização ────────────────────────────────────────────────
-  const [brandLogo, setBrandLogo] = useState<string>(() => localStorage.getItem('brand_logo') || '');
+  const [brandLogo, setBrandLogo] = useState<string>(() => localStorage.getItem('brand_logo') || '/Logo.png');
   const [brandName, setBrandName] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Território');
   const [brandNameDraft, setBrandNameDraft] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Território');
 

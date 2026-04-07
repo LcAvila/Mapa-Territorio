@@ -38,39 +38,47 @@ export interface Cliente {
 }
 
 export function useApiRepresentatives(enabled: boolean) {
-  const { token } = useAuth();
+  const { token, tokenVersion } = useAuth();
   return useQuery<Representative[]>({
-    queryKey: ["api", "representatives"],
+    queryKey: ["api", "representatives", !!token],
     queryFn: async () => {
+      if (!token) return [];
       const res = await fetch(`${API_BASE}/api/admin/reps`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'x-user-token-version': String(tokenVersion || 0)
+        }
       });
       return res.ok ? res.json() : [];
     },
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-    enabled
+    staleTime: 5_000,
+    refetchInterval: token ? 10_000 : false,
+    enabled: true  // always enabled; token check inside queryFn
   });
 }
 
 export function useApiTerritories(enabled: boolean) {
-  const { token } = useAuth();
+  const { token, tokenVersion } = useAuth();
   return useQuery<TerritoryAssignment[]>({
-    queryKey: ["api", "territories"],
+    queryKey: ["api", "territories", !!token],
     queryFn: async () => {
+      if (!token) return [];
       const res = await fetch(`${API_BASE}/api/admin/territories`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'x-user-token-version': String(tokenVersion || 0)
+        }
       });
       return res.ok ? res.json() : [];
     },
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-    enabled
+    staleTime: 5_000,
+    refetchInterval: token ? 10_000 : false,
+    enabled: true  // always enabled; token check inside queryFn
   });
 }
 
 export function useApiClientes(repCode: string | null) {
-  const { token } = useAuth();
+  const { token, tokenVersion } = useAuth();
   return useQuery<Cliente[]>({
     queryKey: ["api", "clientes", repCode],
     queryFn: async () => {
@@ -78,7 +86,10 @@ export function useApiClientes(repCode: string | null) {
         ? `${API_BASE}/api/clientes?repCode=${repCode}`
         : `${API_BASE}/api/clientes`;
       const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'x-user-token-version': String(tokenVersion || 0)
+        }
       });
       return res.ok ? res.json() : [];
     },

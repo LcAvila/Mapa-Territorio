@@ -20,35 +20,17 @@ interface DetailPanelProps {
   onToggleClientes: () => void;
 }
 
-function useApiData() {
-  const repsQ = useQuery<Representative[]>({
-    queryKey: ["api", "representatives"],
-    queryFn: async () => {
-      const res = await fetch("http://localhost:3001/api/representatives");
-      return res.ok ? res.json() : [];
-    },
-    staleTime: 30_000,
-  });
-
-  const terrQ = useQuery<TerritoryAssignment[]>({
-    queryKey: ["api", "territories"],
-    queryFn: async () => {
-      const res = await fetch("http://localhost:3001/api/territories");
-      return res.ok ? res.json() : [];
-    },
-    staleTime: 30_000,
-  });
-
-  return { reps: repsQ.data || [], territories: terrQ.data || [] };
-}
+import { useApiRepresentatives, useApiTerritories } from "@/hooks/use-api-data";
 
 export default function DetailPanel({ 
   municipio, uf, modo, onClose, onViewBairros, ufCode, 
   isBairrosActive, onDeselectState, showClientes, onToggleClientes 
 }: DetailPanelProps) {
   const { role, estado_end } = useAuth();
+  const { token } = useAuth();
   const { data: municipiosInfo, isLoading: loadingInfo } = useMunicipioInfo(ufCode || null);
-  const { reps: apiReps, territories: apiTerritories } = useApiData();
+  const { data: apiReps = [] } = useApiRepresentatives(!!token);
+  const { data: apiTerritories = [] } = useApiTerritories(!!token);
 
   const repCodes = getMunicipioResponsaveis(municipio, uf, modo, apiTerritories);
 

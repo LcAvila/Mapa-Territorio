@@ -5,14 +5,25 @@ const Loader = () => {
   return (
     <div className="loader-wrapper flex items-center justify-center w-full h-full min-h-[400px]">
       <StyledWrapper>
-        <div className="loader">
-          <div className="cup">
-            <div className="cup-handle" />
-            <div className="smoke one" />
-            <div className="smoke two" />
-            <div className="smoke three" />
+        <div className="space-loader">
+          <div className="sun" />
+          <div className="orbit orbit-1">
+            <div className="planet planet-1" />
           </div>
-          <div className="load">CARREGANDO...</div>
+          <div className="orbit orbit-2">
+            <div className="planet planet-2" />
+          </div>
+          <div className="orbit orbit-3">
+            <div className="planet planet-3" />
+          </div>
+          <div className="loading-text">
+            <span>Sincronizando Dados</span>
+            <div className="dots">
+              <div className="dot" />
+              <div className="dot" />
+              <div className="dot" />
+            </div>
+          </div>
         </div>
       </StyledWrapper>
     </div>
@@ -20,158 +31,109 @@ const Loader = () => {
 }
 
 const StyledWrapper = styled.div`
-  /* Base design from Uiverse.io by esraaabdel-kareem - Scaled up 1.8x */
-  .loader {
-    width: 180px;
-    height: 180px;
+  .space-loader {
     position: relative;
-    animation: shake 3s infinite ease-in-out;
+    width: 200px;
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  .cup {
+  .sun {
     position: absolute;
-    bottom: 36px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 72px;
-    height: 54px;
-    background-color: #5b4022cb;
-    border: 2px solid #2e2e2e;
-    border-radius: 5px 5px 18px 18px;
-    z-index: 1;
-    animation: cupPulse 6s infinite ease-in-out;
-  }
-
-  .cup::before {
-    content: "";
-    position: absolute;
-    bottom: -9px;
-    width: calc(100% - 4px);
-    height: 11px;
-    background: #5b4022cb;
-    border: 2px solid #2e2e2e;
-    border-top: none;
+    width: 40px;
+    height: 40px;
+    background: hsl(var(--background));
+    border: 2px solid hsl(var(--primary));
     border-radius: 50%;
-    z-index: -1;
-    animation: cupPulse 6s infinite ease-in-out;
+    box-shadow: 0 0 40px hsl(var(--primary) / 0.4), 0 0 60px hsl(155, 45%, 50% / 0.3), 0 0 100px hsl(155, 45%, 30% / 0.2);
+    z-index: 10;
   }
 
-  .cup::after {
-    content: "";
+  .orbit {
     position: absolute;
-    top: -4px;
-    left: 2px;
-    width: calc(100% - 4px);
-    height: 7px;
-    background: #da8920ca;
-    border: 2px solid #2e2e2e;
+    border: 1px solid hsl(var(--foreground) / 0.1);
     border-radius: 50%;
-    animation: coffeeGlow 6s infinite ease-in-out;
   }
 
-  .cup-handle {
-    position: absolute;
-    top: 9px;
-    right: -18px;
-    width: 18px;
-    height: 27px;
-    border: 4px solid #2e2e2e;
-    border-left: none;
-    border-radius: 0 18px 18px 0;
-    background: transparent;
-  }
+  .orbit-1 { width: 100px; height: 100px; animation: rotate 4s linear infinite; }
+  .orbit-2 { width: 150px; height: 150px; animation: rotate 7s linear infinite reverse; }
+  .orbit-3 { width: 200px; height: 200px; animation: rotate 12s linear infinite; }
 
-  .smoke {
+  .planet {
     position: absolute;
-    bottom: 100%;
-    left: 50%;
-    width: 18px;
-    height: 45px;
-    /* Theme-aware smoke color */
-    background: hsl(var(--foreground) / 0.15);
     border-radius: 50%;
-    transform: translateX(-50%);
-    animation: rise 3s infinite ease-in-out;
-    filter: blur(8px);
   }
 
-  .smoke.one {
-    animation-delay: 0s;
-  }
-  .smoke.two {
-    animation-delay: 0.8s;
-  }
-  .smoke.three {
-    animation-delay: 1.6s;
+  .planet-1 {
+    top: 50%;
+    left: -6px;
+    width: 12px;
+    height: 12px;
+    background: hsl(var(--primary));
+    box-shadow: 0 0 15px hsl(var(--primary) / 0.6);
   }
 
-  .load {
+  .planet-2 {
+    top: 10px;
+    right: 30px;
+    width: 10px;
+    height: 10px;
+    background: hsl(var(--foreground));
+    box-shadow: 0 0 12px hsl(var(--foreground) / 0.4);
+  }
+
+  .planet-3 {
+    bottom: 20px;
+    left: 20px;
+    width: 8px;
+    height: 8px;
+    background: hsl(var(--muted-foreground));
+    box-shadow: 0 0 10px hsl(var(--muted-foreground) / 0.4);
+  }
+
+  .loading-text {
     position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    /* Theme-aware loading text */
-    font-size: 16px;
-    font-weight: 700;
+    bottom: -60px;
+    width: 100%;
+    text-align: center;
     color: hsl(var(--foreground));
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
     opacity: 0.8;
-    letter-spacing: 0.1em;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
   }
 
-  @keyframes rise {
-    0% {
-      transform: translate(-50%, 0) scale(0.4);
-      opacity: 0;
-    }
-    30% {
-      opacity: 0.7;
-    }
-    60% {
-      opacity: 0.4;
-    }
-    100% {
-      transform: translate(-50%, -180px) scale(1);
-      opacity: 0;
-    }
+  .dots {
+    display: flex;
+    gap: 4px;
   }
 
-  @keyframes shake {
-    0% {
-      transform: translateX(0) translateY(0) rotate(0);
-    }
-    25% {
-      transform: translateX(-7px) translateY(-3px) rotate(-3deg);
-    }
-    50% {
-      transform: translateX(0) translateY(0) rotate(0);
-    }
-    75% {
-      transform: translateX(7px) translateY(-3px) rotate(3deg);
-    }
-    100% {
-      transform: translateX(0) translateY(0) rotate(0);
-    }
+  .dot {
+    width: 3px;
+    height: 3px;
+    background: hsl(var(--foreground));
+    border-radius: 50%;
+    animation: dotPulse 1.5s infinite;
   }
 
-  /* Animations */
-  @keyframes cupPulse {
-    0%,
-    100% {
-      background-color: #5b4022cb;
-    }
-    50% {
-      background-color: #f5f5f5bd;
-    }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
-  @keyframes coffeeGlow {
-    0%,
-    100% {
-      background: #da8920ca;
-    }
-    50% {
-      background: #fed197d5;
-    }
+  @keyframes dotPulse {
+    0%, 100% { opacity: 0.2; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.4); }
   }
 `;
 

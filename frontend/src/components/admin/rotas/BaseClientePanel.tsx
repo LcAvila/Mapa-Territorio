@@ -21,6 +21,7 @@ interface Cliente {
   bairro: string | null;
   cep: string | null;
   endereco_completo: string | null;
+  numero: string | null;
   repCode: string | null;
   supervisorName: string | null;
   classificacao: string | null;
@@ -50,6 +51,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
     cnpj: '',
     cep: '',
     endereco_completo: '',
+    numero: '',
     bairro: '',
     cidade: '',
     uf: '',
@@ -61,14 +63,61 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
     prioridade: ''
   });
   const [reps, setReps] = useState<{ code: string, name: string }[]>([]);
+  const [fetchingCep, setFetchingCep] = useState(false);
+
+  const formatCNPJ = (value: string) => {
+    let v = value.replace(/\D/g, '');
+    if (v.length > 14) v = v.substring(0, 14);
+    v = v.replace(/^(\d{2})(\d)/, '$1.$2');
+    v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+    v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
+    v = v.replace(/(\d{4})(\d)/, '$1-$2');
+    return v;
+  };
+
+  const formatCEP = (value: string) => {
+    let v = value.replace(/\D/g, '');
+    if (v.length > 8) v = v.substring(0, 8);
+    v = v.replace(/^(\d{5})(\d)/, '$1-$2');
+    return v;
+  };
+
+  const fetchCepData = async (cep: string) => {
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length !== 8) return;
+    
+    setFetchingCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        setFormData(prev => ({
+          ...prev,
+          endereco_completo: data.logradouro + (data.complemento ? `, ${data.complemento}` : ''),
+          bairro: data.bairro,
+          cidade: data.localidade,
+          uf: data.uf,
+        }));
+        toast.success('Endereço preenchido via CEP!');
+      } else {
+        toast.error('CEP não encontrado.');
+      }
+    } catch (e) {
+      toast.error('Erro ao buscar o CEP.');
+    } finally {
+      setFetchingCep(false);
+    }
+  };
 
   const fetchClientes = async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
+      const tokenVersion = localStorage.getItem('tokenVersion') || '0';
       const res = await fetch(API_URL, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'x-user-token-version': tokenVersion
         }
       });
       if (!res.ok) throw new Error('Falha ao buscar clientes');
@@ -85,8 +134,12 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
   const fetchReps = async () => {
     try {
       const token = localStorage.getItem('token');
+      const tokenVersion = localStorage.getItem('tokenVersion') || '0';
       const res = await fetch('http://localhost:3001/api/admin/reps', {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'x-user-token-version': tokenVersion
+        }
       });
       if (res.ok) setReps(await res.json());
     } catch (e) { console.error('Erro ao buscar representantes', e); }
@@ -102,7 +155,11 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name } = e.target;
+    let { value } = e.target;
+    if (name === 'cnpj') value = formatCNPJ(value);
+    if (name === 'cep') value = formatCEP(value);
+    setFormData({ ...formData, [name]: value });
   };
 
   const handleSaveClient = async (e: React.FormEvent) => {
@@ -115,6 +172,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
     try {
       setSubmitting(true);
       const token = localStorage.getItem('token');
+      const tokenVersion = localStorage.getItem('tokenVersion') || '0';
       const method = editingClientId ? 'PUT' : 'POST';
       const url = editingClientId ? `${API_URL}/${editingClientId}` : API_URL;
 
@@ -122,7 +180,8 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
         method,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'x-user-token-version': tokenVersion
         },
         body: JSON.stringify(formData)
       });
@@ -137,7 +196,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
       setEditingClientId(null);
       setFormData({
         codigo_cliente: '', nome_cliente: '', nome_abreviado: '', cnpj: '',
-        cep: '', endereco_completo: '', bairro: '', cidade: '', uf: '', regiao: '',
+        cep: '', endereco_completo: '', numero: '', bairro: '', cidade: '', uf: '', regiao: '',
         repCode: '', supervisorName: '', classificacao: '', semana: '', prioridade: ''
       });
       fetchClientes();
@@ -159,6 +218,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
       cnpj: client.cnpj || '',
       cep: client.cep || '',
       endereco_completo: client.endereco_completo || '',
+      numero: client.numero || '',
       bairro: client.bairro || '',
       cidade: client.cidade || '',
       uf: client.uf || '',
@@ -177,9 +237,13 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
+      const tokenVersion = localStorage.getItem('tokenVersion') || '0';
       const res = await fetch(`${API_URL}/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'x-user-token-version': tokenVersion
+        }
       });
       if (!res.ok) throw new Error('Erro ao apagar cliente');
       toast.success('Cliente apagado com sucesso!');
@@ -222,7 +286,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
                 <Plus className="w-4 h-4" /> Cadastrar Cliente
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-xl">
                   {editingClientId ? <Pencil className="w-5 h-5 text-primary" /> : <Database className="w-5 h-5 text-primary" />}
@@ -255,13 +319,20 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
                       <MapPin className="w-4 h-4" /> Dados de Localização e Endereço
                     </div>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 relative">
                     <Label htmlFor="cep">CEP</Label>
-                    <Input id="cep" name="cep" value={formData.cep} onChange={handleInputChange} placeholder="00000-000" />
+                    <div className="relative">
+                      <Input id="cep" name="cep" value={formData.cep} onChange={handleInputChange} onBlur={() => fetchCepData(formData.cep)} placeholder="00000-000" />
+                      {fetchingCep && <Loader2 className="absolute right-3 top-2.5 w-4 h-4 animate-spin text-muted-foreground" />}
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="endereco_completo">Endereço Completo</Label>
-                    <Input id="endereco_completo" name="endereco_completo" value={formData.endereco_completo} onChange={handleInputChange} placeholder="Rua, número, complemento" />
+                    <Label htmlFor="endereco_completo">Logradouro (Rua/Av)</Label>
+                    <Input id="endereco_completo" name="endereco_completo" value={formData.endereco_completo} onChange={handleInputChange} placeholder="Ex: Rua das Flores" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="numero">Número</Label>
+                    <Input id="numero" name="numero" value={formData.numero} onChange={handleInputChange} placeholder="Ex: 123 ou S/N" />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="bairro">Bairro</Label>
@@ -308,42 +379,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="supervisorName">Supervisor</Label>
-                    <Input id="supervisorName" name="supervisorName" value={formData.supervisorName} onChange={handleInputChange} placeholder="Nome do supervisor" />
-                  </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="classificacao">Classificação</Label>
-                    <select id="classificacao" name="classificacao" value={formData.classificacao} onChange={handleSelectChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                      <option value="">— Selecione —</option>
-                      <option value="Estratégico">Estratégico</option>
-                      <option value="Forte">Forte</option>
-                      <option value="Médio">Médio</option>
-                      <option value="Pontual">Pontual</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="semana">Semana de Visita</Label>
-                    <select id="semana" name="semana" value={formData.semana} onChange={handleSelectChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                      <option value="">— Selecione —</option>
-                      <option value="Semana 1">Semana 1</option>
-                      <option value="Semana 2">Semana 2</option>
-                      <option value="Semana 3">Semana 3</option>
-                      <option value="Semana 4">Semana 4</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="prioridade">Prioridade</Label>
-                    <select id="prioridade" name="prioridade" value={formData.prioridade} onChange={handleSelectChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                      <option value="">— Selecione —</option>
-                      <option value="Alta">Alta</option>
-                      <option value="Média">Média</option>
-                      <option value="Baixa">Baixa</option>
-                    </select>
-                  </div>
                 </div>
                 <div className="flex justify-end pt-4 mt-6 border-t">
                   <div className="flex gap-2">
@@ -428,7 +464,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
               <p className="text-xs mt-1">Sincronize ou clique em "Cadastrar Cliente" para adicionar.</p>
             </div>
           ) : (
-            <div className="overflow-auto max-h-[calc(100vh-280px)]">
+            <div className="overflow-auto max-h-[calc(100vh-280px)] custom-scrollbar">
               <Table>
                 <TableHeader className="bg-muted/50 sticky top-0 z-10 font-semibold backdrop-blur-sm">
                   <TableRow className="hover:bg-transparent">

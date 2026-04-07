@@ -43,6 +43,7 @@ interface BrazilMapProps {
   selectedClients?: Cliente[];
   onSelectClients?: (clients: Cliente[]) => void;
   onResetMap?: () => void;
+  onZoomToLocation?: (center: [number, number], zoom: number) => void;
 }
 
 const API_BASE = "http://localhost:3001";
@@ -55,22 +56,18 @@ function MapController({ center, zoom, flyToLocation, selectedUF }: { center: [n
   const centerLng = center[1];
   const hasFlyTo = !!flyToLocation;
 
-  // Initial view and state-driven animations
+  // Lógica de animação baseada em estado (UF ou visão Brasil)
   useEffect(() => {
     if (!map) return;
-    if (isFirst.current) { 
-      isFirst.current = false; 
-      map.setView(center, zoom); 
-      return;
-    }
-
-    // Se houver uma UF selecionada, seguimos a visão dela.
-    // Mas se não houver UF (visão Brasil), não forçamos a visão a cada render,
-    // pois isso mataria o zoom manual do usuário, a não ser que tenha havido um flyToLocation.
-    if ((selectedUF && !hasFlyTo) || (!selectedUF && hasFlyTo)) {
+    // SÓ executamos se não estivemos num foco de cliente (flyToLocation)
+    // E se não estivermos já num nível de zoom detalhado (evita resetar zoom manual)
+    if (!hasFlyTo && map.getZoom() < 10) {
+      if (selectedUF || isFirst.current) {
         map.flyTo(center, zoom, { duration: 1.5, easeLinearity: 0.25 });
+        isFirst.current = false;
+      }
     }
-  }, [map, center, zoom, hasFlyTo, selectedUF]); 
+  }, [map, center, zoom, hasFlyTo, selectedUF]);
 
   // Handle manual address search navigation
   useEffect(() => {
@@ -80,7 +77,7 @@ function MapController({ center, zoom, flyToLocation, selectedUF }: { center: [n
         // Use a small timeout to ensure map is ready and not fighting other animations
         const timer = setTimeout(() => {
           try {
-            map.flyTo([lat, lon], flyToLocation.zoom || 14, { 
+            map.flyTo([lat, lon], flyToLocation.zoom || 14, {
               duration: 2.5,
               easeLinearity: 0.1
             });
@@ -110,6 +107,87 @@ function MapAnimationController({ onMoveStart, onMoveEnd }: { onMoveStart: () =>
   return null;
 }
 
+// ─── Map Context Menu component ──────────────────────────────────────────────
+function MapContextActions({
+  clientContextMenu,
+  onClose,
+  onSelectClients,
+  onZoomToLocation
+}: {
+  clientContextMenu: { client: Cliente; x: number; y: number } | null;
+  onClose: () => void;
+  onSelectClients?: (clients: Cliente[]) => void;
+  onZoomToLocation?: (center: [number, number], zoom: number) => void;
+}) {
+  const map = useMap();
+  useEffect(() => {
+    // If maps clicks happen, close menu
+    const close = () => onClose();
+    map.on('click', close);
+    map.on('zoomstart', close);
+    map.on('movestart', close);
+    return () => {
+      map.off('click', close);
+      map.off('zoomstart', close);
+      map.off('movestart', close);
+    };
+  }, [map, onClose]);
+
+  if (!clientContextMenu) return null;
+
+  // Make sure it doesn't fall off the screen
+  const x = Math.min(clientContextMenu.x, window.innerWidth - 200);
+  const y = Math.min(clientContextMenu.y, window.innerHeight - 150);
+
+  return (
+    <div
+      className="fixed z-[99999] bg-card border border-border shadow-2xl rounded-lg overflow-hidden w-48 pointer-events-auto"
+      style={{ left: x, top: y }}
+      onContextMenu={(e: React.MouseEvent) => { e.preventDefault(); L.DomEvent.stopPropagation(e.nativeEvent); }}
+      onClick={(e: React.MouseEvent) => { L.DomEvent.stopPropagation(e.nativeEvent); }}
+    >
+      <div className="bg-primary/5 px-3 py-2 border-b border-border/50">
+        <p className="text-[11px] font-bold text-primary truncate">
+          {clientContextMenu.client.nome_cliente}
+        </p>
+      </div>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          const { latitude, longitude } = clientContextMenu.client;
+          if (latitude !== undefined && longitude !== undefined) {
+             const target: [number, number] = [Number(latitude), Number(longitude)];
+             onZoomToLocation?.(target, 18);
+             onClose();
+          }
+        }}
+        className="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-secondary transition-colors border-b border-border/50"
+      >
+        Aproximar Cliente
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          if (onSelectClients) onSelectClients([clientContextMenu.client]);
+          onClose();
+        }}
+        className="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-secondary transition-colors border-b border-border/50"
+      >
+        Ver Detalhes
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        className="w-full text-left px-3 py-2 text-[10px] text-muted-foreground hover:bg-muted transition-colors"
+      >
+        Cancelar
+      </button>
+    </div>
+  );
+}
+
 // ─── Map event handler for global clicks (deselect on background click) ────
 function MapEventHandler({ onBackgroundClick, onBackgroundDblClick }: { onBackgroundClick: () => void; onBackgroundDblClick: () => void }) {
   const map = useMap();
@@ -123,8 +201,8 @@ function MapEventHandler({ onBackgroundClick, onBackgroundDblClick }: { onBackgr
       L.DomEvent.stopPropagation(e);
       onBackgroundDblClick();
     });
-    return () => { 
-      map.off("click", onBackgroundClick); 
+    return () => {
+      map.off("click", onBackgroundClick);
       map.off("dblclick", onBackgroundDblClick);
     };
   }, [map, onBackgroundClick, onBackgroundDblClick]);
@@ -140,11 +218,11 @@ function ZoomToFeature({ geoJson, maxZoom = 13 }: { geoJson: GeoJSONFeature | Ge
       const layer = L.geoJSON(geoJson as Parameters<typeof L.geoJSON>[0]);
       const bounds = layer.getBounds();
       if (bounds.isValid()) {
-        map.flyToBounds(bounds, { 
-          padding: [50, 50], 
-          duration: 2.0, 
-          easeLinearity: 0.5, 
-          maxZoom: maxZoom 
+        map.flyToBounds(bounds, {
+          padding: [50, 50],
+          duration: 2.0,
+          easeLinearity: 0.5,
+          maxZoom: maxZoom
         });
         // Ensure map is correctly aligned after transition
         setTimeout(() => map.invalidateSize(), 2100);
@@ -180,7 +258,7 @@ export default function BrazilMap({
   municipioCodeForBairros, onDeactivateBairros, selectedMunicipioName, showClientes, showHeatmap,
   onContextMenuState, onContextMenuMunicipio,
   flyToLocation, searchResultGeo,
-  selectedClients = [], onSelectClients, onResetMap
+  selectedClients = [], onSelectClients, onResetMap, onZoomToLocation
 }: BrazilMapProps) {
   const { role, estado_end, token, repCode: loggedRepCode } = useAuth();
   const { data: statesMetadata } = useStatesMetadata();
@@ -195,13 +273,14 @@ export default function BrazilMap({
   const [selectedNeighborhood, setSelectedNeighborhood] = useState<string | null>(null);
   const [mapTheme, setMapTheme] = useState<'dark' | 'dark-labels' | 'light' | 'satellite' | 'osm'>('dark');
   const [showThemePicker, setShowThemePicker] = useState(false);
+  const [clientContextMenu, setClientContextMenu] = useState<{ client: Cliente, x: number, y: number } | null>(null);
 
   const MAP_THEMES = {
-    'dark':        { label: 'Escuro',          url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', opacity: 0.4 },
-    'dark-labels': { label: 'Escuro + Labels', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',       opacity: 0.5 },
-    'light':       { label: 'Claro',           url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',       opacity: 0.9 },
-    'satellite':   { label: 'Satélite',        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opacity: 1.0 },
-    'osm':         { label: 'OpenStreetMap',   url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                  opacity: 1.0 },
+    'dark': { label: 'Escuro', url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', opacity: 0.4 },
+    'dark-labels': { label: 'Escuro + Labels', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', opacity: 0.5 },
+    'light': { label: 'Claro', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', opacity: 0.9 },
+    'satellite': { label: 'Satélite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opacity: 1.0 },
+    'osm': { label: 'OpenStreetMap', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', opacity: 1.0 },
   } as const;
 
   const ufInfo = selectedUF ? getUFBySigla(selectedUF) : null;
@@ -228,8 +307,8 @@ export default function BrazilMap({
   const stateGeo = useMemo(() => {
     if (!statesGeo || !selectedUF) return null;
     return (statesGeo.features as GeoJSONFeature[])?.find((f) => {
-        const uf = getUFByCode(Number(f?.properties?.codarea));
-        return uf && uf.sigla === selectedUF;
+      const uf = getUFByCode(Number(f?.properties?.codarea));
+      return uf && uf.sigla === selectedUF;
     }) || null;
   }, [statesGeo, selectedUF]);
 
@@ -263,7 +342,7 @@ export default function BrazilMap({
     return {
       fillColor: isSelected ? "hsl(168, 70%, 45%)" : "hsl(220, 15%, 25%)",
       weight: isSelected ? 2 : 1.5,
-      opacity: 1, 
+      opacity: 1,
       color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : "hsl(220, 15%, 35%)",
       fillOpacity: isSelected ? 0.15 : 0.6,
     };
@@ -285,16 +364,16 @@ export default function BrazilMap({
       const q = searchQuery.toLowerCase();
       const repNames = reps.map(c => apiReps.find(r => r.code === c)?.name || "").join(" ").toLowerCase();
       const isMatch = name.toLowerCase().includes(q) || reps.join(" ").toLowerCase().includes(q) || repNames.includes(q);
-      
+
       if (isMatch) {
-         const hasSelection = (selectedClients || []).length > 0;
-         return { 
-           fillColor: "hsl(45, 90%, 55%)", 
-           weight: hasSelection ? 1.5 : 3, 
-           opacity: 1, 
-           color: "hsl(45, 90%, 40%)", 
-           fillOpacity: hasSelection ? 0.05 : 0.25 
-         };
+        const hasSelection = (selectedClients || []).length > 0;
+        return {
+          fillColor: "hsl(45, 90%, 55%)",
+          weight: hasSelection ? 1.5 : 3,
+          opacity: 1,
+          color: "hsl(45, 90%, 40%)",
+          fillOpacity: hasSelection ? 0.05 : 0.25
+        };
       }
     }
 
@@ -345,7 +424,7 @@ export default function BrazilMap({
   const onEachNeighborhood = useCallback((feature: unknown, layer: L.Layer) => {
     const f = feature as GeoJSONFeature;
     const name = f.properties?.nome || "Bairro";
-    
+
     if (layer instanceof L.Path) {
       const el = layer.getElement();
       if (el) el.classList.add('map-hover-effect');
@@ -382,13 +461,13 @@ export default function BrazilMap({
     }
 
     (layer as L.Path).on({
-      mouseover: (e) => { 
+      mouseover: (e) => {
         e.target.setStyle({ color: 'hsl(var(--admin-sidebar-accent))', fillOpacity: 0.3, weight: 2.5 });
-        e.target.bindTooltip(uf.nome, { sticky: true }).openTooltip(); 
+        e.target.bindTooltip(uf.nome, { sticky: true }).openTooltip();
       },
-      mouseout: (e) => { 
+      mouseout: (e) => {
         e.target.setStyle(stateStyle(f));
-        e.target.closeTooltip(); 
+        e.target.closeTooltip();
       },
       click: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
@@ -410,21 +489,21 @@ export default function BrazilMap({
     const city = citiesMetadata.find((c: { name: string; ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea));
     const name = city?.name || `Município ${codArea}`;
     const reps = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
-    
+
     // Role-based restrictions mapping
     let tooltipHtml = '';
     if (role === 'user' && estado_end && selectedUF !== estado_end) {
-        if (reps.length > 0) {
-            const hasVago = reps.some(c => getRepByCode(c, apiReps)?.isVago);
-            tooltipHtml = `<strong>${name}</strong><br/>${hasVago ? '<em>Vago</em>' : '<em>Ocupado</em>'}`;
-        } else {
-            tooltipHtml = `<strong>${name}</strong><br/><em>Sem responsável</em>`;
-        }
+      if (reps.length > 0) {
+        const hasVago = reps.some(c => getRepByCode(c, apiReps)?.isVago);
+        tooltipHtml = `<strong>${name}</strong><br/>${hasVago ? '<em>Vago</em>' : '<em>Ocupado</em>'}`;
+      } else {
+        tooltipHtml = `<strong>${name}</strong><br/><em>Sem responsável</em>`;
+      }
     } else {
-        const repNames = reps.map(c => { const r = getRepByCode(c, apiReps); return r ? `${r.code} - ${r.name}` : c; });
-        tooltipHtml = reps.length > 0
-          ? `<strong>${name}</strong><br/>${repNames.join("<br/>")}`
-          : `<strong>${name}</strong><br/><em>Sem responsável</em>`;
+      const repNames = reps.map(c => { const r = getRepByCode(c, apiReps); return r ? `${r.code} - ${r.name}` : c; });
+      tooltipHtml = reps.length > 0
+        ? `<strong>${name}</strong><br/>${repNames.join("<br/>")}`
+        : `<strong>${name}</strong><br/><em>Sem responsável</em>`;
     }
 
     if (layer instanceof L.Path) {
@@ -433,13 +512,13 @@ export default function BrazilMap({
     }
 
     (layer as L.Path).on({
-      mouseover: (e) => { 
+      mouseover: (e) => {
         e.target.setStyle({ color: 'hsl(var(--admin-sidebar-accent))', fillOpacity: 0.6, weight: 3 });
-        e.target.bindTooltip(tooltipHtml, { sticky: true }).openTooltip(); 
+        e.target.bindTooltip(tooltipHtml, { sticky: true }).openTooltip();
       },
-      mouseout: (e) => { 
+      mouseout: (e) => {
         e.target.setStyle(municipioStyle(f));
-        e.target.closeTooltip(); 
+        e.target.closeTooltip();
       },
       click: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
@@ -484,7 +563,7 @@ export default function BrazilMap({
       });
       if (stateFeature) filterGeometry = stateFeature as unknown as GeoJSONFeature;
     } else {
-      filterGeometry = statesGeo as unknown as GeoJSONFeatureCollection; 
+      filterGeometry = statesGeo as unknown as GeoJSONFeatureCollection;
     }
 
     return apiClientes.filter(c => {
@@ -504,18 +583,18 @@ export default function BrazilMap({
     });
   }, [showClientes, showHeatmap, apiClientes, statesGeo, selectedUF]);
 
-  const heatmapPoints: [number, number, number][] = useMemo(() => 
+  const heatmapPoints: [number, number, number][] = useMemo(() =>
     showHeatmap ? visibleClientes.map(c => [c.latitude!, c.longitude!, 1]) : [],
-  [showHeatmap, visibleClientes]);
+    [showHeatmap, visibleClientes]);
 
   const handleBack = useCallback(() => {
     if (selectedNeighborhood) {
       setSelectedNeighborhood(null);
     } else if (municipioCodeForBairros) {
-       onDeactivateBairros?.();
+      onDeactivateBairros?.();
     } else if (selectedUF) {
-       onSelectUF("");
-       if (onResetMap) onResetMap();
+      onSelectUF("");
+      if (onResetMap) onResetMap();
     }
   }, [selectedNeighborhood, municipioCodeForBairros, selectedUF, onDeactivateBairros, onSelectUF, onResetMap]);
 
@@ -531,23 +610,26 @@ export default function BrazilMap({
         zoomControl={true}
         scrollWheelZoom={true}
         dragging={true}
-        doubleClickZoom={false}
+        doubleClickZoom={true}
         boxZoom={true}
         keyboard={true}
         attributionControl={false}
         style={{ background: "hsl(220, 20%, 8%)" }}
-        minZoom={2}
-        maxBounds={[[-90, -180], [90, 180]]}
-        maxBoundsViscosity={0.5}
+        minZoom={3}
       >
         <AttributionControl prefix={false} />
         <MapController center={center} zoom={zoom} flyToLocation={flyToLocation} selectedUF={selectedUF} />
-        <MapAnimationController 
-          onMoveStart={() => setIsMapMoving(true)} 
-          onMoveEnd={() => setIsMapMoving(false)} 
+        <MapAnimationController
+          onMoveStart={() => setIsMapMoving(true)}
+          onMoveEnd={() => setIsMapMoving(false)}
         />
-        <MapEventHandler 
-          onBackgroundClick={() => { /* Do nothing on single click */ }} 
+        <MapEventHandler
+          onBackgroundClick={() => {
+            if (clientContextMenu) setClientContextMenu(null);
+            // Only call reset/header logic if we aren't already focusing on something 
+            // OR if the user is explicitly clicking empty space.
+            // Leaflet propagation handles most cases, but Index.tsx handler is very aggressive.
+          }}
           onBackgroundDblClick={handleBackgroundDblClick}
         />
 
@@ -566,8 +648,8 @@ export default function BrazilMap({
 
         {/* Search Result Polygon Highlight */}
         {searchResultGeo && (
-          <GeoJSON 
-            key={`search-result-${JSON.stringify(searchResultGeo).length}`} 
+          <GeoJSON
+            key={`search-result-${JSON.stringify(searchResultGeo).length}`}
             data={searchResultGeo}
             interactive={false}
             style={{
@@ -581,16 +663,18 @@ export default function BrazilMap({
         )}
 
         {/* States layer (Level 1) */}
-        {statesGeo && !selectedUF && (
-          <GeoJSON key="states" data={statesGeo} style={stateStyle} onEachFeature={onEachState} />
-        )}
-        {statesGeo && selectedUF && (
-          <GeoJSON key={`states-outline-${selectedUF}`} data={statesGeo} style={stateOutlineStyle} />
-        )}
+        <Pane name="basePane" style={{ zIndex: 100 }}>
+          {statesGeo && !selectedUF && (
+            <GeoJSON key="states" data={statesGeo} style={stateStyle} onEachFeature={onEachState} />
+          )}
+          {statesGeo && selectedUF && (
+            <GeoJSON key={`states-outline-${selectedUF}`} data={statesGeo} style={stateOutlineStyle} />
+          )}
+        </Pane>
 
         {/* Municipalities layer (Level 2) - Always show when a state is selected */}
         {municipiosGeo && selectedUF && citiesMetadata && (
-          <Pane name="municipiosPane" style={{ zIndex: 400 }}>
+          <Pane name="municipiosPane" style={{ zIndex: 200 }}>
             <GeoJSON
               key={`muns-${selectedUF}-${modo}-${filtroRepresentante}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}`}
               data={municipiosGeo} style={municipioStyle} onEachFeature={onEachMunicipio}
@@ -644,7 +728,7 @@ export default function BrazilMap({
             {/* Loading indicator */}
             <AnimatePresence>
               {loadingNeighborhoods && (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, y: 20, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
@@ -653,7 +737,7 @@ export default function BrazilMap({
                   className="bg-card/90 backdrop-blur-sm border border-border rounded-lg px-4 py-3 flex items-center gap-2 shadow-xl"
                 >
                   <Loader className="w-4 h-4 animate-spin text-primary" />
-                  <span className="text-sm">Carregando bairros...</span>
+                  <span className="text-sm font-medium text-foreground">Carregando bairros...</span>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -670,69 +754,85 @@ export default function BrazilMap({
               const isSelected = selectedClients.some(c => c.id_cliente === cliente.id_cliente);
               const rep = getRepByCode(cliente.repCode as string, apiReps);
               const repColor = rep ? getRepColor(rep) : "hsl(190, 100%, 50%)";
-              
+
               return (
                 <CircleMarker
                   key={`cliente-${cliente.id_cliente}`}
                   center={[cliente.latitude!, cliente.longitude!]}
                   radius={isSelected ? 6 : 4}
                   pathOptions={{
-                pane: "markerPane", // Elevates it above SVG polygons
-                fillColor: isSelected ? "hsl(45, 100%, 50%)" : repColor,
-                color: isSelected ? "white" : (rep ? repColor : "hsl(190, 100%, 30%)"),
-                weight: isSelected ? 3 : 2,
-                opacity: 0.9,
-                fillOpacity: 1
-              }}
-              interactive={true}
-              eventHandlers={{
-                click: (e) => {
-                  L.DomEvent.stopPropagation(e);
-                  const isCtrl = e.originalEvent.ctrlKey;
-                  
-                  if (onSelectClients) {
-                    if (isCtrl) {
-                      if (isSelected) {
-                        onSelectClients(selectedClients.filter(c => c.id_cliente !== cliente.id_cliente));
-                      } else {
-                        onSelectClients([...selectedClients, cliente]);
-                      }
-                    } else {
-                      onSelectClients([cliente]);
-                    }
-                  }
-                }
-              }}
-            >
-              <LeafletTooltip direction="top" className="custom-tooltip" pane="topPane">
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="font-bold text-sm text-primary">{cliente.nome_cliente}</span>
-                    <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded opacity-70">#{cliente.codigo_cliente}</span>
-                  </div>
-                  {cliente.nome_abreviado && (
-                    <p className="text-xs font-medium text-muted-foreground border-t border-border/50 pt-1">
-                      {cliente.nome_abreviado}
-                    </p>
-                  )}
-                  <div className="text-[10px] text-muted-foreground bg-muted/30 p-1.5 rounded-md mt-2">
-                    {cliente.endereco_completo && <p className="leading-tight">{cliente.endereco_completo}</p>}
-                    {cliente.bairro && <p className="mt-1 font-semibold uppercase tracking-wider">{cliente.bairro}</p>}
-                  </div>
-                </div>
-              </LeafletTooltip>
-            </CircleMarker>
-          );
-        })}
-        </Pane>
-      )}
+                    pane: "markerPane", // Elevates it above SVG polygons
+                    fillColor: isSelected ? "hsl(45, 100%, 50%)" : repColor,
+                    color: isSelected ? "white" : (rep ? repColor : "hsl(190, 100%, 30%)"),
+                    weight: isSelected ? 3 : 2,
+                    opacity: 0.9,
+                    fillOpacity: 1
+                  }}
+                  interactive={true}
+                  eventHandlers={{
+                    click: (e) => {
+                      L.DomEvent.stopPropagation(e);
+                      if (clientContextMenu) setClientContextMenu(null);
+                      const isCtrl = e.originalEvent.ctrlKey;
 
+                      if (onSelectClients) {
+                        if (isCtrl) {
+                          if (isSelected) {
+                            onSelectClients(selectedClients.filter(c => c.id_cliente !== cliente.id_cliente));
+                          } else {
+                            onSelectClients([...selectedClients, cliente]);
+                          }
+                        } else {
+                          onSelectClients([cliente]);
+                        }
+                      }
+                    },
+                    contextmenu: (e) => {
+                      L.DomEvent.stopPropagation(e);
+                      e.originalEvent.preventDefault();
+                      setClientContextMenu({
+                        client: cliente,
+                        x: e.originalEvent.clientX,
+                        y: e.originalEvent.clientY
+                      });
+                    }
+                  }}
+                >
+                  <LeafletTooltip direction="top" className="custom-tooltip" pane="topPane">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="font-bold text-sm text-primary">{cliente.nome_cliente}</span>
+                        <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded opacity-70">#{cliente.codigo_cliente}</span>
+                      </div>
+                      {cliente.nome_abreviado && (
+                        <p className="text-xs font-medium text-muted-foreground border-t border-border/50 pt-1">
+                          {cliente.nome_abreviado}
+                        </p>
+                      )}
+                      <div className="text-[10px] text-muted-foreground bg-muted/30 p-1.5 rounded-md mt-2">
+                        {cliente.endereco_completo && <p className="leading-tight">{cliente.endereco_completo}</p>}
+                        {cliente.bairro && <p className="mt-1 font-semibold uppercase tracking-wider">{cliente.bairro}</p>}
+                      </div>
+                    </div>
+                  </LeafletTooltip>
+                </CircleMarker>
+              );
+            })}
+          </Pane>
+        )}
+
+        <MapContextActions
+          clientContextMenu={clientContextMenu}
+          onClose={() => setClientContextMenu(null)}
+          onSelectClients={onSelectClients}
+          onZoomToLocation={onZoomToLocation}
+        />
       </MapContainer>
 
       {/* Universal Back button for hierarchy navigation */}
       <AnimatePresence>
         {(selectedUF || municipioCodeForBairros || selectedNeighborhood) && (
-          <motion.div 
+          <motion.div
             initial={{ x: -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -20, opacity: 0 }}
@@ -775,15 +875,13 @@ export default function BrazilMap({
                 <button
                   key={key}
                   onClick={() => { setMapTheme(key); setShowThemePicker(false); }}
-                  className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-center gap-2 ${
-                    mapTheme === key
+                  className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-center gap-2 ${mapTheme === key
                       ? 'bg-primary/20 text-primary font-semibold'
                       : 'text-foreground hover:bg-secondary'
-                  }`}
+                    }`}
                 >
-                  <span className={`w-2 h-2 rounded-full border flex-shrink-0 ${
-                    mapTheme === key ? 'bg-primary border-primary' : 'border-muted-foreground'
-                  }`} />
+                  <span className={`w-2 h-2 rounded-full border flex-shrink-0 ${mapTheme === key ? 'bg-primary border-primary' : 'border-muted-foreground'
+                    }`} />
                   {theme.label}
                 </button>
               ))}

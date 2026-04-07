@@ -31,7 +31,7 @@ const ClientDetailPanel = ({ clients, onClose, onSelectClient }: ClientDetailPan
       initial={{ x: 300, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 300, opacity: 0 }}
-      className="fixed top-20 right-4 z-[1001] w-80 max-h-[calc(100vh-120px)] bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
+      className="w-full max-h-[calc(100vh-120px)] bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
     >
       <div className="p-4 border-b border-border flex items-center justify-between bg-primary/5">
         <div className="flex items-center gap-2">

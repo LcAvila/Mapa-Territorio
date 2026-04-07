@@ -45,8 +45,12 @@ export default function FeedList({ refreshTrigger }: { refreshTrigger: number })
 
   const fetchPosts = useCallback(async () => {
     try {
+      const tokenVersion = localStorage.getItem('tokenVersion') || '0';
       const res = await fetch('http://localhost:3001/api/feed', {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'x-user-token-version': tokenVersion
+        }
       });
       if (res.ok) {
         const data = await res.json();

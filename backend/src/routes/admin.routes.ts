@@ -1,9 +1,8 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
 import { prisma } from '../prisma';
-import { authenticate, requireAdmin, requirePermission } from '../middlewares/auth';
+import { authenticate, requirePermission } from '../middlewares/auth';
 import { logUserActivity } from '../utils/logger';
-import type { AuthRequest } from '../middlewares/auth';
+import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router();
 router.use(authenticate);
@@ -20,21 +19,44 @@ const PUBLIC_USER_FIELDS = {
   id: true, username: true, role: true, repCode: true, code: true, tipo: true, 
   full_name: true, cpf_cnpj: true, telefone: true, cargo: true, company_name: true, groupId: true,
   photo: true, birth_date: true, colorIndex: true, comissao: true, isVago: true,
-  created_at: true, last_active: true 
+  created_at: true, last_active: true, token_version: true
 };
 
 // --- KICK USER ---
-router.post('/users/:id/kick', requireAdminMiddleware, async (req, res) => {
+router.post('/users/:id/kick', requireAdminMiddleware, async (req: any, res) => {
   const id = Number(req.params.id);
   try {
-    const user = await prisma.user.update({
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+
+    // Increment token_version and reset last_active to force 'Offline' visually
+    await prisma.user.update({
       where: { id },
-      // @ts-ignore
-      data: { token_version: { increment: 1 } }
+      data: { 
+        token_version: { increment: 1 },
+        last_active: new Date(0) // 1970-01-01
+      }
     });
+
+    // Supabase session management: find user by email and revoke session
+    const authEmail = user.username === 'admin' ? 'admin@mapaterritorio.com' : `${user.code || user.username}@mapaterritorio.com`;
+    console.log(`[KICK] Tentando derrubar usuário por email: ${authEmail}`);
     
-    await logUserActivity((req as any).user.id, 'kick_user', `Administrador derrubou a sessão do usuário ${user.username}`, req, 'User', String(id));
-    
+    try {
+      const { data: authData } = await supabaseAdmin.auth.admin.listUsers();
+      const sbUser = authData?.users?.find(u => u.email === authEmail);
+      
+      if (sbUser) {
+          console.log(`[KICK] Usuário Supabase encontrado (ID: ${sbUser.id}). Revogando sessões...`);
+          await supabaseAdmin.auth.admin.signOut(sbUser.id);
+      } else {
+          console.warn(`[KICK] Usuário Supabase NÃO encontrado para o email: ${authEmail}`);
+      }
+    } catch (e) {
+      console.error('[KICK] Erro crítico ao interagir com Supabase Admin:', e);
+    }
+
+    await logUserActivity(req.user.id, 'kick_user', `Administrador solicitou reset de sessão do usuário ${user.username}`, req, 'User', String(id));
     res.json({ message: `Sessão do usuário ${user.username} encerrada com sucesso` });
   } catch (error) {
     res.status(500).json({ message: 'Erro ao derrubar sessão' });
@@ -46,8 +68,8 @@ router.get('/users', requirePermission('users', 'view'), async (req, res) => {
   res.json(users);
 });
 
-router.post('/users', requirePermission('users', 'edit'), async (req, res) => {
-  const { username, password, role, tipo, full_name, repCode, code, photo, colorIndex, comissao, isVago, telefone, cpf_cnpj, birth_date, cargo, company_name, groupId } = req.body;
+router.post('/users', requirePermission('users', 'edit'), async (req: any, res) => {
+  const { password, role, tipo, full_name, repCode, code, photo, colorIndex, comissao, isVago, telefone, cpf_cnpj, birth_date, cargo, company_name, groupId } = req.body;
   
   if (!code) return res.status(400).json({ message: 'Código é obrigatório' });
 
@@ -58,95 +80,172 @@ router.post('/users', requirePermission('users', 'edit'), async (req, res) => {
     return res.status(409).json({ message: `Código já existe` });
   }
   
-  // Password validation
-  if (password) {
-    const { validatePasswordStrength } = require('../middlewares/security');
-    if (!validatePasswordStrength(password)) {
-      return res.status(400).json({ message: 'A senha deve conter letras maiúsculas, minúsculas, números e símbolos.' });
-    }
-  }
+  try {
+    // Step 1: Create in Supabase Auth via Admin API
+    const authEmail = `${code}@mapaterritorio.com`;
+    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: authEmail,
+      password: password || 'Mapa@123',
+      email_confirm: true,
+      user_metadata: { full_name, role: role || 'user' }
+    });
 
-  const hashedPassword = password ? await bcrypt.hash(password, 10) : await bcrypt.hash('Mapa@123', 10);
-  const user = await prisma.user.create({ 
-    data: { 
-      username: username || code, 
-      password: hashedPassword, 
-      role: role || 'user', 
-      tipo: tipo || 'cliente', 
-      full_name, 
-      repCode, 
-      code,
-      photo,
-      telefone,
-      cpf_cnpj,
-      cargo,
-      company_name,
-      groupId: groupId ? Number(groupId) : null,
-      birth_date: birth_date ? new Date(birth_date) : null,
-      colorIndex: colorIndex !== undefined ? Number(colorIndex) : 0,
-      comissao: comissao ? parseFloat(comissao) : null,
-      isVago: isVago ? 1 : 0
-    }, 
-    select: PUBLIC_USER_FIELDS 
-  });
-  res.status(201).json(user);
+    if (authError) {
+        console.error('Supabase Auth error:', authError);
+        return res.status(500).json({ message: `Erro no Supabase Auth: ${authError.message}` });
+    }
+
+    // Step 2: Create in our Prisma DB
+    const user = await prisma.user.create({ 
+      data: { 
+        username: code, 
+        password: 'SUPABASE_AUTH_ACTIVE', // We don't store plain passwords anymore
+        role: role || 'user', 
+        tipo: tipo || 'cliente', 
+        full_name, 
+        repCode: (repCode === '' || repCode === null) ? null : repCode, 
+        code,
+        photo,
+        telefone,
+        cpf_cnpj,
+        cargo,
+        company_name,
+        groupId: groupId ? Number(groupId) : null,
+        birth_date: birth_date ? new Date(birth_date) : null,
+        colorIndex: colorIndex !== undefined ? Number(colorIndex) : 0,
+        comissao: (comissao !== undefined && comissao !== '' && comissao !== null) ? parseFloat(comissao) : null,
+        isVago: isVago ? 1 : 0
+      }, 
+      select: PUBLIC_USER_FIELDS 
+    });
+
+    await logUserActivity(req.user.id, 'create_user', `Criou novo usuário ${code}`, req, 'User', String(user.id));
+    res.status(201).json(user);
+  } catch (error) {
+    console.error('Create user error:', error);
+    res.status(500).json({ message: 'Erro ao criar usuário' });
+  }
 });
 
-router.put('/users/:id', requirePermission('users', 'edit'), async (req, res) => {
+router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, res) => {
   const id = Number(req.params.id);
-  const { username, password, role, repCode, tipo, full_name, photo, colorIndex, comissao, isVago, telefone, cpf_cnpj, birth_date, cargo, company_name, groupId } = req.body;
+  const { password, role, repCode, tipo, full_name, photo, colorIndex, comissao, isVago, telefone, cpf_cnpj, birth_date, cargo, company_name, groupId } = req.body;
   
   const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ message: 'Usuário não encontrado' });
   
-  const data: any = { 
-    username, role, repCode, tipo, full_name, telefone, cpf_cnpj, cargo, company_name,
-    groupId: groupId !== undefined ? (groupId ? Number(groupId) : null) : undefined,
-    birth_date: birth_date ? new Date(birth_date) : undefined,
-    colorIndex: colorIndex !== undefined ? Number(colorIndex) : undefined,
-    comissao: comissao !== undefined ? (comissao ? parseFloat(comissao) : null) : undefined,
-    isVago: isVago !== undefined ? (isVago ? 1 : 0) : undefined
-  };
-
-  // NOTE: 'code' is purposely excluded from data to prevent editing after creation.
-
-  if (password) {
-    const { validatePasswordStrength } = require('../middlewares/security');
-    if (!validatePasswordStrength(password)) {
-      return res.status(400).json({ message: 'A senha deve conter letras maiúsculas, minúsculas, números e símbolos.' });
+  try {
+    // 1. Optional password sync to Supabase (if provided)
+    if (password && existing.code) {
+      try {
+        const authEmail = `${existing.code}@mapaterritorio.com`;
+        const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
+        const sbUser = users.find(u => u.email === authEmail);
+        
+        if (sbUser) {
+          const { error: updErr } = await supabaseAdmin.auth.admin.updateUserById(sbUser.id, { password });
+          if (updErr) console.error('[AUTH] Error syncing password to Supabase:', updErr);
+        }
+      } catch (authSyncError) {
+        console.error('[AUTH] Supabase sync failed, continuing with local update:', authSyncError);
+      }
     }
-    data.password = await bcrypt.hash(password, 10);
-    // @ts-ignore
-    data.token_version = { increment: 1 };
+
+    // 2. Prepare data for Prisma update
+    const data: any = { 
+        role, 
+        repCode: (repCode === '' || repCode === null) ? null : repCode, 
+        tipo, 
+        full_name, 
+        telefone, 
+        cpf_cnpj, 
+        cargo, 
+        company_name,
+        // Ensure groupId is not 0 if empty string is passed
+        groupId: (groupId !== undefined && groupId !== '' && groupId !== null) ? Number(groupId) : (groupId === '' || groupId === null ? null : undefined),
+        birth_date: birth_date ? new Date(birth_date) : undefined,
+        colorIndex: colorIndex !== undefined ? Number(colorIndex) : undefined,
+        isVago: isVago !== undefined ? (isVago ? 1 : 0) : undefined
+    };
+
+    // Safe Float parsing for comissao
+    if (comissao !== undefined) {
+      if (comissao === '' || comissao === null) {
+        data.comissao = null;
+      } else {
+        const val = parseFloat(comissao);
+        data.comissao = isNaN(val) ? null : val;
+      }
+    }
+
+    if (photo !== undefined) data.photo = photo;
+    
+    // 3. Perform database update
+    const user = await prisma.user.update({ 
+      where: { id }, 
+      data, 
+      select: PUBLIC_USER_FIELDS 
+    });
+
+    await logUserActivity(req.user.id, 'update_user', `Atualizou usuário ${user.username}`, req, 'User', String(id));
+    res.json(user);
+  } catch (error: any) {
+    console.error('Update user error:', error);
+    
+    // Specific check for Unique constraint (repCode or username)
+    if (error.code === 'P2002') {
+      const field = error.meta?.target?.[0] || 'campo único';
+      return res.status(400).json({ 
+        message: `O ${field} informado já está em uso por outro usuário.`,
+        field 
+      });
+    }
+
+    res.status(500).json({ 
+      message: 'Erro ao atualizar usuário',
+      details: error.message 
+    });
   }
-  if (photo !== undefined) data.photo = photo;
-  
-  const user = await prisma.user.update({ where: { id }, data, select: PUBLIC_USER_FIELDS });
-  res.json(user);
 });
 
-router.delete('/users/:id', requireAdminMiddleware, async (req, res) => {
+router.delete('/users/:id', requireAdminMiddleware, async (req: any, res) => {
   const id = Number(req.params.id);
   const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ message: 'Usuário não encontrado' });
   
-  await prisma.user.delete({ where: { id } });
-  res.json({ message: 'Usuário excluído com sucesso' });
+  try {
+    // Sync delete to Supabase Auth
+    const authEmail = `${existing.code}@mapaterritorio.com`;
+    const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
+    const sbUser = users.find(u => u.email === authEmail);
+    if (sbUser) {
+        await supabaseAdmin.auth.admin.deleteUser(sbUser.id);
+    }
+
+    await prisma.user.delete({ where: { id } });
+    await logUserActivity(req.user.id, 'delete_user', `Excluiu usuário ${existing.username}`, req, 'User', String(id));
+    res.json({ message: 'Usuário excluído com sucesso' });
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao excluir usuário' });
+  }
 });
 
 // --- REPS (Now based on Users filtering) ---
 router.get('/reps', requirePermission('reps', 'view'), async (req, res) => {
   const user = (req as any).user;
-  const where: any = {
+
+  // Build base filter: must have a repCode AND be a representative by role or tipo
+  let where: any = {
+    repCode: { not: null },
     OR: [
-      { tipo: 'representante' },
-      { role: 'user' }, // Adjusting to return all potential representatives
-      { NOT: { repCode: null } }
+      { role: 'representante' },
+      { tipo: 'representante' }
     ]
   };
 
+  // If the requester is a rep themselves, restrict to only their own record
   if (user && user.role === 'representante' && user.repCode) {
-    where.repCode = user.repCode;
+    where = { repCode: user.repCode };
   }
 
   const reps = await prisma.user.findMany({ 
@@ -177,6 +276,77 @@ router.get('/reps', requirePermission('reps', 'view'), async (req, res) => {
   })).filter(r => r.code !== ''); // Ensure only those with repCode are treated as reps
 
   res.json(formattedReps);
+});
+
+router.post('/reps', requireAdminMiddleware, async (req: any, res) => {
+  const { userId, code, colorIndex } = req.body;
+  if (!userId || !code) return res.status(400).json({ message: 'UserId e código são obrigatórios' });
+
+  try {
+    const user = await prisma.user.update({
+      where: { id: Number(userId) },
+      data: {
+        repCode: code,
+        role: 'representante',
+        tipo: 'representante',
+        colorIndex: colorIndex !== undefined ? Number(colorIndex) : undefined
+      }
+    });
+
+    await logUserActivity(req.user.id, 'create_rep', `Promoveu usuário ${user.username} para representante (${code})`, req, 'User', String(userId));
+    res.json({ message: 'Representante vinculado com sucesso', user });
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+        return res.status(400).json({ message: 'Este código de representante já está em uso.' });
+    }
+    res.status(500).json({ message: 'Erro ao vincular representante' });
+  }
+});
+
+router.put('/reps/:code', requireAdminMiddleware, async (req: any, res) => {
+  const code = req.params.code;
+  const { name, colorIndex, isVago, comissao } = req.body;
+  
+  try {
+    const user = await prisma.user.update({
+      where: { repCode: code },
+      data: {
+        full_name: name,
+        colorIndex: colorIndex !== undefined ? Number(colorIndex) : undefined,
+        isVago: isVago !== undefined ? (isVago ? 1 : 0) : undefined,
+        comissao: comissao ? parseFloat(comissao) : null
+      }
+    });
+
+    await logUserActivity(req.user.id, 'update_rep', `Atualizou dados do rep ${code}`, req, 'User', String(user.id));
+    res.json({ message: 'Atualizado com sucesso' });
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao atualizar representante' });
+  }
+});
+
+router.delete('/reps/:code', requireAdminMiddleware, async (req: any, res) => {
+  const code = req.params.code;
+  
+  try {
+    // We clear the repCode from the user, effectively "demoting" them
+    const user = await prisma.user.update({
+      where: { repCode: code },
+      data: {
+        repCode: null,
+        role: 'user',
+        tipo: 'normal'
+      }
+    });
+
+    // Also remove their territories as requested in the frontend UI message
+    await prisma.territory.deleteMany({ where: { repCode: code } });
+
+    await logUserActivity(req.user.id, 'delete_rep', `Removeu vínculo de representante de ${code}`, req, 'User', String(user.id));
+    res.json({ message: 'Representante removido com sucesso' });
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao remover representante' });
+  }
 });
 
 // --- TERRITORIES ---

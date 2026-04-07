@@ -31,3 +31,11 @@ dist-ssr
 *.sln
 *.sw?
 .history/
+
+# Arquivos Locais de Banco e Backups
+backend/database.sqlite*
+*.backup
+mapa_territorio.backup
+# Arquivos Temporários
+temp_admin.tsx
+build_output.txt

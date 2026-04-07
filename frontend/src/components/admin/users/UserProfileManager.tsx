@@ -104,10 +104,12 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
 
   const API = 'http://localhost:3001';
   const token = localStorage.getItem('token');
+  const tokenVersion = localStorage.getItem('tokenVersion');
   const authHeaders = useMemo(() => ({ 
     'Content-Type': 'application/json', 
-    'Authorization': `Bearer ${token}` 
-  }), [token]);
+    'Authorization': `Bearer ${token}`,
+    'x-user-token-version': tokenVersion || '0'
+  }), [token, tokenVersion]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -371,9 +373,9 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
                   value={formData.role} 
                   onChange={e => setFormData({...formData, role: e.target.value})}
                 >
-                  <option value="user">Usuário Comum</option>
-                  <option value="supervisor">Supervisor</option>
-                  <option value="admin">Administrador</option>
+                  <option value="user">Representantes</option>
+                  <option value="supervisor">Supervisores</option>
+                  <option value="promotor">Promotores</option>
                 </select>
               </div>
               <div className="field">

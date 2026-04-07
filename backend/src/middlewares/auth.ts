@@ -1,7 +1,6 @@
 import { Request as ExRequest, Response as ExResponse, NextFunction as ExNextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-
-const SECRET_KEY = process.env.JWT_SECRET || 'super-secret-key';
+import { supabase } from '../lib/supabase';
+import { prisma } from '../prisma';
 
 export interface AuthRequest extends ExRequest {
   user?: any;
@@ -14,37 +13,61 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
   }
 
   try {
-    const verified = jwt.verify(token, SECRET_KEY) as any;
-    const { prisma } = require('../prisma');
+    // Step 1: Validate session with Supabase
+    const { data: { user: sbUser }, error: sbError } = await supabase.auth.getUser(token);
     
-    const user = await (prisma as any).user.findUnique({ 
-      where: { id: verified.id }, 
-      select: { token_version: true, last_active: true } 
+    if (sbError || !sbUser) {
+      return res.status(401).json({ message: 'Sessão inválida ou expirada' });
+    }
+
+    // Step 2: Extract our custom user from Prisma
+    const accessCode = sbUser.email?.split('@')[0];
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { code: accessCode },
+          { username: accessCode }
+        ]
+      },
+      include: {
+        permissions: {
+          include: { module: true }
+        }
+      }
     });
-
+ 
     if (!user) {
-      return res.status(401).json({ message: 'Usuário não encontrado' });
+      return res.status(401).json({ message: 'Perfil não encontrado' });
     }
 
-    // Validation of session version (kick feature)
-    const tokenVersion = verified.token_version ?? 0;
-    if (user.token_version !== tokenVersion) {
-      return res.status(401).json({ message: 'Sessão encerrada ou inválida' });
-    }
+    // Step 3: Real-time 'Kick' validation
+    const clientTokenVersion = Number(req.headers['x-user-token-version'] || 0);
+    // Be more permissive with /me endpoint check to allow getting the profile after login
+    const isMeEndpoint = req.path === '/me' || req.originalUrl.includes('/auth/me');
 
-    // Update last_active periodically (every 1 min) to optimize performance
-    const oneMinAgo = new Date(Date.now() - 60000);
-    if (!user.last_active || new Date(user.last_active) < oneMinAgo) {
-      await (prisma as any).user.update({
-        where: { id: verified.id },
-        data: { last_active: new Date() }
-      });
+    if (!isMeEndpoint && user.token_version > 0 && clientTokenVersion < user.token_version) {
+      return res.status(401).json({ message: 'Sessão encerrada por outro administrador' });
     }
+ 
+    // Step 4: Attach user info to request
+    req.user = {
+      ...user,
+      id: user.id,
+      role: user.role,
+      tipo: user.tipo,
+      repCode: user.repCode
+    };
 
-    req.user = verified;
+    // Update last_active in background
+    prisma.user.update({
+      where: { id: user.id },
+      data: { last_active: new Date() }
+    }).catch(e => console.error('Error updating last_active:', e));
+
     next();
   } catch (err) {
-    res.status(401).json({ message: 'Token inválido' });
+    console.error('Auth error:', err);
+    res.status(401).json({ message: 'Falha na autenticação' });
   }
 };
 
@@ -64,18 +87,14 @@ export const requirePermission = (moduleId: string, level: 'view' | 'edit' = 'vi
 
     // Representatives have default view access to their data modules
     const DEFAULT_REP_VIEW_MODULES = ['clients', 'reps', 'territories', 'interests', 'groups'];
-    const isRep = req.user.role === 'representante' || (req.user as any).type === 'representante' || (req.user as any).tipo === 'representante';
+    const isRep = req.user.role === 'representante' || req.user.tipo === 'representante';
 
     if (isRep && level === 'view' && DEFAULT_REP_VIEW_MODULES.includes(moduleId)) {
       return next();
     }
 
-    console.log(`[Permission] Manual check for User ${req.user.id} (${req.user.role}/${(req.user as any).type}): ${moduleId}.${level}`);
-
     try {
-      // Import prisma dynamically to avoid circular dependencies if any
-      const { prisma } = require('../prisma');
-      const permission = await (prisma as any).userPermission.findUnique({
+      const permission = await prisma.userPermission.findUnique({
         where: {
           userId_moduleId: {
             userId: req.user.id,

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, HandHeart, MapPin, Loader2, CheckCircle2, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/auth-context-core';
 
 const API = 'http://localhost:3001';
 
@@ -16,6 +17,8 @@ export default function InterestModal({ municipio, uf, onClose }: InterestModalP
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
 
+    const { userId, repCode, userName, token } = useAuth();
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!motivo.trim()) { toast.error('Descreva o motivo do seu interesse'); return; }
@@ -23,9 +26,14 @@ export default function InterestModal({ municipio, uf, onClose }: InterestModalP
         try {
             const res = await fetch(`${API}/api/interest`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': token ? `Bearer ${token}` : ''
+                },
                 body: JSON.stringify({ 
-                    nome: '-', // required by backend schema
+                    nome: userName || '-', // required by backend schema
+                    userId,
+                    repCode,
                     municipio, 
                     uf, 
                     observacoes: motivo,

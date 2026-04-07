@@ -20,8 +20,13 @@ export default function BirthdayWidget({ onCongratulate }: { onCongratulate: (na
   useEffect(() => {
     const fetchBirthdays = async () => {
       try {
+        const token = localStorage.getItem('token');
+        const tokenVersion = localStorage.getItem('tokenVersion') || '0';
         const res = await fetch('http://localhost:3001/api/birthdays/month', {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'x-user-token-version': tokenVersion
+          }
         });
         if (res.ok) {
           const data = await res.json();

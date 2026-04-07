@@ -65,7 +65,7 @@ interface Representative {
 }
 interface Territory { id: number; municipio: string; uf: string; repCode: string; modo: string; }
 interface SystemUser { id: number; username: string; role: string; repCode: string | null; code?: string; fullName?: string; full_name?: string; document?: string; cpf_cnpj?: string; documentType?: 'cpf' | 'cnpj'; companyName?: string; company_name?: string; birth_date?: string; birthDate?: string; telefone?: string; email?: string; photo?: string; cargo?: string; groupId?: number; last_active?: string; tipo?: string; }
-interface InterestRequest { id: number; nome: string; email: string | null; telefone: string | null; empresa: string | null; municipio: string; uf: string; modo: string | null; observacoes: string | null; status: 'pending' | 'accepted' | 'rejected'; created_at: string; }
+interface InterestRequest { id: number; nome: string; email: string | null; telefone: string | null; empresa: string | null; municipio: string; uf: string; modo: string | null; observacoes: string | null; status: 'pending' | 'accepted' | 'rejected'; created_at: string; userId?: number; repCode?: string; }
 
 interface Group { id: string; name: string; repCodes: string[]; createdAt: string; }
 interface Notification { id: string; title: string; message: string; targetAll: boolean; targetReps: string[]; sentAt: string; readBy: string[]; }
@@ -228,7 +228,7 @@ function ColorPicker({ value, onChange, disabled }: { value: number; onChange: (
 }
 
 export default function Admin() {
-  const { token, logout, repCode: myRepCode, userId } = useAuth();
+  const { token, logout, repCode: myRepCode, userId, tokenVersion } = useAuth();
   const navigate = useNavigate();
 
   // Security: redirect if no token
@@ -243,6 +243,7 @@ export default function Admin() {
   const [interests, setInterests] = useState<InterestRequest[]>([]);
   const [clientes, setClientes] = useState<ClienteData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
 
@@ -251,7 +252,7 @@ export default function Admin() {
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
 
   // ── Brand / Personalização ────────────────────────────────────────────────
-  const [brandLogo, setBrandLogo] = useState<string>(() => localStorage.getItem('brand_logo') || '');
+  const [brandLogo, setBrandLogo] = useState<string>(() => localStorage.getItem('brand_logo') || '/Logo.png');
   const [brandName, setBrandName] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Território');
   const [brandNameDraft, setBrandNameDraft] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Território');
 
@@ -295,8 +296,9 @@ export default function Admin() {
   // ── Auth & Permissions ──────────────────────────────────────────────────
   const authHeaders = useMemo(() => ({
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`
-  }), [token]);
+    'Authorization': `Bearer ${token}`,
+    'x-user-token-version': String(tokenVersion || 0)
+  }), [token, tokenVersion]);
 
   const [myPermissions, setMyPermissions] = useState<ModulePermission[]>([]);
   const fetchMyPermissions = useCallback(async () => {
@@ -359,6 +361,7 @@ export default function Admin() {
   });
   const [showEditPwd, setShowEditPwd] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [isRepModalOpen, setIsRepModalOpen] = useState(false);
   const [userSearch, setUserSearch] = useState('');
   const [userFilterOnline, setUserFilterOnline] = useState(false);
 
@@ -437,7 +440,7 @@ export default function Admin() {
   }, [authHeaders]);
 
   const fetchAll = useCallback(async () => {
-    setLoading(true);
+    if (!initialLoadDone) setLoading(true);
     try {
       const [rR, tR, uR, iR, cR] = await Promise.all([
         fetch(`${API}/api/admin/reps`, { headers: authHeaders }),
@@ -466,8 +469,11 @@ export default function Admin() {
       await fetchGroups();
     } catch (error) {
       console.error('Fetch error:', error);
-    } finally { setLoading(false); }
-  }, [authHeaders, logout, fetchGroups]);
+    } finally { 
+      setLoading(false); 
+      setInitialLoadDone(true);
+    }
+  }, [authHeaders, logout, fetchGroups, initialLoadDone]);
 
   const handleDownloadLogisticsPlan = async () => {
     try {
@@ -545,6 +551,7 @@ export default function Admin() {
         userId: '', code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '',
         endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: ''
       });
+      setIsRepModalOpen(false);
       fetchAll();
     }
     else { const err = await res.json(); toast.error(err.message || 'Erro'); }
@@ -797,7 +804,7 @@ export default function Admin() {
 
     // Check modular permission for specific areas
     const moduleMap: Record<string, string> = {
-      'baserotas': 'clients',
+      'baserotas': 'clientes',
       'reps': 'reps',
       'territories': 'territories',
       'rotas_menu': 'routes',
@@ -1520,7 +1527,7 @@ export default function Admin() {
                           <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-x-5 gap-y-4">
                             
                             {/* Linha 1 */}
-                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Código *</Label><Input value={newUser.code} onChange={e => setNewUser({ ...newUser, code: e.target.value })} required placeholder="Ex: CLI001" className="h-9 text-xs uppercase" /></div>
+                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Código *</Label><Input value={newUser.code} onChange={e => setNewUser({ ...newUser, code: e.target.value.replace(/[^a-zA-Z0-9.-]/g, '') })} required className="h-9 text-xs" /></div>
                             <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Nome Completo *</Label><Input value={newUser.fullName} onChange={e => setNewUser({ ...newUser, fullName: e.target.value })} required className="h-9 text-xs" /></div>
                             <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">E-mail</Label><Input type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} className="h-9 text-xs" /></div>
                             
@@ -1591,7 +1598,7 @@ export default function Admin() {
                       <p className="text-xs text-muted-foreground mt-1">Gerencie a equipe de representantes e suas informações de contato.</p>
                     </div>
 
-                    <Dialog>
+                    <Dialog open={isRepModalOpen} onOpenChange={setIsRepModalOpen}>
                       <DialogTrigger asChild>
                         <Button className="gap-2">
                           <Plus className="w-4 h-4" />
@@ -1622,7 +1629,7 @@ export default function Admin() {
                             .map(([idx, color]) => ({ idx: Number(idx), color }));
 
                           return (
-                            <form onSubmit={(e) => { handleCreateRep(e); document.body.click(); }} className="space-y-6 pt-4">
+                            <form onSubmit={(e) => { handleCreateRep(e); }} className="space-y-6 pt-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {/* Seleção de Usuário */}
                                 <div className="space-y-2">
@@ -1898,6 +1905,8 @@ export default function Admin() {
           {activeTab === 'territories' && (() => {
             const computedTerritories = (() => {
               const map = new globalThis.Map<string, { municipio: string, uf: string, repCodes: Set<string>, clientCount: number }>();
+              
+              // Process clients
               clientes.forEach(c => {
                 if (!c.cidade || !c.uf) return;
                 const city = c.cidade.trim();
@@ -1908,6 +1917,20 @@ export default function Admin() {
                 const entry = map.get(key)!;
                 entry.clientCount++;
                 if (c.repCode) entry.repCodes.add(c.repCode);
+              });
+
+              // Process explicit territories from database
+              territories.forEach(t => {
+                if (!t.municipio || !t.uf) return;
+                const city = t.municipio.trim();
+                const uf = t.uf.trim().toUpperCase();
+                const key = `${city}-${uf}`;
+                
+                if (!map.has(key)) {
+                  map.set(key, { municipio: city, uf, repCodes: new Set(), clientCount: 0 });
+                }
+                const entry = map.get(key)!;
+                if (t.repCode) entry.repCodes.add(t.repCode);
               });
 
               return Array.from(map.values()).map((t, idx) => ({
@@ -2119,8 +2142,18 @@ export default function Admin() {
                       </TableRow></TableHeader>
                       <TableBody>{items.map(req => (
                         <TableRow key={req.id} className="border-border/30 hover:bg-secondary/30">
-                          <TableCell className="pl-4"><p className="text-sm font-medium">{req.nome}</p><div className="flex flex-wrap gap-x-3 mt-0.5">{req.empresa && <span className="text-[10px] text-muted-foreground">{req.empresa}</span>}{req.email && <span className="text-[10px] text-primary/80">{req.email}</span>}{req.telefone && <span className="text-[10px] text-muted-foreground">{req.telefone}</span>}</div></TableCell>
-                          <TableCell><div className="flex items-center gap-1.5"><MapPin className="w-3 h-3 text-primary shrink-0" /><div><p className="text-xs font-medium">{req.municipio}</p><p className="text-[10px] text-muted-foreground font-mono">{req.uf}</p></div></div></TableCell>
+                          <TableCell className="pl-4">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-bold">{req.nome}</p>
+                              {req.repCode && <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono font-bold tracking-tight">{req.repCode}</span>}
+                            </div>
+                            <div className="flex flex-wrap gap-x-3 mt-0.5">
+                              {req.empresa && <span className="text-[10px] text-muted-foreground">{req.empresa}</span>}
+                              {req.email && <span className="text-[10px] text-primary/80">{req.email}</span>}
+                            </div>
+                            {req.observacoes && <p className="text-[10px] text-muted-foreground italic mt-1.5 border-l-2 border-primary/20 pl-2">“{req.observacoes}”</p>}
+                          </TableCell>
+                          <TableCell><div className="flex items-center gap-1.5"><MapPin className="w-3 h-3 text-primary shrink-0" /><div><p className="text-xs font-semibold">{req.municipio}</p><p className="text-[10px] text-muted-foreground font-mono">{req.uf}</p></div></div></TableCell>
                           <TableCell>{req.modo && <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${req.modo === 'planejamento' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>{req.modo === 'planejamento' ? 'Plan.' : 'Atend.'}</span>}</TableCell>
                           <TableCell className="text-[10px] text-muted-foreground tabular-nums">{new Date(req.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</TableCell>
                           {key === 'pending' && (<TableCell className="pr-4"><div className="flex gap-1.5">

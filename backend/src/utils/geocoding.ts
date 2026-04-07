@@ -29,17 +29,44 @@ interface HereGeocodeResponse {
  * usando a API do HERE Maps.
  */
 export async function geocodeAddress(address: string): Promise<GeocodeResult | null> {
+  // Se não houver HERE_API_KEY definida, usa o OpenStreetMap (Nominatim) gratuitamente
   if (!API_KEY) {
-    console.error('[Geocoding] Erro: HERE_API_KEY não configurada no .env');
-    return null;
+    try {
+      console.log(`[Geocoding] HERE_API_KEY ausente. Usando Nominatim API (OSM) para: ${address}`);
+      const endpoint = `https://nominatim.openstreetmap.org/search`;
+      const response = await axios.get(endpoint, {
+        params: {
+          q: `${address}, Brasil`,
+          format: 'json',
+          limit: 1
+        },
+        headers: {
+          'User-Agent': 'MapaTerritorio-App/1.0 (Integration)'
+        }
+      });
+      
+      const items = response.data;
+      if (items && items.length > 0) {
+        return {
+          lat: parseFloat(items[0].lat),
+          lng: parseFloat(items[0].lon),
+          formattedAddress: items[0].display_name
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('[Geocoding] Erro ao consultar API Nominatim (OSM):', error);
+      return null;
+    }
   }
 
+  // Comportamento original da HERE Maps...
   try {
     const response = await axios.get<HereGeocodeResponse>(GEOCODE_URL, {
       params: {
-        q: `${address}, Brasil`, // Reforça o país na query
+        q: `${address}, Brasil`,
         apiKey: API_KEY,
-        in: 'countryCode:BRA', // Restrição oficial por código de país (ISO 3166-1 alpha-3)
+        in: 'countryCode:BRA',
         limit: 1
       }
     });
@@ -60,3 +87,4 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
     return null;
   }
 }
+

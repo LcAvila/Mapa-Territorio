@@ -2,6 +2,7 @@ import { useApiRepresentatives, useApiTerritories, Cliente } from "@/hooks/use-a
 import { getRepColor } from "@/data/representatives";
 import { useAuth } from "@/contexts/auth-context-core";
 import { Users, FilterX, MapPin } from "lucide-react";
+import { useMemo } from "react";
 
 interface MapLegendProps {
   selectedUF: string | null;
@@ -24,13 +25,27 @@ export default function MapLegend({
 }: MapLegendProps) {
   const { token, role, repCode } = useAuth();
   const { data: representatives = [] } = useApiRepresentatives(!!token);
+  const { data: apiTerritories = [] } = useApiTerritories(!!token);
 
-  // Get the set of repCodes that have clients in the selected UF
-  const repCodesInUF = selectedUF
-    ? new Set(clients.filter(c => c.uf === selectedUF && c.repCode).map(c => c.repCode!))
-    : null;
+  // Get the set of repCodes that have clients OR territories in the selected UF
+  const repCodesInUF = useMemo(() => {
+    if (!selectedUF) return null;
+    const codes = new Set<string>();
+    
+    // Add reps with clients in UF
+    clients.forEach(c => {
+      if (c.uf === selectedUF && c.repCode) codes.add(c.repCode);
+    });
+    
+    // Add reps with territories in UF
+    apiTerritories.forEach(t => {
+      if (t.uf === selectedUF && t.repCode) codes.add(t.repCode);
+    });
+    
+    return codes;
+  }, [selectedUF, clients, apiTerritories]);
 
-  // Filter reps: if a UF is selected, show only those who have clients there
+  // Filter reps: if a UF is selected, show only those who have clients/territories there
   // Also, if not an admin, restrict the list ENTIRELY to the user's repCode.
   const relevantReps = representatives.filter(rep => {
     if (role !== 'admin' && rep.code !== repCode) return false;

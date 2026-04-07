@@ -310,6 +310,7 @@ const Index = () => {
           selectedClients={selectedClients}
           onSelectClients={setSelectedClients}
           onResetMap={() => setFlyToLocation({ center: [-14.2, -51.9], zoom: 4 })}
+          onZoomToLocation={(center, zoom) => setFlyToLocation({ center, zoom })}
         />
 
         {/* Legend overlay - bottom left */}
@@ -327,72 +328,80 @@ const Index = () => {
           </div>
         )}
 
-        {/* Detail panel overlay - right (Municipality) */}
-        {selectedMunicipio && (
-          <div className="absolute top-4 right-4 z-[1000] w-[320px]">
-            <DetailPanel
-              municipio={selectedMunicipio.nome}
-              uf={selectedMunicipio.uf}
-              modo={modo}
-              onClose={() => setSelectedMunicipio(null)}
-              onViewBairros={setMunicipioCodeForBairros}
-              ufCode={ufInfo?.codigo}
-              isBairrosActive={!!municipioCodeForBairros}
-              onDeselectState={() => handleSelectUF(null)}
-              showClientes={showClientes}
-              onToggleClientes={() => setShowClientes(!showClientes)}
-            />
-          </div>
-        )}
-
-        {/* Client detail panel */}
-        <AnimatePresence>
-          {selectedClients.length > 0 && (
-            <motion.div 
-              initial={{ x: 20, opacity: 0 }}
-              animate={{ x: showReps ? -290 : 0, opacity: 1 }}
-              exit={{ x: 20, opacity: 0 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className={`absolute ${selectedMunicipio ? 'top-[440px]' : 'top-4'} right-4 z-[1002]`}
-            >
-              <ClientDetailPanel
-                clients={selectedClients}
-                onClose={() => setSelectedClients([])}
-                onSelectClient={(client) => {
-                  setFlyToLocation({
-                    center: [client.latitude, client.longitude],
-                    zoom: 17
-                  });
-                }}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Representative Panel */}
-        <AnimatePresence>
-          {showReps && (
-            <div className="absolute top-4 right-4 z-[1001]">
-              <RepresentativePanel
-                reps={apiReps as Representative[]}
-                clients={apiClientes}
-                territories={apiTerritories}
-                selectedRep={filtroRepresentante}
-                onSelectRep={(code) => {
-                  setFiltroRepresentante(code);
-                  // Show clients on map when a rep is selected
-                  if (code) setShowClientes(true);
-                }}
-                onClose={() => setShowReps(false)}
-                onZoomToRep={(rep) => {
-                  // The existing useEffect in Index handles zoom-to-rep when filtroRepresentante changes
-                  setFiltroRepresentante(rep.code);
-                  setShowClientes(true);
-                }}
+        {/* Right side floating panels (Side-by-Side Flex Layout) */}
+        <div className="absolute top-4 right-4 z-[1000] flex flex-row-reverse items-start gap-4 pointer-events-none overflow-x-auto overflow-y-visible max-w-[calc(100vw-4rem)] p-1 scrollbar-hide">
+          
+          {/* Detail panel overlay - right (Municipality) */}
+          {selectedMunicipio && (
+            <div className="w-[320px] pointer-events-auto shrink-0 shadow-xl rounded-lg">
+              <DetailPanel
+                municipio={selectedMunicipio.nome}
+                uf={selectedMunicipio.uf}
+                modo={modo}
+                onClose={() => setSelectedMunicipio(null)}
+                onViewBairros={setMunicipioCodeForBairros}
+                ufCode={ufInfo?.codigo}
+                isBairrosActive={!!municipioCodeForBairros}
+                onDeselectState={() => handleSelectUF(null)}
+                showClientes={showClientes}
+                onToggleClientes={() => setShowClientes(!showClientes)}
               />
             </div>
           )}
-        </AnimatePresence>
+
+          {/* Representative Panel */}
+          <AnimatePresence>
+            {showReps && (
+              <motion.div 
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.2 }}
+                className="w-[320px] pointer-events-auto shrink-0 shadow-xl rounded-lg"
+              >
+                <RepresentativePanel
+                  reps={apiReps as Representative[]}
+                  clients={apiClientes}
+                  territories={apiTerritories}
+                  selectedRep={filtroRepresentante}
+                  onSelectRep={(code) => {
+                    setFiltroRepresentante(code);
+                    if (code) setShowClientes(true);
+                  }}
+                  onClose={() => setShowReps(false)}
+                  onZoomToRep={(rep) => {
+                    setFiltroRepresentante(rep.code);
+                    setShowClientes(true);
+                  }}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Client detail panel */}
+          <AnimatePresence>
+            {selectedClients.length > 0 && (
+              <motion.div 
+                initial={{ x: 20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 20, opacity: 0 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
+                className="w-[320px] pointer-events-auto shrink-0 shadow-xl rounded-lg"
+              >
+                <ClientDetailPanel
+                  clients={selectedClients}
+                  onClose={() => setSelectedClients([])}
+                  onSelectClient={(client) => {
+                    setFlyToLocation({
+                      center: [client.latitude, client.longitude],
+                      zoom: 17
+                    });
+                  }}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* Info badge when no UF selected */}
         {!selectedUF && (
