@@ -1,9 +1,25 @@
+/**
+ * @file sonner.tsx
+ * @description Esse aqui é o maluco que faz brotar as notificações na tela.
+ * Sabe aquele aviso de "Sucesso!" ou "Deu ruim!" que aparece do nada? É esse componente aqui que manda no pedaço.
+ * 
+ * Papo de visão: Removi a exportação do 'toast' daqui porque o React tava de deboche com o Fast Refresh.
+ * Se precisar disparar um toast em outro lugar, importa direto da 'sonner', valeu?
+ * 
+ * @author Cria de Nova Iguaçu
+ */
+
 import { useTheme } from "@/contexts/ThemeContext";
-import { Toaster as Sonner, toast } from "sonner";
+import { Toaster as Sonner } from "sonner";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
+/**
+ * Toaster - O dono da festa das notificações.
+ * Coloca esse cara no topo da aplicação pra ele ficar de olho em tudo.
+ */
 const Toaster = ({ ...props }: ToasterProps) => {
+  // Pegando o tema (claro/escuro) pra não ficar aquela luz no olho de madrugada
   const { theme = "system" } = useTheme();
 
   return (
@@ -24,4 +40,4 @@ const Toaster = ({ ...props }: ToasterProps) => {
   );
 };
 
-export { Toaster, toast };
+export { Toaster };

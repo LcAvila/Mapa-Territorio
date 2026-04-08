@@ -517,12 +517,37 @@ export default function Admin() {
   useEffect(() => {
     if (!selectedMunicipio || !includeBairro) { setSubdistritos([]); setSelectedBairro(''); return; }
     setLoadingSubdistritos(true); setSelectedBairro('');
-    Promise.all([
-      fetch(`${IBGE}/municipios/${selectedMunicipio}/subdistritos`).then(r => r.ok ? r.json() : []),
-      fetch(`${IBGE}/municipios/${selectedMunicipio}/distritos`).then(r => r.ok ? r.json() : []),
-    ]).then(([s, d]) => { const all = [...s, ...d].sort((a: { nome: string }, b: { nome: string }) => a.nome.localeCompare(b.nome)); setSubdistritos(all); })
-      .catch(() => toast.error('Erro ao carregar bairros')).finally(() => setLoadingSubdistritos(false));
-  }, [selectedMunicipio, includeBairro]);
+
+    const muni = municipios.find(m => String(m.id) === selectedMunicipio);
+    if (!muni) { setLoadingSubdistritos(false); return; }
+
+    // Prioridade total pros bairros do nosso banco (os brabos que a gente povoou)
+    fetch(`${API}/api/location/bairros/${encodeURIComponent(muni.nome)}/${encodeURIComponent(selectedUF)}`, { headers: authHeaders })
+      .then(r => r.ok ? r.json() : [])
+      .then(localData => {
+        if (localData && localData.length > 0) {
+          setSubdistritos(localData.map((b: { id: number, bairro: string }) => ({ id: b.id, nome: b.bairro })));
+          setLoadingSubdistritos(false);
+        } else {
+          // Se não tiver local, apela pro IBGE (URGs e afins)
+          Promise.all([
+            fetch(`${IBGE}/municipios/${selectedMunicipio}/subdistritos`).then(r => r.ok ? r.json() : []),
+            fetch(`${IBGE}/municipios/${selectedMunicipio}/distritos`).then(r => r.ok ? r.json() : []),
+          ]).then(([s, d]) => { 
+            const all = [...s, ...d].sort((a: { nome: string }, b: { nome: string }) => a.nome.localeCompare(b.nome)); 
+            setSubdistritos(all); 
+          })
+          .catch(() => toast.error('Erro ao carregar bairros do IBGE'))
+          .finally(() => setLoadingSubdistritos(false));
+        }
+      })
+      .catch(() => {
+        // Fallback rápido se o nosso servidor der ruim
+        fetch(`${IBGE}/municipios/${selectedMunicipio}/subdistritos`).then(r => r.json())
+          .then(d => setSubdistritos(d.sort((a: { nome: string }, b: { nome: string }) => a.nome.localeCompare(b.nome))))
+          .finally(() => setLoadingSubdistritos(false));
+      });
+  }, [selectedMunicipio, includeBairro, selectedUF, municipios, authHeaders]);
 
   // ── Options ───────────────────────────────────────────────────────────────
   const ufOptions = UF_DATA.sort((a, b) => a.nome.localeCompare(b.nome)).map(u => ({ value: u.sigla, label: `${u.sigla} — ${u.nome}` }));

@@ -1,3 +1,13 @@
+/**
+ * @file geocoding.ts
+ * @description Esse aqui é o GPS do sistema, morou?
+ * Ele pega o endereço que o usuário digitou e transforma em latitude e longitude (os números que o mapa entende).
+ * Se não tiver a chave da API do HERE (o VIP das localizações), ele usa o Nominatim (do OpenStreetMap), 
+ * que é 0800 mas às vezes dá uma vacilada se o endereço não tiver certinho.
+ * 
+ * @author Cria de Nova Iguaçu
+ */
+
 import axios from 'axios';
 import dotenv from 'dotenv';
 
@@ -25,14 +35,14 @@ interface HereGeocodeResponse {
 }
 
 /**
- * Converte um endereço textual em coordenadas (latitude e longitude)
- * usando a API do HERE Maps.
+ * geocodeAddress - A mágica que acha o lugar no mapa.
+ * Se o endereço tiver incompleto, a chance de 'dar ruim' e não voltar nada é grande!
  */
 export async function geocodeAddress(address: string): Promise<GeocodeResult | null> {
-  // Se não houver HERE_API_KEY definida, usa o OpenStreetMap (Nominatim) gratuitamente
+  // Se tu esqueceu de colocar a chave do HERE no .env, vamos de Nominatim (que é de graça).
   if (!API_KEY) {
     try {
-      console.log(`[Geocoding] HERE_API_KEY ausente. Usando Nominatim API (OSM) para: ${address}`);
+      console.log(`[Geocoding] Chave do HERE sumiu! Usando o 'plano B' (Nominatim) para: ${address}`);
       const endpoint = `https://nominatim.openstreetmap.org/search`;
       const response = await axios.get(endpoint, {
         params: {
@@ -55,12 +65,12 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
       }
       return null;
     } catch (error) {
-      console.error('[Geocoding] Erro ao consultar API Nominatim (OSM):', error);
+      console.error('[Geocoding] Nominatim deu erro, mó climão:', error);
       return null;
     }
   }
 
-  // Comportamento original da HERE Maps...
+  // Se tiver a chave do HERE (o bagulho é doido!), usa ela que é mais certeira.
   try {
     const response = await axios.get<HereGeocodeResponse>(GEOCODE_URL, {
       params: {
@@ -83,7 +93,7 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
 
     return null;
   } catch (error) {
-    console.error('[Geocoding] Erro ao consultar API do HERE:', error);
+    console.error('[Geocoding] API do HERE chorou:', error);
     return null;
   }
 }

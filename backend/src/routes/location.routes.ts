@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { LocationService } from '../services/LocationService';
+import { prisma } from '../prisma';
 
 const router = Router();
 
@@ -29,6 +30,22 @@ router.get('/districts/:ibgeCode', async (req, res) => {
     res.json(districts);
   } catch (error) {
     res.status(500).json({ error: `Erro ao buscar bairros do IBGE ${req.params.ibgeCode}` });
+  }
+});
+
+router.get('/bairros/:cidade/:uf', async (req, res) => {
+  try {
+    const { cidade, uf } = req.params;
+    const bairros = await prisma.bairro.findMany({
+      where: {
+        municipio: { equals: cidade, mode: 'insensitive' },
+        uf: { equals: uf, mode: 'insensitive' }
+      },
+      orderBy: { bairro: 'asc' }
+    });
+    res.json(bairros);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar bairros locais' });
   }
 });
 

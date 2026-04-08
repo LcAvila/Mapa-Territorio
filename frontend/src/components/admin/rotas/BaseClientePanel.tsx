@@ -1,3 +1,15 @@
+/**
+ * @file BaseClientePanel.tsx
+ * @description Esse aqui é o formulário brabo onde a gente cadastra a clientela.
+ * Tu joga o CEP lá, ele busca o básico (rua, bairro, cidade), mas o segredo da precisão 
+ * tá em preencher o número certinho. Sem número, o mapa fica "perdido na curva".
+ * 
+ * Papo de visão: O CEP ajuda a não ter que digitar tudo, mas o mapa só se acha mesmo
+ * quando a gente manda a Latitude e Longitude (que o servidor calcula sozinho baseado no endereço).
+ * 
+ * @author Cria de Nova Iguaçu
+ */
+
 import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Database, Filter, Search, Plus, MapPin, Loader2, Briefcase, MoreVertical, Pencil, Trash2, X } from 'lucide-react';
@@ -8,6 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
+import { AddressMapPicker } from './AddressMapPicker';
 
 interface Cliente {
   id_cliente: number;
@@ -22,6 +35,8 @@ interface Cliente {
   cep: string | null;
   endereco_completo: string | null;
   numero: string | null;
+  latitude: number | null;
+  longitude: number | null;
   repCode: string | null;
   supervisorName: string | null;
   classificacao: string | null;
@@ -56,6 +71,8 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
     cidade: '',
     uf: '',
     regiao: '',
+    latitude: null as number | null,
+    longitude: null as number | null,
     repCode: '',
     supervisorName: '',
     classificacao: '',
@@ -64,6 +81,26 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
   });
   const [reps, setReps] = useState<{ code: string, name: string }[]>([]);
   const [fetchingCep, setFetchingCep] = useState(false);
+  const [bairrosLocais, setBairrosLocais] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (formData.cidade && formData.uf) {
+      const fetchBairros = async () => {
+        try {
+          const res = await fetch(`http://localhost:3001/api/location/bairros/${encodeURIComponent(formData.cidade)}/${encodeURIComponent(formData.uf)}`);
+          if (res.ok) {
+            const data = await res.json();
+            setBairrosLocais(data.map((b: { id: number, bairro: string }) => b.bairro));
+          }
+        } catch (e) {
+          console.error('Erro ao buscar bairros locais', e);
+        }
+      };
+      fetchBairros();
+    } else {
+      setBairrosLocais([]);
+    }
+  }, [formData.cidade, formData.uf]);
 
   const formatCNPJ = (value: string) => {
     let v = value.replace(/\D/g, '');
@@ -98,12 +135,47 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
           cidade: data.localidade,
           uf: data.uf,
         }));
-        toast.success('Endereço preenchido via CEP!');
+        toast.success('Endereço preenchido via CEP! Agora bote o número pra gente achar no mapa.');
       } else {
         toast.error('CEP não encontrado.');
       }
     } catch (e) {
       toast.error('Erro ao buscar o CEP.');
+    } finally {
+      setFetchingCep(false);
+    }
+  };
+
+  /**
+   * handleGeocode - Aqui é onde a gente pergunta pro servidor "onde fica esse lugar?".
+   * Ele usa o endereço e o número pra tentar achar o ponto exato no globo.
+   */
+  const handleGeocode = async () => {
+    const { endereco_completo, numero, bairro, cidade, uf } = formData;
+    
+    // Se não tiver o básico do básico, nem tenta que é perda de tempo.
+    if (!endereco_completo || !cidade || !uf) {
+      toast.info('Preencha o endereço, cidade e UF primeiro, mestre!');
+      return;
+    }
+
+    setFetchingCep(true);
+    try {
+      const searchAddress = `${endereco_completo}${numero ? ', ' + numero : ''}${bairro ? ', ' + bairro : ''}, ${cidade}, ${uf}, Brasil`;
+      const token = localStorage.getItem('token');
+      const res = await fetch(`http://localhost:3001/api/geocode?address=${encodeURIComponent(searchAddress)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (res.ok) {
+        const coords = await res.json();
+        setFormData(prev => ({ ...prev, latitude: coords.lat, longitude: coords.lng }));
+        toast.success('Ponto achado com sucesso! Confere aí no mapa.');
+      } else {
+        toast.error('Não achei esse endereço exato não... tenta ajustar o pino no mapa na mão.');
+      }
+    } catch (e) {
+      toast.error('O GPS deu tela azul. Tenta de novo!');
     } finally {
       setFetchingCep(false);
     }
@@ -197,6 +269,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
       setFormData({
         codigo_cliente: '', nome_cliente: '', nome_abreviado: '', cnpj: '',
         cep: '', endereco_completo: '', numero: '', bairro: '', cidade: '', uf: '', regiao: '',
+        latitude: null, longitude: null,
         repCode: '', supervisorName: '', classificacao: '', semana: '', prioridade: ''
       });
       fetchClientes();
@@ -223,6 +296,8 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
       cidade: client.cidade || '',
       uf: client.uf || '',
       regiao: client.regiao || '',
+      latitude: client.latitude || null,
+      longitude: client.longitude || null,
       repCode: client.repCode || '',
       supervisorName: client.supervisorName || '',
       classificacao: client.classificacao || '',
@@ -336,7 +411,19 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="bairro">Bairro</Label>
-                    <Input id="bairro" name="bairro" value={formData.bairro} onChange={handleInputChange} placeholder="Nome do Bairro" />
+                    <Input 
+                      id="bairro" 
+                      name="bairro" 
+                      value={formData.bairro} 
+                      onChange={handleInputChange} 
+                      placeholder="Nome do Bairro" 
+                      list="bairros-list"
+                    />
+                    <datalist id="bairros-list">
+                      {bairrosLocais.map(b => (
+                        <option key={b} value={b} />
+                      ))}
+                    </datalist>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="cidade">Cidade</Label>
@@ -346,9 +433,37 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
                     <Label htmlFor="uf">UF</Label>
                     <Input id="uf" name="uf" value={formData.uf} onChange={handleInputChange} placeholder="Ex: SP" maxLength={2} />
                   </div>
-                  <div className="space-y-2">
+                   <div className="space-y-2">
                     <Label htmlFor="regiao">Região</Label>
                     <Input id="regiao" name="regiao" value={formData.regiao} onChange={handleInputChange} placeholder="Ex: SUL, NORTE" />
+                  </div>
+
+                  <div className="col-span-2 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-semibold flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-primary" /> Visualização no Mapa (Mó Precisão)
+                      </Label>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleGeocode}
+                        className="h-8 text-[10px] gap-2 font-bold"
+                        disabled={fetchingCep}
+                      >
+                        {fetchingCep ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                        BUSCAR NO MAPA
+                      </Button>
+                    </div>
+                    
+                    <AddressMapPicker 
+                      lat={formData.latitude} 
+                      lng={formData.longitude} 
+                      onChange={(lat, lng) => setFormData(p => ({ ...p, latitude: lat, longitude: lng }))}
+                    />
+                    <p className="text-[10px] text-muted-foreground italic">
+                      * Se o pino tiver no lugar errado, é só tocar no mapa pra ajustar.
+                    </p>
                   </div>
 
                   <div className="col-span-2 mt-2 border-t pt-4">

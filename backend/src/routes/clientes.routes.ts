@@ -1,3 +1,14 @@
+/**
+ * @file clientes.routes.ts
+ * @description Aqui é onde a mágica dos clientes acontece. 
+ * É o balcão de atendimento: tu pede pra listar, criar ou mudar algo e a gente desenrola aqui.
+ * 
+ * Papo reto: Se o cliente não carregar no mapa, confere se as coordenadas (lat/lng) foram geradas.
+ * Se o endereço for muito 'vago', o GPS do sistema se perde e o cliente fica num 'limbo' sem aparecer no mapa.
+ * 
+ * @author Cria de Nova Iguaçu
+ */
+
 import { Router } from 'express';
 import { prisma } from '../prisma';
 import { authenticate, requirePermission } from '../middlewares/auth';
@@ -6,18 +17,18 @@ import { geocodeAddress } from '../utils/geocoding';
 
 const router = Router();
 
-// Protege todas as rotas de clientes com a autenticação padrão
+// Só entra quem tem o crachá (autenticado)
 router.use(authenticate);
 
 // ---------------------------------------------------------
-// GET /api/clientes - Listar todos os clientes
+// GET /api/clientes - Traz a lista da rapaziada (clientes)
 // ---------------------------------------------------------
 router.get('/', requirePermission('clients', 'view'), async (req, res) => {
   try {
     const { repCode, supervisorName } = req.query;
     const where: any = {};
     
-    // Isolamento de dados: Representantes veem apenas os próprios clientes
+    // Cada um no seu quadrado: Representante só vê os dele.
     const user = (req as any).user;
     if (user && user.role === 'representante') {
       where.repCode = user.repCode;
@@ -31,18 +42,18 @@ router.get('/', requirePermission('clients', 'view'), async (req, res) => {
       orderBy: { nome_cliente: 'asc' },
     });
 
-    // Log Consulta
+    // Anotando no caderninho quem andou bisbilhotando os clientes
     if (user) await logUserActivity(user.id, 'query', 'Usuário consultou a base de clientes', req, 'Cliente');
 
     res.json(clientes);
   } catch (error) {
-    console.error('Erro ao buscar clientes:', error);
+    console.error('Deu ruim ao buscar clientes, mó zebra:', error);
     res.status(500).json({ message: 'Erro ao buscar clientes no banco de dados' });
   }
 });
 
 // ---------------------------------------------------------
-// POST /api/clientes - Cadastrar um novo cliente
+// POST /api/clientes - Bota mais um cliente no jogo
 // ---------------------------------------------------------
 router.post('/', requirePermission('clients', 'edit'), async (req, res) => {
   try {
@@ -62,33 +73,33 @@ router.post('/', requirePermission('clients', 'edit'), async (req, res) => {
       longitude
     } = req.body;
 
-    // Se latitude ou longitude não forem informados, tentar geocodificar automatimente
+    // Se o usuário não mandou a latitude ou longitude, a gente tenta achar no Google/Nominatim.
     if ((!latitude || !longitude) && (endereco_completo || (cidade && uf))) {
-      // Build a more precise search address including the number if available
       const searchAddress = `${endereco_completo || ""}${numero ? ", " + numero : ""}${bairro ? ", " + bairro : ""}, ${cidade || ""}, ${uf || ""}`;
       const coords = await geocodeAddress(searchAddress.trim());
       
       if (coords) {
         latitude = coords.lat;
         longitude = coords.lng;
-        console.log(`[Geocode] Coordenadas obtidas para "${searchAddress}": ${latitude}, ${longitude}`);
+        console.log(`[Geocode] Achamos o lugar! "${searchAddress}": ${latitude}, ${longitude}`);
       } else {
-        console.warn(`[Geocode] Não foi possível encontrar coordenadas para "${searchAddress}"`);
+        // Se cair aqui, o endereço tá muito zoado e o cliente vai ficar sem pino no mapa.
+        console.warn(`[Geocode] Ih, rapaz! Não achei o endereço "${searchAddress}". O cliente vai ficar sem localização.`);
       }
     }
 
     if (!nome_cliente) {
-      return res.status(400).json({ message: 'O nome do cliente é obrigatório.' });
+      return res.status(400).json({ message: 'Qual é o nome do cliente? Não pode deixar em branco, pô.' });
     }
 
-    // Se informou um código de cliente, verificar se já não existe
+    // Se mandou um código, a gente checa se já não tem outro cliente 'clonado' com esse código.
     if (codigo_cliente) {
       const existing = await prisma.cliente.findUnique({
         where: { codigo_cliente }
       });
 
       if (existing) {
-        return res.status(409).json({ message: 'Já existe um cliente com este código.' });
+        return res.status(409).json({ message: 'Já tem um cliente com esse código aí, mexe nisso.' });
       }
     }
 
@@ -116,15 +127,15 @@ router.post('/', requirePermission('clients', 'edit'), async (req, res) => {
       }
     });
 
-    res.status(201).json({ message: 'Cliente cadastrado com sucesso!', cliente: novoCliente });
+    res.status(201).json({ message: 'Cliente cadastrado com sucesso! Já tá na conta.', cliente: novoCliente });
   } catch (error) {
-    console.error('Erro ao criar cliente:', error);
+    console.error('Deu erro ao criar cliente, mó vacilo:', error);
     res.status(500).json({ message: 'Erro ao cadastrar o cliente.' });
   }
 });
 
 // ---------------------------------------------------------
-// PUT /api/clientes/:id - Atualizar um cliente
+// PUT /api/clientes/:id - Atualiza os dados do cliente
 // ---------------------------------------------------------
 router.put('/:id', requirePermission('clients', 'edit'), async (req, res) => {
   try {
@@ -135,15 +146,15 @@ router.put('/:id', requirePermission('clients', 'edit'), async (req, res) => {
       classificacao, semana, prioridade, status_ativo 
     } = req.body;
 
-    // FORCAR recalculação se endereço ou número foram enviados (evita usar coordenadas antigas e imprecisas)
+    // Se mudar o endereço, a gente recalcula o lugar pra não ficar com o pino no lugar errado.
     if (endereco_completo || numero || cidade || uf || bairro) {
       const searchAddress = `${endereco_completo || ""}${numero ? ", " + numero : ""}${bairro ? ", " + bairro : ""}, ${cidade || ""}, ${uf || ""}, Brasil`;
-      console.log(`[Geocode Update] Recalculando para: ${searchAddress.trim()}`);
+      console.log(`[Geocode Update] Recalculando GPS para: ${searchAddress.trim()}`);
       const coords = await geocodeAddress(searchAddress.trim());
       if (coords) {
         latitude = coords.lat;
         longitude = coords.lng;
-        console.log(`[Geocode Update] Novas coordenadas: ${latitude}, ${longitude}`);
+        console.log(`[Geocode Update] Novas coordenadas pegas: ${latitude}, ${longitude}`);
       }
     }
 
@@ -160,23 +171,23 @@ router.put('/:id', requirePermission('clients', 'edit'), async (req, res) => {
       }
     });
 
-    res.json({ message: 'Cliente atualizado com sucesso!', cliente: clienteAtualizado });
+    res.json({ message: 'Cliente atualizado! Tudo nos conformes.', cliente: clienteAtualizado });
   } catch (error) {
-    console.error('Erro ao atualizar cliente:', error);
+    console.error('Erro ao atualizar cliente, mó furada:', error);
     res.status(500).json({ message: 'Erro ao atualizar o cliente.' });
   }
 });
 
 // ---------------------------------------------------------
-// DELETE /api/clientes/:id - Remover um cliente
+// DELETE /api/clientes/:id - Manda o cliente pra conta do Papa
 // ---------------------------------------------------------
 router.delete('/:id', requirePermission('clients', 'edit'), async (req, res) => {
   try {
     const id = parseInt(req.params.id as string);
     await prisma.cliente.delete({ where: { id_cliente: id } });
-    res.json({ message: 'Cliente removido com sucesso!' });
+    res.json({ message: 'Cliente removido! Sumiu do mapa.' });
   } catch (error) {
-    console.error('Erro ao deletar cliente:', error);
+    console.error('Erro ao deletar cliente, que fase:', error);
     res.status(500).json({ message: 'Erro ao remover o cliente.' });
   }
 });
