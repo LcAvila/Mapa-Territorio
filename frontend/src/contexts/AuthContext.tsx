@@ -68,6 +68,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('role', newRole);
         localStorage.setItem('token', newToken);
         localStorage.setItem('userId', String(newUserId));
+        // Stamp activity time so the inactivity tracker has a reference point
+        localStorage.setItem('lastActivityTime', Date.now().toString());
         if (newTokenVersion !== undefined) localStorage.setItem('tokenVersion', String(newTokenVersion));
 
         if (newUserName) localStorage.setItem('userName', newUserName);
@@ -91,12 +93,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const logout = async () => {
         // Clear local state first before signOut to avoid infinite loop in onAuthStateChange
-        ['token', 'role', 'userId', 'userName', 'repCode', 'tipo', 'estado_end', 'defaultWorkspace', 'inactivityLimit', 'tokenVersion'].forEach(k => localStorage.removeItem(k));
+        ['token', 'role', 'userId', 'userName', 'repCode', 'tipo', 'estado_end', 'defaultWorkspace', 'inactivityLimit', 'tokenVersion', 'lastActivityTime'].forEach(k => localStorage.removeItem(k));
         setToken(null); setRole(null); setUserId(null); setUserName(null); setRepCode(null); setTipo(null); setEstadoEnd(null);
         setDefaultWorkspace(null); setInactivityLimit(null); setTokenVersion(null);
         // signOut last — this triggers onAuthStateChange but we no longer call logout() there
         await supabase.auth.signOut();
     };
+
+    // Inactivity Tracker
+    useEffect(() => {
+        if (!token) return;
+
+        const limitMinutes = inactivityLimit || 30; // 30 minutes default
+        const limitMs = limitMinutes * 60 * 1000;
+
+        const checkInactivity = () => {
+            const lastActive = localStorage.getItem('lastActivityTime');
+            if (!lastActive) {
+                // No timestamp means the session was restored from Supabase
+                // without a known last activity — force logout for security
+                logout();
+                return;
+            }
+            const now = Date.now();
+            if (now - parseInt(lastActive, 10) > limitMs) {
+                logout();
+            }
+        };
+
+        const updateActivity = () => {
+            localStorage.setItem('lastActivityTime', Date.now().toString());
+        };
+
+        checkInactivity();
+        const intervalId = setInterval(checkInactivity, 60000);
+
+        let throttleTimeout: ReturnType<typeof setTimeout> | null = null;
+        const handleActivity = () => {
+            if (throttleTimeout) return;
+            throttleTimeout = setTimeout(() => {
+                updateActivity();
+                throttleTimeout = null;
+            }, 1000);
+        };
+
+        const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+        events.forEach(e => window.addEventListener(e, handleActivity));
+
+        return () => {
+            clearInterval(intervalId);
+            events.forEach(e => window.removeEventListener(e, handleActivity));
+            if (throttleTimeout) clearTimeout(throttleTimeout);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [token, inactivityLimit]);
 
     return (
         <AuthContext.Provider value={{
