@@ -17,53 +17,8 @@ const PUBLIC_USER_FIELDS = {
   token_version: true
 };
 
-router.post('/register', async (req, res) => {
-  try {
-    const { password, full_name, code, birth_date, telefone, cpf_cnpj, cargo, company_name, groupId } = req.body;
-    
-    if (!code || !password || !full_name) {
-      return res.status(400).json({ message: 'Campos obrigatórios: código, senha e nome completo' });
-    }
-
-    const existing = await prisma.user.findFirst({ where: { code } });
-    if (existing) return res.status(409).json({ message: `Este Código já está em uso` });
-    
-    // Step 1: Create in Supabase Auth
-    const authEmail = `${code}@mapaterritorio.com`;
-    const { error: authError } = await supabaseAdmin.auth.admin.createUser({
-        email: authEmail,
-        password,
-        email_confirm: true,
-        user_metadata: { full_name }
-    });
-
-    if (authError) return res.status(500).json({ message: `Supabase Auth Error: ${authError.message}` });
-
-    // Step 2: Create in Prisma
-    const user = await prisma.user.create({ 
-      data: { 
-        username: code, 
-        password: 'SUPABASE_AUTH_ACTIVE',
-        full_name,
-        code,
-        telefone,
-        cpf_cnpj,
-        cargo,
-        company_name,
-        groupId: groupId ? Number(groupId) : null,
-        birth_date: birth_date ? new Date(birth_date) : null,
-        tipo: 'cliente',
-        role: 'user'
-      } 
-    });
-
-    await logUserActivity(user.id, 'register', 'Usuário se registrou no sistema', req);
-    res.status(201).json({ message: 'Usuário registrado com sucesso' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error registering user' });
-  }
-});
+// The /register route has been removed. 
+// Account creation is now exclusively handled by the Admin endpoint (/api/admin/users) for security reasons.
 
 router.post('/login', async (req, res) => {
     // This endpoint is now legacy as the frontend signs in via Supabase directly

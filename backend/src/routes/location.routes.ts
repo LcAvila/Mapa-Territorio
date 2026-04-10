@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import { LocationService } from '../services/LocationService';
 import { prisma } from '../prisma';
+import { authenticate } from '../middlewares/auth';
 
 const router = Router();
+
+// Protect all location endpoints
+router.use(authenticate);
 
 router.get('/states', async (req, res) => {
   try {

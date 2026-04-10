@@ -1,11 +1,20 @@
 import { Router } from 'express';
 import { prisma } from '../prisma';
-import { authenticate, requireAdmin, requirePermission } from '../middlewares/auth';
+import { authenticate, requirePermission } from '../middlewares/auth';
 import { logUserActivity } from '../utils/logger';
+import rateLimit from 'express-rate-limit';
 
 const router = Router();
 
-router.post('/', async (req, res) => {
+const interestLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Limit each IP to 5 requests per windowMs
+  message: { message: 'Muitas solicitações detectadas. Tente novamente mais tarde.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+router.post('/', interestLimiter, async (req, res) => {
   // Optional authentication: if token provided, link to user
   const authHeader = req.headers.authorization;
   let userId: number | undefined;
