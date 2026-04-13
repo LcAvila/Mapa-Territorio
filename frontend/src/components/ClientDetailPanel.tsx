@@ -1,4 +1,4 @@
-import { X, MapPin, User, Building2, Layers, Search, CheckCircle2 } from "lucide-react";
+import { X, MapPin, User, Building2, Layers, Search, CheckCircle2, Navigation2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -21,9 +21,10 @@ interface ClientDetailPanelProps {
   clients: Client[];
   onClose: () => void;
   onSelectClient?: (client: Client) => void;
+  onCalculateRoute?: () => void;
 }
 
-const ClientDetailPanel = ({ clients, onClose, onSelectClient }: ClientDetailPanelProps) => {
+const ClientDetailPanel = ({ clients, onClose, onSelectClient, onCalculateRoute }: ClientDetailPanelProps) => {
   if (clients.length === 0) return null;
 
   return (
@@ -114,15 +115,25 @@ const ClientDetailPanel = ({ clients, onClose, onSelectClient }: ClientDetailPan
         </div>
       </ScrollArea>
 
-      {clients.length > 1 && (
-        <div className="p-3 bg-muted/20 border-t border-border">
+      {(clients.length >= 1) && (
+        <div className="p-3 bg-muted/20 border-t border-border flex gap-2">
+          {onCalculateRoute && clients.some(c => c.latitude && c.longitude) && (
+            <Button
+              variant="default"
+              className="flex-1 h-8 text-xs gap-2 bg-blue-600 hover:bg-blue-500 text-white"
+              onClick={onCalculateRoute}
+            >
+              <Navigation2 className="w-3.5 h-3.5" />
+              Calcular Rota
+            </Button>
+          )}
           <Button 
             variant="outline" 
-            className="w-full h-8 text-xs gap-2"
+            className="flex-1 h-8 text-xs gap-2"
             onClick={onClose}
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
-            Limpar Seleção
+            Fechar
           </Button>
         </div>
       )}

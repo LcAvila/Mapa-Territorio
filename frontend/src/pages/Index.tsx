@@ -12,7 +12,9 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import ClientDetailPanel from "@/components/ClientDetailPanel";
 import RepresentativePanel from "@/components/RepresentativePanel";
+import RoutingPanel from "@/components/RoutingPanel";
 import { useApiRepresentatives, useApiClientes, useApiTerritories, Cliente, SearchSuggestion, GeoJSONFeature, Representative } from "@/hooks/use-api-data";
+import { RouteWaypoint } from "@/hooks/use-routing";
 
 const Index = () => {
   const { isAuthenticated, role, logout, repCode } = useAuth();
@@ -43,6 +45,10 @@ const Index = () => {
 
   // Client selection state
   const [selectedClients, setSelectedClients] = useState<Cliente[]>([]);
+
+  // Routing state
+  const [showRouting, setShowRouting] = useState(false);
+  const [routeWaypoints, setRouteWaypoints] = useState<RouteWaypoint[]>([]);
 
   // Interest modal state
   const [interestTarget, setInterestTarget] = useState<{ municipio: string; uf: string } | null>(null);
@@ -390,13 +396,37 @@ const Index = () => {
               >
                 <ClientDetailPanel
                   clients={selectedClients}
-                  onClose={() => setSelectedClients([])}
+                  onClose={() => { setSelectedClients([]); setShowRouting(false); setRouteWaypoints([]); }}
                   onSelectClient={(client) => {
                     setFlyToLocation({
                       center: [client.latitude, client.longitude],
                       zoom: 17
                     });
                   }}
+                  onCalculateRoute={() => setShowRouting(true)}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Routing Panel */}
+          <AnimatePresence>
+            {showRouting && selectedClients.length > 0 && (
+              <motion.div
+                initial={{ x: 20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 20, opacity: 0 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
+                className="w-[320px] pointer-events-auto shrink-0 shadow-xl rounded-lg"
+              >
+                <RoutingPanel
+                  clients={selectedClients}
+                  onClose={() => { setShowRouting(false); setRouteWaypoints([]); }}
+                  onRouteCalculated={(waypoints) => {
+                    setRouteWaypoints(waypoints);
+                    toast.success(`Rota calculada! ${waypoints.length} pontos.`);
+                  }}
+                  onRouteClear={() => setRouteWaypoints([])}
                 />
               </motion.div>
             )}

@@ -8,6 +8,7 @@ export interface AuthRequest extends ExRequest {
 
 export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
+  console.log(`[AUTH] Request received: ${req.method} ${req.originalUrl}. Token present: ${!!token}`);
   if (!token) {
     return res.status(401).json({ message: 'Acesso negado' });
   }
@@ -17,11 +18,13 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
     const { data: { user: sbUser }, error: sbError } = await supabase.auth.getUser(token);
     
     if (sbError || !sbUser) {
+      console.error('[AUTH] Supabase error:', sbError?.message);
       return res.status(401).json({ message: 'Sessão inválida ou expirada' });
     }
 
     // Step 2: Extract our custom user from Prisma
     const accessCode = sbUser.email?.split('@')[0];
+    console.log(`[AUTH] Attempting to match user in Prisma. Email: ${sbUser.email}, extracted code: ${accessCode}`);
     const user = await prisma.user.findFirst({
       where: {
         OR: [
@@ -37,6 +40,7 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
     });
  
     if (!user) {
+      console.error(`[AUTH] User profile not found in Prisma for accessCode: ${accessCode}`);
       return res.status(401).json({ message: 'Perfil não encontrado' });
     }
 

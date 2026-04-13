@@ -84,7 +84,7 @@ interface NavItem {
   subItems?: { id: TabId; label: string; icon: React.ElementType; count?: number; }[];
 }
 
-const API = 'http://localhost:3001';
+const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
 const IBGE = 'https://servicodados.ibge.gov.br/api/v1/localidades';
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────

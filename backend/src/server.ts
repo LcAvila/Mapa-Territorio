@@ -1,10 +1,18 @@
-import 'dotenv/config';
+import path from 'path';
+import dotenv from 'dotenv';
+// Força o carregamento do .env do diretório atual
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import hpp from 'hpp';
 import pc from 'picocolors';
+
+// console.log(pc.yellow(`[CONFIG] Carregando .env de: ${path.resolve(process.cwd(), '.env')}`));
+// console.log(pc.yellow(`[CONFIG] SUPABASE_URL: ${process.env.SUPABASE_URL ? '✅ ok' : '❌ VAZIO'}`));
+// console.log(pc.yellow(`[CONFIG] SUPABASE_ANON_KEY: ${process.env.SUPABASE_ANON_KEY ? '✅ ok' : '❌ VAZIO'}`));
 
 import authRoutes from './routes/auth.routes';
 import adminRoutes from './routes/admin.routes';
@@ -15,13 +23,37 @@ import clientesRoutes from './routes/clientes.routes';
 import locationRoutes from './routes/location.routes';
 import feedRoutes from './routes/feed.routes';
 import birthdaysRoutes from './routes/birthdays.routes';
+import routingRoutes from './routes/routing.routes';
 import { prisma } from './prisma';
 
 const app = express();
+
+// LOGGER GLOBAL DE SEGURANÇA - Captura tudo o que bater na porta 3001
+app.use((req, res, next) => {
+  console.log(`[NETWORK] Recebido: ${req.method} ${req.url} de ${req.headers.origin || 'origem desconhecida'}`);
+  next();
+});
+
 const PORT = process.env.PORT || 3001;
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:8080',
+  'http://127.0.0.1:8080',
+  'http://localhost:5173'
+].filter(Boolean) as string[];
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Permite requisições sem origin (como mobile ou curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log(`[CORS] Bloqueado: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 
@@ -49,6 +81,7 @@ app.use('/api', planilhaRoutes);
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/feed', feedRoutes);
 app.use('/api/birthdays', birthdaysRoutes);
+app.use('/api/routing', routingRoutes);
 
 async function bootstrap() {
     // Garantir que existe o usuário 'admin' do Prisma igual tinha no SQLite.
@@ -69,7 +102,7 @@ async function bootstrap() {
     }
 
     app.listen(PORT, () => {
-        console.clear();
+        // console.clear(); // REMOVIDO PARA VERMOS OS LOGS
         console.log(pc.cyan("──────────────────────────────────────────────────"));
         console.log(pc.bold(pc.magenta("🚀 MAPA TERRITÓRIO - BACKEND")));
         console.log(pc.cyan("──────────────────────────────────────────────────"));
@@ -77,6 +110,11 @@ async function bootstrap() {
         console.log(`${pc.blue("🔗 URL Local:")} ${pc.underline(pc.white(`http://localhost:${PORT}`))}`);
         console.log(`${pc.blue("📂 Ambiente:")} ${pc.yellow(process.env.NODE_ENV || 'development')}`);
         console.log(`${pc.blue("🗄️ Database:")} ${pc.green("Prisma ORM")}`);
+        
+        // Logs de Supabase aqui dentro para garantir que apareçam
+        console.log(`${pc.blue("☁️ Supabase URL:")} ${process.env.SUPABASE_URL ? pc.green("Conectado") : pc.red("FALTANDO")}`);
+        console.log(`${pc.blue("☁️ Supabase Key:")} ${process.env.SUPABASE_ANON_KEY ? pc.green("Presente") : pc.red("FALTANDO")}`);
+        
         console.log(pc.cyan("──────────────────────────────────────────────────"));
         console.log(pc.gray("Aguardando requisições...\n"));
     });

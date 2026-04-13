@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                 // If we have a token but missing core metadata (common after refresh), restore it
                 if (!localStorage.getItem('role') || !localStorage.getItem('userId')) {
-                    fetch('http://localhost:3001/api/auth/me', {
+                    fetch(`${import.meta.env.VITE_API_URL}/api/auth/me`, {
                         headers: { 'Authorization': `Bearer ${existingToken}` }
                     })
                     .then(r => r.json())
@@ -52,6 +52,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (session && session.access_token !== localStorage.getItem('token')) {
                 setToken(session.access_token);
                 localStorage.setItem('token', session.access_token);
+                // Garante que lastActivityTime esteja definido antes que o efeito de
+                // inatividade rode — evita logout() prematuro durante o fluxo de login.
+                if (!localStorage.getItem('lastActivityTime')) {
+                    localStorage.setItem('lastActivityTime', Date.now().toString());
+                }
             }
         });
 
@@ -110,9 +115,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const checkInactivity = () => {
             const lastActive = localStorage.getItem('lastActivityTime');
             if (!lastActive) {
-                // No timestamp means the session was restored from Supabase
-                // without a known last activity — force logout for security
-                logout();
+                // Sem timestamp: pode ser sessão restaurada sem atividade conhecida.
+                // Definimos como agora para não derrubar o usuário que acabou de logar.
+                localStorage.setItem('lastActivityTime', Date.now().toString());
                 return;
             }
             const now = Date.now();
