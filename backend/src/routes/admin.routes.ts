@@ -101,7 +101,7 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
         username: code, 
         password: 'SUPABASE_AUTH_ACTIVE', // We don't store plain passwords anymore
         role: role || 'user', 
-        tipo: tipo || 'cliente', 
+        tipo: tipo || 'normal', 
         full_name, 
         repCode: (repCode === '' || repCode === null) ? null : repCode, 
         code,

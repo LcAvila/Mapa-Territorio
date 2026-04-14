@@ -658,13 +658,22 @@ export default function Admin() {
     }
     if (newUser.password !== newUser.confirmPassword) { toast.error('As senhas não coincidem!'); return; }
 
+    // Mapeia tipo de cadastro → role do sistema
+    const roleMap: Record<string, string> = {
+      supervisor:    'supervisor',
+      representante: 'representante',
+      promotor:      'user',
+      normal:        'user',
+    };
+    const resolvedRole = roleMap[newUser.tipo] ?? 'user';
+
     const body: Record<string, string | number | null | boolean> = {
       code: newUser.code,
       full_name: newUser.fullName,
       username: newUser.email || newUser.code,
       password: newUser.password,
-      role: 'user', // Default per specification
-      tipo: 'cliente',
+      role: resolvedRole,
+      tipo: newUser.tipo || 'normal',
       repCode: newUser.repCode || null,
       telefone: newUser.telefone,
       cpf_cnpj: newUser.document,

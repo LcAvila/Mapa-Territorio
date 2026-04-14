@@ -304,15 +304,9 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
            <div className="breadcrumb">
              Início &gt; Administração &gt; Segurança &gt; Usuários &gt; <span>{formData.fullName}</span>
            </div>
-           <div className="actions">
-             {activeTab === 'profile' && <Button onClick={handleSaveProfile} disabled={loading} className="gap-2"><Save size={16} /> SALVAR PERFIL</Button>}
-             {activeTab === 'perms' && <Button onClick={handleSavePermissions} disabled={loading} className="gap-2"><Save size={16} /> SALVAR PERMISSÕES</Button>}
-             {activeTab === 'settings' && <Button onClick={handleSaveConfig} disabled={loading} className="gap-2"><Save size={16} /> SALVAR CONFIGURAÇÕES</Button>}
-             {activeTab === 'notif' && <Button onClick={handleSaveNotifPrefs} disabled={loading} className="gap-2"><Save size={16} /> SALVAR PREFERÊNCIAS</Button>}
-           </div>
         </ContentHeader>
 
-        <ContentBody $scroll={activeTab === 'perms' || activeTab === 'profile'}>
+        <ContentBody $scroll={true}>
           {activeTab === 'profile' && (
             <FormGrid>
               <div className="section-title">Informações Básicas</div>
@@ -585,6 +579,39 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
             </div>
           )}
         </ContentBody>
+
+        {/* ─── Rodapé com botão Salvar para TODAS as abas ─── */}
+        {activeTab !== 'history' && (
+          <ContentFooter>
+            <Button variant="ghost" onClick={onClose} className="gap-2 text-muted-foreground">
+              <X size={16} /> Cancelar
+            </Button>
+            <Button
+              onClick={
+                activeTab === 'profile'   ? handleSaveProfile :
+                activeTab === 'org'       ? handleSaveProfile :
+                activeTab === 'perms'     ? handleSavePermissions :
+                activeTab === 'notif'     ? handleSaveNotifPrefs :
+                activeTab === 'settings'  ? handleSaveConfig :
+                handleSaveProfile
+              }
+              disabled={loading}
+              className="gap-2 min-w-[160px]"
+            >
+              {loading ? (
+                <><span className="animate-spin">⟳</span> Salvando...</>
+              ) : (
+                <><Save size={16} />
+                {activeTab === 'profile'  && 'Salvar Perfil'}
+                {activeTab === 'org'      && 'Salvar Organizacional'}
+                {activeTab === 'perms'    && 'Salvar Permissões'}
+                {activeTab === 'notif'    && 'Salvar Preferências'}
+                {activeTab === 'settings' && 'Salvar Configurações'}
+                </>
+              )}
+            </Button>
+          </ContentFooter>
+        )}
       </MainContent>
     </Container>
   );
@@ -712,6 +739,18 @@ const ContentBody = styled.div<{ $scroll?: boolean }>`
   padding: 30px;
   flex: 1;
   overflow-y: ${props => props.$scroll ? 'auto' : 'hidden'};
+  min-height: 0;
+`;
+
+const ContentFooter = styled.div`
+  padding: 14px 30px;
+  border-top: 1px solid hsl(var(--border) / 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  background: hsl(var(--secondary) / 0.15);
+  flex-shrink: 0;
 `;
 
 const FormGrid = styled.div`
