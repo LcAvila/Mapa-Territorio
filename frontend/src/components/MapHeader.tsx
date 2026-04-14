@@ -97,24 +97,14 @@ export default function MapHeader({
   return (
     <header className="bg-card/95 backdrop-blur-sm border-b border-border px-4 py-2.5 flex items-center gap-3 md:gap-6 sticky top-0 z-[1000] shadow-sm">
       {/* Logo / Brand */}
-      <div className="flex items-center gap-3 shrink-0 cursor-pointer group" onClick={() => navigate('/mapa')}>
+      <div className="flex items-center gap-4 shrink-0 cursor-pointer group" onClick={() => navigate('/mapa')}>
         <div className="relative">
-          <img src="/Logo.png" alt="Logo" className="h-10 w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
-          <div className="absolute inset-0 bg-primary/10 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <img src="/Logo.png" alt="Logo" className="h-16 w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
+          <div className="absolute inset-0 bg-primary/10 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
         </div>
       </div>
 
-      {/* Navigation Links */}
-      {isAuthenticated && (
-        <div className="hidden lg:flex items-center gap-1.5 px-3 border-l border-border h-8 ml-2">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/')} className={`h-8 gap-2 px-3 text-xs font-semibold ${location.pathname === '/' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}`}>
-            <Users className="w-3.5 h-3.5" /> Comunidade
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/mapa')} className={`h-8 gap-2 px-3 text-xs font-semibold ${location.pathname === '/mapa' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}`}>
-            <MapPin className="w-3.5 h-3.5" /> Mapa
-          </Button>
-        </div>
-      )}
+
 
       {/* UF Selector & Search */}
       {!minimal && (
