@@ -22,7 +22,8 @@ import {
   Clock, LayoutDashboard, Bell, ScrollText, UsersRound, Briefcase, Send, Eye, EyeOff,
   Building2, Filter, RefreshCw, ChevronRight, MessageSquare, Globe, Activity,
   TrendingUp, AlertCircle, BadgeCheck, Palette, Upload, ImageOff, Download, Truck, Settings,
-  Database, Layers, Grid3X3, Calendar, FileSpreadsheet, Camera, Percent, Mail, Phone, MapPinned
+  Database, Layers, Grid3X3, Calendar, FileSpreadsheet, Camera, Percent, Mail, Phone, MapPinned,
+  Route, BarChart2
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -40,6 +41,8 @@ import { RoteirosPanel } from '../components/admin/rotas/RoteirosPanel';
 import { AgendaPanel } from '../components/admin/rotas/AgendaPanel';
 import { DensidadePanel } from '../components/admin/rotas/DensidadePanel';
 import { LeituraPlanilhaPanel } from '../components/admin/rotas/LeituraPlanilhaPanel';
+import { RotaSequencialPanel } from '../components/admin/rotas/RotaSequencialPanel';
+import { ResumoRoteiroPanel } from '../components/admin/rotas/ResumoRoteiroPanel';
 import { RotasProvider } from '../contexts/RotasContext';
 import MiniMapBrasil from '../components/admin/MiniMapBrasil';
 import UserProfileManager from '../components/admin/users/UserProfileManager';
@@ -72,7 +75,7 @@ interface Notification { id: string; title: string; message: string; targetAll: 
 interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; repCode?: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; }
 interface ModulePermission { userId: number; moduleId: string; canView: boolean; canEdit: boolean; }
 
-type TabId = 'comunidade' | 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha';
+type TabId = 'comunidade' | 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha' | 'roteiro_seq' | 'resumo_roteiro';
 
 interface NavItem {
   id: TabId | 'settings' | 'rotas_menu' | 'users_menu';
@@ -376,8 +379,11 @@ export default function Admin() {
 
       if (userFilterOnline) {
         const rawLastActive = u.last_active || (u as SystemUser & { lastActive?: string }).lastActive;
-        const lastDate = rawLastActive ? new Date(rawLastActive) : null;
-        const isOnline = (u.id === userId) || (lastDate && !isNaN(lastDate.getTime()) && (Date.now() - lastDate.getTime()) < 300000);
+        if (!rawLastActive) return false;
+        const lastDate = new Date(rawLastActive);
+        // epoch (new Date(0)) = never logged in sentinel
+        if (lastDate.getFullYear() <= 1970) return false;
+        const isOnline = (u.id === userId) || (!isNaN(lastDate.getTime()) && (Date.now() - lastDate.getTime()) < 300000);
         return isOnline;
       }
 
@@ -647,8 +653,8 @@ export default function Admin() {
   // ── Users CRUD ────────────────────────────────────────────────────────────
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUser.fullName.trim() || !newUser.password.trim() || !newUser.code.trim()) {
-      toast.error('Código, Nome e Senha são obrigatórios'); return;
+    if (!newUser.code.trim() || !newUser.password.trim()) {
+      toast.error('Código e Senha são obrigatórios'); return;
     }
     if (newUser.password !== newUser.confirmPassword) { toast.error('As senhas não coincidem!'); return; }
 
@@ -805,9 +811,11 @@ export default function Admin() {
     {
       id: 'rotas_menu' as const, label: 'Planejamento de Áreas', icon: Truck, restrict: ['admin', 'supervisor'], subItems: [
         { id: 'leituraplanilha' as const, label: 'Leitura Excel', icon: FileSpreadsheet },
+        { id: 'roteiro_seq' as const, label: 'Roteiro Sequencial', icon: Route },
+        { id: 'resumo_roteiro' as const, label: 'Resumo Roteiro', icon: BarChart2 },
         { id: 'clusters' as const, label: 'Clusters', icon: Layers },
         { id: 'blocos' as const, label: 'Blocos', icon: Grid3X3 },
-        { id: 'roteiros' as const, label: 'Roteiros', icon: Map },
+        { id: 'roteiros' as const, label: 'Roteiros HERE', icon: Map },
         { id: 'agenda' as const, label: 'Agenda', icon: Calendar },
         { id: 'densidade' as const, label: 'Densidade', icon: Activity },
       ]
@@ -1441,8 +1449,12 @@ export default function Admin() {
                   {filteredUsers.map(u => {
                     const rawLastActive = u.last_active || (u as SystemUser & { lastActive?: string }).lastActive;
                     const lastDate = rawLastActive ? new Date(rawLastActive) : null;
-                    const isOnline = (u.id === userId) || (lastDate && !isNaN(lastDate.getTime()) && (Date.now() - lastDate.getTime()) < 300000);
-                    const lastActive = (lastDate && !isNaN(lastDate.getTime())) ? lastDate : null;
+                    // epoch (new Date(0)) or null = never logged in sentinel → always offline
+                    const hasEverLoggedIn = lastDate !== null && !isNaN(lastDate.getTime()) && lastDate.getFullYear() > 1970;
+                    const isOnline = hasEverLoggedIn && (
+                      (u.id === userId) || (Date.now() - lastDate!.getTime() < 300000)
+                    );
+                    const lastActive = hasEverLoggedIn ? lastDate : null;
 
                     return (
                       <Card key={u.id} className="group relative overflow-hidden border-border/40 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 transform hover:-translate-y-1">
@@ -1553,7 +1565,7 @@ export default function Admin() {
                             
                             {/* Linha 1 */}
                             <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Código *</Label><Input value={newUser.code} onChange={e => setNewUser({ ...newUser, code: e.target.value.replace(/[^a-zA-Z0-9.-]/g, '') })} required className="h-9 text-xs" /></div>
-                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Nome Completo *</Label><Input value={newUser.fullName} onChange={e => setNewUser({ ...newUser, fullName: e.target.value })} required className="h-9 text-xs" /></div>
+                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Nome Completo</Label><Input value={newUser.fullName} onChange={e => setNewUser({ ...newUser, fullName: e.target.value })} className="h-9 text-xs" /></div>
                             <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">E-mail</Label><Input type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} className="h-9 text-xs" /></div>
                             
                             {/* Linha 2 */}
@@ -1583,7 +1595,7 @@ export default function Admin() {
                                 ))}
                               </div>
                             </div>
-                            <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{newUser.documentType.toUpperCase()} *</Label><Input value={newUser.document} onChange={e => setNewUser({ ...newUser, document: maskDoc(e.target.value, newUser.documentType) })} required className="h-9 text-xs" /></div>
+                            <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{newUser.documentType.toUpperCase()}</Label><Input value={newUser.document} onChange={e => setNewUser({ ...newUser, document: maskDoc(e.target.value, newUser.documentType) })} className="h-9 text-xs" /></div>
 
                             {/* Linha 5 (Senhas) */}
                             <div className="space-y-1.5 md:col-start-1">
@@ -2262,7 +2274,7 @@ export default function Admin() {
           {activeTab === 'baserotas' && <BaseClientePanel onSwitchToReps={() => setActiveTab('reps')} />}
 
           {/* ━━ PLANEJAMENTO DE ÁREAS (com contexto) ━━ */}
-          {['clusters', 'blocos', 'roteiros', 'agenda', 'densidade', 'leituraplanilha'].includes(activeTab) && (
+          {['clusters', 'blocos', 'roteiros', 'agenda', 'densidade', 'leituraplanilha', 'roteiro_seq', 'resumo_roteiro'].includes(activeTab) && (
             <RotasProvider>
               {activeTab === 'clusters' && <ClustersPanel />}
               {activeTab === 'blocos' && <BlocosPanel />}
@@ -2270,6 +2282,8 @@ export default function Admin() {
               {activeTab === 'agenda' && <AgendaPanel />}
               {activeTab === 'densidade' && <DensidadePanel />}
               {activeTab === 'leituraplanilha' && <LeituraPlanilhaPanel />}
+              {activeTab === 'roteiro_seq' && <RotaSequencialPanel />}
+              {activeTab === 'resumo_roteiro' && <ResumoRoteiroPanel />}
             </RotasProvider>
           )}
 

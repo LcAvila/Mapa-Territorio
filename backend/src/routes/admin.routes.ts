@@ -114,7 +114,8 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
         birth_date: birth_date ? new Date(birth_date) : null,
         colorIndex: colorIndex !== undefined ? Number(colorIndex) : 0,
         comissao: (comissao !== undefined && comissao !== '' && comissao !== null) ? parseFloat(comissao) : null,
-        isVago: isVago ? 1 : 0
+        isVago: isVago ? 1 : 0,
+        last_active: new Date(0), // Epoch = never logged in (sentinela)
       }, 
       select: PUBLIC_USER_FIELDS 
     });
