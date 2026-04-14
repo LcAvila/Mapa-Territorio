@@ -663,20 +663,32 @@ export default function BrazilMap({
         )}
 
         {/* States layer (Level 1) */}
-        <Pane name="basePane" style={{ zIndex: 100 }}>
           {statesGeo && !selectedUF && (
-            <GeoJSON key="states" data={statesGeo} style={stateStyle} onEachFeature={onEachState} />
+            <Pane name="basePane" style={{ zIndex: 100 }}>
+              <GeoJSON 
+                key={`states-${statesMetadata?.length || 0}`} 
+                data={statesGeo} 
+                style={stateStyle} 
+                onEachFeature={onEachState} 
+              />
+            </Pane>
           )}
           {statesGeo && selectedUF && (
-            <GeoJSON key={`states-outline-${selectedUF}`} data={statesGeo} style={stateOutlineStyle} />
+            <Pane name="basePane" style={{ zIndex: 100 }}>
+              <GeoJSON 
+                key={`states-outline-${selectedUF}`} 
+                data={statesGeo} 
+                style={stateOutlineStyle} 
+                interactive={false}
+              />
+            </Pane>
           )}
-        </Pane>
 
         {/* Municipalities layer (Level 2) - Always show when a state is selected */}
         {municipiosGeo && selectedUF && citiesMetadata && (
           <Pane name="municipiosPane" style={{ zIndex: 200 }}>
             <GeoJSON
-              key={`muns-${selectedUF}-${modo}-${filtroRepresentante}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}`}
+              key={`muns-${selectedUF}-${modo}-${filtroRepresentante}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}-${citiesMetadata?.length || 0}`}
               data={municipiosGeo} style={municipioStyle} onEachFeature={onEachMunicipio}
             />
           </Pane>
@@ -684,7 +696,7 @@ export default function BrazilMap({
 
         {/* Bairros layer (Level 3) */}
         {municipioCodeForBairros && (
-          <Pane name="bairrosPane" style={{ zIndex: 450 }}>
+          <Pane name="bairrosPane" style={{ zIndex: 450, pointerEvents: 'none' }}>
             {/* Show selected municipality boundary */}
             {municipiosGeo && selectedUF && citiesMetadata && (
               <GeoJSON
@@ -749,7 +761,7 @@ export default function BrazilMap({
 
         {/* Client Pins */}
         {showClientes && (
-          <Pane name="topPane" style={{ zIndex: 700, pointerEvents: 'auto' }}>
+          <Pane name="topPane" style={{ zIndex: 700, pointerEvents: 'none' }}>
             {visibleClientes.map((cliente) => {
               const isSelected = selectedClients.some(c => c.id_cliente === cliente.id_cliente);
               const rep = getRepByCode(cliente.repCode as string, apiReps);

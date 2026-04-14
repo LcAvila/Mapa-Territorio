@@ -250,6 +250,25 @@
   color: hsl(var(--primary)) !important;
 }
 
+/* Permitir clique através de Panes superiores (Clientes e Bairros) */
+.leaflet-topPane-pane,
+.leaflet-bairrosPane-pane {
+  pointer-events: none !important;
+}
+
+.leaflet-topPane-pane svg,
+.leaflet-bairrosPane-pane svg {
+  pointer-events: none !important;
+}
+
+/* Reativar cliques apenas nos elementos (pins/polígonos) */
+.leaflet-topPane-pane svg path,
+.leaflet-topPane-pane .leaflet-marker-icon,
+.leaflet-bairrosPane-pane svg path {
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+
 /* Neighborhood permanent label styles */
 .neighborhood-map-label {
   background: hsl(var(--card) / 0.85) !important;

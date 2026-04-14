@@ -67,7 +67,7 @@ interface Representative {
   _count?: { clientes: number; territories: number; };
 }
 interface Territory { id: number; municipio: string; uf: string; repCode: string; modo: string; }
-interface SystemUser { id: number; username: string; role: string; repCode: string | null; code?: string; fullName?: string; full_name?: string; document?: string; cpf_cnpj?: string; documentType?: 'cpf' | 'cnpj'; companyName?: string; company_name?: string; birth_date?: string; birthDate?: string; telefone?: string; email?: string; photo?: string; cargo?: string; groupId?: number; last_active?: string; tipo?: string; }
+interface SystemUser { id: number; username: string; role: string; repCode: string | null; code?: string; fullName?: string; full_name?: string; document?: string; cpf_cnpj?: string; documentType?: 'cpf' | 'cnpj'; companyName?: string; company_name?: string; birth_date?: string; birthDate?: string; telefone?: string; email?: string; photo?: string; cargo?: string; groupId?: number; last_active?: string; tipo?: string; cep?: string; logradouro?: string; numero?: string; complemento?: string; bairro_end?: string; cidade?: string; estado_end?: string; area_atuacao?: string; base_logistica?: string; }
 interface InterestRequest { id: number; nome: string; email: string | null; telefone: string | null; empresa: string | null; municipio: string; uf: string; modo: string | null; observacoes: string | null; status: 'pending' | 'accepted' | 'rejected'; created_at: string; userId?: number; repCode?: string; }
 
 interface Group { id: string; name: string; repCodes: string[]; createdAt: string; }
@@ -351,7 +351,8 @@ export default function Admin() {
     role: 'user' as 'user' | 'supervisor' | 'admin',
     repCode: '', code: '', documentType: 'cpf' as 'cpf' | 'cnpj',
     document: '', companyName: '', birthDate: '', telefone: '', photo: '',
-    cargo: '', groupId: '', tipo: 'normal' as 'normal' | 'representante' | 'promotor' | 'supervisor', colorIndex: 0
+    cargo: '', groupId: '', tipo: 'normal' as 'normal' | 'representante' | 'promotor' | 'supervisor', colorIndex: 0,
+    cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: ''
   });
   const [groupsData, setGroupsData] = useState<{ id: number, name: string }[]>([]);
   const [showNewPwd, setShowNewPwd] = useState(false);
@@ -651,6 +652,26 @@ export default function Admin() {
   });
 
   // ── Users CRUD ────────────────────────────────────────────────────────────
+  const fetchCepAdmin = async (cep: string) => {
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length !== 8) return;
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        setNewUser(prev => ({
+          ...prev,
+          logradouro: data.logradouro,
+          bairro_end: data.bairro,
+          cidade: data.localidade,
+          estado_end: data.uf
+        }));
+      }
+    } catch (e) {
+      console.error('Erro ao buscar CEP', e);
+    }
+  };
+
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUser.code.trim() || !newUser.password.trim()) {
@@ -681,7 +702,16 @@ export default function Admin() {
       cargo: newUser.cargo,
       company_name: newUser.companyName,
       groupId: newUser.groupId ? Number(newUser.groupId) : null,
-      photo: newUser.photo || null
+      photo: newUser.photo || null,
+      cep: newUser.cep,
+      logradouro: newUser.logradouro,
+      numero: newUser.numero,
+      complemento: newUser.complemento,
+      bairro_end: newUser.bairro_end,
+      cidade: newUser.cidade,
+      estado_end: newUser.estado_end,
+      area_atuacao: newUser.area_atuacao,
+      base_logistica: newUser.base_logistica
     };
 
     try {
@@ -693,7 +723,8 @@ export default function Admin() {
           fullName: '', email: '', password: '', confirmPassword: '',
           role: 'user', repCode: '', code: '', documentType: 'cpf',
           document: '', companyName: '', birthDate: '', telefone: '', photo: '',
-          cargo: '', groupId: '', tipo: 'normal', colorIndex: 0
+          cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
+          cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: ''
         });
         setIsUserModalOpen(false);
         fetchAll();
@@ -1606,7 +1637,7 @@ export default function Admin() {
                             </div>
                             <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{newUser.documentType.toUpperCase()}</Label><Input value={newUser.document} onChange={e => setNewUser({ ...newUser, document: maskDoc(e.target.value, newUser.documentType) })} className="h-9 text-xs" /></div>
 
-                            {/* Linha 5 (Senhas) */}
+                            {/* Linhas de Senha (movidas para baixo) */}
                             <div className="space-y-1.5 md:col-start-1">
                               <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Senha *</Label>
                               <div className="relative">
@@ -1617,6 +1648,31 @@ export default function Admin() {
                             <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Confirmar Senha *</Label><Input type={showNewPwd ? 'text' : 'password'} value={newUser.confirmPassword} onChange={e => setNewUser({ ...newUser, confirmPassword: e.target.value })} required className="h-9 text-xs" /></div>
                           </div>
                         </div>
+
+                        <div className="mt-6 pt-4 border-t border-border/40 grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <h4 className="col-span-full text-xs font-bold text-primary mb-1">ENDEREÇO</h4>
+                          <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">CEP</Label><Input value={newUser.cep} onChange={e => setNewUser({ ...newUser, cep: e.target.value.replace(/\D/g, '') })} onBlur={() => fetchCepAdmin(newUser.cep)} maxLength={8} className="h-9 text-xs" /></div>
+                          <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Logradouro / Rua</Label><Input value={newUser.logradouro} onChange={e => setNewUser({ ...newUser, logradouro: e.target.value })} className="h-9 text-xs" /></div>
+                          <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Número</Label><Input value={newUser.numero} onChange={e => setNewUser({ ...newUser, numero: e.target.value })} className="h-9 text-xs" /></div>
+                          <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Complemento</Label><Input value={newUser.complemento} onChange={e => setNewUser({ ...newUser, complemento: e.target.value })} className="h-9 text-xs" /></div>
+                          <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bairro</Label><Input value={newUser.bairro_end} onChange={e => setNewUser({ ...newUser, bairro_end: e.target.value })} className="h-9 text-xs" /></div>
+                          <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Cidade</Label><Input value={newUser.cidade} onChange={e => setNewUser({ ...newUser, cidade: e.target.value })} className="h-9 text-xs" /></div>
+                          <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">UF</Label><Input value={newUser.estado_end} onChange={e => setNewUser({ ...newUser, estado_end: e.target.value })} maxLength={2} className="h-9 text-xs uppercase" /></div>
+                        </div>
+
+                        {newUser.tipo === 'supervisor' && (
+                          <div className="mt-6 pt-4 border-t border-border/40 grid grid-cols-1 md:grid-cols-2 gap-4 bg-primary/5 p-4 rounded-lg">
+                            <h4 className="col-span-full text-xs font-bold text-primary mb-1">DADOS DO SUPERVISOR</h4>
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Base Logística</Label>
+                              <Input value={newUser.base_logistica} onChange={e => setNewUser({ ...newUser, base_logistica: e.target.value })} placeholder="Ex: Fábrica Compactor" className="h-9 text-xs bg-background" />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Área de Atuação</Label>
+                              <Input value={newUser.area_atuacao} onChange={e => setNewUser({ ...newUser, area_atuacao: e.target.value })} placeholder="Ex: RJ Capital e Baixada" className="h-9 text-xs bg-background" />
+                            </div>
+                          </div>
+                        )}
 
                         <div className="flex gap-3 pt-6 mt-4 border-t border-border/10 justify-end">
                           <Button variant="ghost" type="button" onClick={() => setIsUserModalOpen(false)} className="w-32">Cancelar</Button>

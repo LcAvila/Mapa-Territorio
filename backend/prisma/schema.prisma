@@ -19,6 +19,7 @@ model User {
   telefone     String?
   cargo        String?
   company_name String?
+  email        String?
   cep          String?
   logradouro   String?
   numero       String?
@@ -27,6 +28,8 @@ model User {
   cidade       String?
   estado_end   String?
   photo        String?
+  area_atuacao String?
+  base_logistica String?
   repCode      String?   @unique
   code         String?   @unique
   birth_date   DateTime?

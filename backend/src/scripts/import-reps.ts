@@ -1,83 +1,103 @@
-import * as xlsx from 'xlsx';
-import bcrypt from 'bcryptjs';
-import { PrismaClient } from '@prisma/client';
+import * as XLSX from 'xlsx';
+import { prisma } from '../prisma';
+import { supabaseAdmin } from '../lib/supabase';
+import * as dotenv from 'dotenv';
 
-const prisma = new PrismaClient();
+dotenv.config();
 
-async function main() {
-  const filePath = 'C:\\Users\\Avila\\Desktop\\Mapa-Territorio\\frontend\\public\\Representantes\\Login Rep.xlsx';
-  const wb = xlsx.readFile(filePath);
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows: any[] = xlsx.utils.sheet_to_json(sheet);
+const excelPath = 'C:\\Users\\Avila\\Documents\\Mapa-Territorio\\frontend\\public\\Cad Representantes\\Login Rep.xlsx';
 
-  console.log(`Found ${rows.length} rows to import.`);
+async function importReps() {
+  console.log('--- INICIANDO IMPORTAÇÃO DE REPRESENTANTES ---');
+  
+  try {
+    const workbook = XLSX.readFile(excelPath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data: any[] = XLSX.utils.sheet_to_json(worksheet);
 
-  for (const row of rows) {
-    const username = String(row['Cod login']).trim();
-    const passwordRaw = String(row['Pass login']).trim();
-    const fullName = row['Nome'] ? String(row['Nome']).trim() : null;
+    console.log(`Encontrados ${data.length} registros na planilha.`);
 
-    if (!username || !passwordRaw || username === 'undefined') {
-      console.log('Skipping row missing login/pass:', row);
-      continue;
-    }
+    for (const row of data) {
+      const code = String(row['Cod login'] || '').trim();
+      const password = String(row['Pass login'] || '').trim();
+      const name = String(row['Nome'] || '').trim();
+      const email = String(row['E-mail'] || '').trim();
+      const address = String(row['Endereco'] || '').trim();
+      const bairro = String(row['Bairro'] || '').trim();
+      const cidade = String(row['Cidade'] || '').trim();
+      const estado = String(row['Estado'] || '').trim();
+      const cep = String(row['CEP'] || '').trim();
 
-    // Derive repCode from the login itself: REP010 → strip 'REP' → '010' → remove leading zeros → '10'
-    const repCode = username.replace(/^REP/i, '').replace(/^0+/, '') || '0';
+      if (!code || code === 'undefined') continue;
 
-    // Verify the representative exists in the DB (now via User model)
-    const rep = await prisma.user.findUnique({ where: { repCode } });
+      console.log(`Processando ${code} - ${name}...`);
 
-    const existing = await prisma.user.findUnique({ where: { username } });
-    const hashedPassword = await bcrypt.hash(passwordRaw, 10);
+      try {
+        // 1. Verificar se usuário já existe no Prisma
+        const existing = await prisma.user.findFirst({
+          where: { OR: [{ code }, { username: code }] }
+        });
 
-    if (existing) {
-      console.log(`Updating existing user ${username} → repCode=${repCode}`);
-      await prisma.user.update({
-        where: { id: existing.id },
-        data: {
-          repCode,
-          password: hashedPassword,
-          full_name: fullName || existing.full_name,
-          role: 'representante',
-          tipo: 'representante',
+        if (existing) {
+          console.log(`[SKIP] Usuário ${code} já existe.`);
+          continue;
         }
-      });
-      continue;
-    }
 
-    if (rep) {
-      console.log(`Updating existing representative by repCode ${repCode} to new username ${username}`);
-      await prisma.user.update({
-        where: { id: rep.id },
-        data: {
-          username,
-          password: hashedPassword,
-          full_name: fullName || rep.full_name,
-          role: 'representante',
-          tipo: 'representante',
+        // 2. Criar no Supabase Auth
+        // Email fake baseado no código para garantir unicidade no Supabase se o email real falhar/não existir
+        const authEmail = (email && email !== 'undefined' && email.includes('@')) ? email : `${code}@mapaterritorio.com`;
+        
+        const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+          email: authEmail,
+          password: password || `${code}@123`,
+          email_confirm: true,
+          user_metadata: { full_name: name, role: 'user' }
+        });
+
+        if (authError) {
+          if (authError.message.includes('already been registered')) {
+            console.warn(`[WARN] Email ${authEmail} já registrado no Supabase Auth.`);
+          } else {
+            console.error(`[ERROR] Erro Supabase Auth para ${code}:`, authError.message);
+            continue;
+          }
         }
-      });
-      continue;
-    }
 
-    // Attempt to create if neither exist.
-    await prisma.user.create({
-      data: {
-        username,
-        password: hashedPassword,
-        full_name: fullName,
-        role: 'representante',
-        tipo: 'representante',
-        repCode,
+        // 3. Criar no Banco de Dados via Prisma
+        const userData: any = {
+            username: code,
+            password: 'SUPABASE_AUTH_ACTIVE',
+            role: 'user',
+            tipo: 'representante',
+            full_name: name,
+            code: code,
+            repCode: code,
+            email: email && email !== 'undefined' ? email : null,
+            logradouro: address,
+            bairro_end: bairro,
+            cidade: cidade,
+            estado_end: estado,
+            cep: cep,
+            last_active: new Date(0),
+        };
+
+        await prisma.user.create({ data: userData });
+
+        console.log(`[SUCCESS] ${code} cadastrado com sucesso.`);
+
+      } catch (err: any) {
+        console.error(`[FATAL] Erro ao processar ${code}:`, err?.message || err);
       }
-    });
-    console.log(`Created user ${username} → repCode=${repCode}`);
-  }
+    }
 
-  console.log('Done!');
+    console.log('\n--- IMPORTAÇÃO CONCLUÍDA ---');
+
+  } catch (error: any) {
+    console.error('Erro ao ler a planilha:', error?.message || error);
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
-main()
-  .catch(e => console.error(e))
-  .finally(async () => await prisma.$disconnect());
+importReps();

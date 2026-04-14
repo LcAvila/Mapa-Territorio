@@ -19,6 +19,8 @@ const PUBLIC_USER_FIELDS = {
   id: true, username: true, role: true, repCode: true, code: true, tipo: true, 
   full_name: true, cpf_cnpj: true, telefone: true, cargo: true, company_name: true, groupId: true,
   photo: true, birth_date: true, colorIndex: true, comissao: true, isVago: true,
+  cep: true, logradouro: true, numero: true, complemento: true,
+  bairro_end: true, cidade: true, estado_end: true, area_atuacao: true, base_logistica: true,
   created_at: true, last_active: true, token_version: true
 };
 
@@ -69,7 +71,11 @@ router.get('/users', requirePermission('users', 'view'), async (req, res) => {
 });
 
 router.post('/users', requirePermission('users', 'edit'), async (req: any, res) => {
-  const { password, role, tipo, full_name, repCode, code, photo, colorIndex, comissao, isVago, telefone, cpf_cnpj, birth_date, cargo, company_name, groupId } = req.body;
+  const { 
+    password, role, tipo, full_name, repCode, code, photo, colorIndex, comissao, isVago, 
+    telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
+    cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica 
+  } = req.body;
   
   if (!code) return res.status(400).json({ message: 'Código é obrigatório' });
 
@@ -110,6 +116,15 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
         cpf_cnpj,
         cargo,
         company_name,
+        cep,
+        logradouro,
+        numero,
+        complemento,
+        bairro_end,
+        cidade,
+        estado_end,
+        area_atuacao,
+        base_logistica,
         groupId: groupId ? Number(groupId) : null,
         birth_date: birth_date ? new Date(birth_date) : null,
         colorIndex: colorIndex !== undefined ? Number(colorIndex) : 0,
@@ -130,7 +145,11 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
 
 router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, res) => {
   const id = Number(req.params.id);
-  const { password, role, repCode, tipo, full_name, photo, colorIndex, comissao, isVago, telefone, cpf_cnpj, birth_date, cargo, company_name, groupId } = req.body;
+  const { 
+    password, role, repCode, tipo, full_name, photo, colorIndex, comissao, isVago, 
+    telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
+    cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica 
+  } = req.body;
   
   const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ message: 'Usuário não encontrado' });
@@ -162,6 +181,7 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
         cpf_cnpj, 
         cargo, 
         company_name,
+        cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
         // Ensure groupId is not 0 if empty string is passed
         groupId: (groupId !== undefined && groupId !== '' && groupId !== null) ? Number(groupId) : (groupId === '' || groupId === null ? null : undefined),
         birth_date: birth_date ? new Date(birth_date) : undefined,

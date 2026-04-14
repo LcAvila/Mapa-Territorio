@@ -46,6 +46,15 @@ interface SystemUser {
   cargo?: string;
   company_name?: string;
   groupId?: number;
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro_end?: string;
+  cidade?: string;
+  estado_end?: string;
+  area_atuacao?: string;
+  base_logistica?: string;
 }
 
 interface UserActivity {
@@ -84,6 +93,15 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
     cpf_cnpj: user.cpf_cnpj || '',
     password: '',
     confirmPassword: '',
+    cep: user.cep || '',
+    logradouro: user.logradouro || '',
+    numero: user.numero || '',
+    complemento: user.complemento || '',
+    bairro_end: user.bairro_end || '',
+    cidade: user.cidade || '',
+    estado_end: user.estado_end || '',
+    area_atuacao: user.area_atuacao || '',
+    base_logistica: user.base_logistica || ''
   });
 
   const [permissions, setPermissions] = useState<UserPermission[]>([]);
@@ -139,6 +157,26 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
     if (activeTab === 'history') fetchActivities();
   }, [fetchData, fetchActivities, activeTab]);
 
+  const fetchCepProfile = async (cep: string) => {
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length !== 8) return;
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        setFormData(prev => ({
+          ...prev,
+          logradouro: data.logradouro,
+          bairro_end: data.bairro,
+          cidade: data.localidade,
+          estado_end: data.uf
+        }));
+      }
+    } catch (e) {
+      console.error('Erro ao buscar CEP', e);
+    }
+  };
+
   const handleSaveProfile = async () => {
     if (formData.password && formData.password !== formData.confirmPassword) {
       toast.error('As senhas não coincidem');
@@ -170,7 +208,16 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
           telefone: formData.telefone,
           birth_date: formData.birthDate,
           cpf_cnpj: formData.cpf_cnpj,
-          password: formData.password || undefined
+          password: formData.password || undefined,
+          cep: formData.cep,
+          logradouro: formData.logradouro,
+          numero: formData.numero,
+          complemento: formData.complemento,
+          bairro_end: formData.bairro_end,
+          cidade: formData.cidade,
+          estado_end: formData.estado_end,
+          area_atuacao: formData.area_atuacao,
+          base_logistica: formData.base_logistica
         })
       });
 
@@ -354,6 +401,36 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
                   </div>
                 </div>
               )}
+
+              <div className="section-title mt-4">Endereço</div>
+              <div className="field">
+                <Label>CEP</Label>
+                <Input value={formData.cep} onChange={e => setFormData({...formData, cep: e.target.value.replace(/\D/g, '')})} onBlur={() => fetchCepProfile(formData.cep)} maxLength={8} />
+              </div>
+              <div className="field">
+                <Label>Logradouro / Rua</Label>
+                <Input value={formData.logradouro} onChange={e => setFormData({...formData, logradouro: e.target.value})} />
+              </div>
+              <div className="field">
+                <Label>Número</Label>
+                <Input value={formData.numero} onChange={e => setFormData({...formData, numero: e.target.value})} />
+              </div>
+              <div className="field">
+                <Label>Complemento</Label>
+                <Input value={formData.complemento} onChange={e => setFormData({...formData, complemento: e.target.value})} />
+              </div>
+              <div className="field">
+                <Label>Bairro</Label>
+                <Input value={formData.bairro_end} onChange={e => setFormData({...formData, bairro_end: e.target.value})} />
+              </div>
+              <div className="field">
+                <Label>Cidade</Label>
+                <Input value={formData.cidade} onChange={e => setFormData({...formData, cidade: e.target.value})} />
+              </div>
+              <div className="field">
+                <Label>UF</Label>
+                <Input value={formData.estado_end} onChange={e => setFormData({...formData, estado_end: e.target.value})} maxLength={2} className="uppercase" />
+              </div>
             </FormGrid>
           )}
 
@@ -423,6 +500,20 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
                       />
                     </div>
                     <p className="text-[10px] text-muted-foreground">O índice de cor (1-12) define a cor das regiões no mapa.</p>
+                  </div>
+                </>
+              )}
+
+              {formData.role === 'supervisor' && (
+                <>
+                  <div className="section-title mt-6">Dados do Supervisor</div>
+                  <div className="field">
+                    <Label>Base Logística</Label>
+                    <Input value={formData.base_logistica} onChange={e => setFormData({...formData, base_logistica: e.target.value})} placeholder="Ex: Fábrica Compactor" />
+                  </div>
+                  <div className="field">
+                    <Label>Área de Atuação</Label>
+                    <Input value={formData.area_atuacao} onChange={e => setFormData({...formData, area_atuacao: e.target.value})} placeholder="Ex: RJ Capital e Baixada" />
                   </div>
                 </>
               )}
@@ -654,25 +745,29 @@ const UserAvatarHome = styled.div`
   position: relative;
   border: 3px solid #fff;
   box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
-  img { width: 100%; height: 100%; object-cover: cover; }
+  img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
   
-  input { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 10; }
+  input { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 10; border-radius: 50%; }
 
   .edit-overlay {
     position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 24px;
-    height: 24px;
+    bottom: 0px;
+    right: 0px;
+    width: 26px;
+    height: 26px;
     background: #fff;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     color: #444;
+    z-index: 11;
+    border: 1px solid hsl(var(--border) / 0.5);
   }
 `;
 
