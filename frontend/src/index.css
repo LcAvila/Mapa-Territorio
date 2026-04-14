@@ -1340,3 +1340,220 @@ button#space-btn div.shooting-star-4 {
     opacity: 0;
   }
 }
+
+/* ═══════════════════════════════════════════════════
+   REACT QUILL RICH TEXT EDITOR — THEME (Light + Dark)
+═══════════════════════════════════════════════════ */
+
+.quill-editor-wrapper {
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  overflow: hidden;
+  background: hsl(var(--background));
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.quill-editor-wrapper:focus-within {
+  border-color: hsl(var(--primary) / 0.6);
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.12);
+}
+
+/* ── Toolbar ── */
+.quill-editor-wrapper .ql-toolbar.ql-snow {
+  border: none !important;
+  border-bottom: 1px solid hsl(var(--border)) !important;
+  background: hsl(var(--secondary) / 0.5);
+  padding: 8px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  align-items: center;
+}
+
+/* Toolbar buttons */
+.quill-editor-wrapper .ql-toolbar .ql-formats {
+  margin-right: 6px;
+}
+
+.quill-editor-wrapper .ql-toolbar button {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  color: hsl(var(--foreground));
+}
+
+.quill-editor-wrapper .ql-toolbar button:hover {
+  background: hsl(var(--primary) / 0.12) !important;
+  color: hsl(var(--primary)) !important;
+}
+
+.quill-editor-wrapper .ql-toolbar button.ql-active {
+  background: hsl(var(--primary) / 0.18) !important;
+  color: hsl(var(--primary)) !important;
+}
+
+/* SVG strokes/fills inside toolbar buttons */
+.quill-editor-wrapper .ql-toolbar .ql-stroke {
+  stroke: hsl(var(--foreground)) !important;
+}
+
+.quill-editor-wrapper .ql-toolbar .ql-fill {
+  fill: hsl(var(--foreground)) !important;
+}
+
+.quill-editor-wrapper .ql-toolbar button:hover .ql-stroke,
+.quill-editor-wrapper .ql-toolbar button.ql-active .ql-stroke {
+  stroke: hsl(var(--primary)) !important;
+}
+
+.quill-editor-wrapper .ql-toolbar button:hover .ql-fill,
+.quill-editor-wrapper .ql-toolbar button.ql-active .ql-fill {
+  fill: hsl(var(--primary)) !important;
+}
+
+/* Dropdowns (header, font, size) */
+.quill-editor-wrapper .ql-toolbar .ql-picker {
+  color: hsl(var(--foreground));
+  font-size: 0.78rem;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+}
+
+.quill-editor-wrapper .ql-toolbar .ql-picker-label {
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 6px;
+  padding: 2px 8px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  transition: border-color 0.15s;
+}
+
+.quill-editor-wrapper .ql-toolbar .ql-picker-label:hover {
+  border-color: hsl(var(--primary) / 0.5) !important;
+  color: hsl(var(--primary));
+}
+
+.quill-editor-wrapper .ql-toolbar .ql-picker-label .ql-stroke {
+  stroke: hsl(var(--muted-foreground)) !important;
+}
+
+.quill-editor-wrapper .ql-toolbar .ql-picker-options {
+  background: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 24px hsl(0 0% 0% / 0.15) !important;
+  padding: 4px !important;
+  margin-top: 4px !important;
+  z-index: 9999 !important;
+}
+
+.quill-editor-wrapper .ql-toolbar .ql-picker-item {
+  border-radius: 6px;
+  padding: 4px 10px;
+  color: hsl(var(--foreground));
+  font-size: 0.8rem;
+}
+
+.quill-editor-wrapper .ql-toolbar .ql-picker-item:hover,
+.quill-editor-wrapper .ql-toolbar .ql-picker-item.ql-selected {
+  background: hsl(var(--primary) / 0.1) !important;
+  color: hsl(var(--primary)) !important;
+}
+
+/* Color pickers */
+.quill-editor-wrapper .ql-toolbar .ql-color-picker .ql-picker-label,
+.quill-editor-wrapper .ql-toolbar .ql-background .ql-picker-label {
+  border: none !important;
+  background: transparent;
+  padding: 2px 4px;
+}
+
+/* ── Editor Content Area ── */
+.quill-editor-wrapper .ql-container.ql-snow {
+  border: none !important;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 0.9rem;
+  background: hsl(var(--background));
+}
+
+.quill-editor-wrapper .ql-editor {
+  min-height: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+  color: hsl(var(--foreground));
+  line-height: 1.65;
+  padding: 14px 16px;
+  caret-color: hsl(var(--primary));
+}
+
+.quill-editor-wrapper .ql-editor.ql-blank::before {
+  color: hsl(var(--muted-foreground));
+  font-style: normal;
+  opacity: 0.7;
+}
+
+/* Editor content scrollbar */
+.quill-editor-wrapper .ql-editor::-webkit-scrollbar {
+  width: 5px;
+}
+.quill-editor-wrapper .ql-editor::-webkit-scrollbar-track {
+  background: transparent;
+}
+.quill-editor-wrapper .ql-editor::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 999px;
+}
+
+/* ── Links ── */
+.quill-editor-wrapper .ql-editor a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ── Blockquote ── */
+.quill-editor-wrapper .ql-editor blockquote {
+  border-left: 3px solid hsl(var(--primary) / 0.5);
+  padding-left: 12px;
+  color: hsl(var(--muted-foreground));
+  margin: 8px 0;
+}
+
+/* ── Code Block ── */
+.quill-editor-wrapper .ql-editor pre.ql-syntax {
+  background: hsl(var(--secondary));
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  color: hsl(var(--foreground));
+  padding: 10px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+}
+
+/* ── Tooltip (link input) ── */
+.quill-editor-wrapper .ql-tooltip {
+  background: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 24px hsl(0 0% 0% / 0.15) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.quill-editor-wrapper .ql-tooltip input[type=text] {
+  background: hsl(var(--input)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 6px !important;
+  color: hsl(var(--foreground)) !important;
+  padding: 4px 8px;
+}
+
+.quill-editor-wrapper .ql-tooltip a.ql-action,
+.quill-editor-wrapper .ql-tooltip a.ql-remove {
+  color: hsl(var(--primary)) !important;
+}

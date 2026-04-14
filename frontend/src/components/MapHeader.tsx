@@ -95,203 +95,205 @@ export default function MapHeader({
   }, []);
 
   return (
-    <header className="bg-card border-b border-border px-4 py-3 flex items-center gap-4 flex-wrap">
-      {/* Logo / Title */}
-      <div className="flex items-center gap-2 mr-4 cursor-pointer" onClick={() => navigate('/mapa')}>
-        <MapPin className="w-5 h-5 text-primary" />
-        <h1 className="text-base font-bold text-foreground tracking-tight">
-          Territórios de Vendas
-        </h1>
+    <header className="bg-card/95 backdrop-blur-sm border-b border-border px-4 py-2.5 flex items-center gap-3 md:gap-6 sticky top-0 z-[1000] shadow-sm">
+      {/* Logo / Brand */}
+      <div className="flex items-center gap-3 shrink-0 cursor-pointer group" onClick={() => navigate('/mapa')}>
+        <div className="relative">
+          <img src="/Logo.png" alt="Logo" className="h-10 w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
+          <div className="absolute inset-0 bg-primary/10 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        </div>
       </div>
 
       {/* Navigation Links */}
       {isAuthenticated && (
-        <div className="hidden md:flex items-center gap-1 mr-4">
-           <Button variant="ghost" size="sm" onClick={() => navigate('/')} className={`gap-2 ${location.pathname === '/' ? 'bg-secondary' : ''}`}>
-             <Users className="w-4 h-4" /> Comunidade
-           </Button>
-           <Button variant="ghost" size="sm" onClick={() => navigate('/mapa')} className={`gap-2 ${location.pathname === '/mapa' ? 'bg-secondary' : ''}`}>
-             <MapPin className="w-4 h-4" /> Mapa
-           </Button>
+        <div className="hidden lg:flex items-center gap-1.5 px-3 border-l border-border h-8 ml-2">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/')} className={`h-8 gap-2 px-3 text-xs font-semibold ${location.pathname === '/' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}`}>
+            <Users className="w-3.5 h-3.5" /> Comunidade
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/mapa')} className={`h-8 gap-2 px-3 text-xs font-semibold ${location.pathname === '/mapa' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}`}>
+            <MapPin className="w-3.5 h-3.5" /> Mapa
+          </Button>
         </div>
       )}
 
-      {/* UF Selector */}
+      {/* UF Selector & Search */}
       {!minimal && (
         <>
-        <div className="relative">
-        <select
-          value={selectedUF || ""}
-          onChange={(e) => onSelectUF(e.target.value || null)}
-          className="appearance-none bg-secondary text-foreground text-sm pl-3 pr-8 py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
-        >
-          <option value="">Todos os Estados</option>
-          {UF_DATA.sort((a, b) => a.sigla.localeCompare(b.sigla)).map((uf) => (
-            <option key={uf.sigla} value={uf.sigla}>
-              {uf.sigla} - {uf.nome}
-            </option>
-          ))}
-        </select>
-        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-      </div>
-
-      {/* General Search Bar */}
-        <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto order-last sm:order-none w-full sm:w-auto mt-2 sm:mt-0 relative">
-        <div className="relative w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Buscar município ou endereço..."
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && onSearchEnter) {
-                onSearchEnter(searchQuery);
-              }
-            }}
-            className="w-full bg-secondary text-foreground text-sm pl-9 pr-3 py-2.5 rounded-md border border-border placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
-        </div>
-
-        {/* Suggestions Dropdown */}
-        {suggestions && suggestions.length > 0 && (
-          <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-xl z-[2000] overflow-hidden max-h-[300px] overflow-y-auto">
-            {suggestions.map((item, idx) => (
-              <button
-                key={idx}
-                onClick={() => onSelectSuggestion?.(item)}
-                className="w-full text-left px-4 py-2.5 hover:bg-muted flex items-center gap-3 transition-colors border-b border-border/50 last:border-0"
-              >
-                <div className="p-1.5 bg-secondary rounded-md">
-                   {item.type === 'city' || item.type === 'administrative' ? <MapPin className="w-3.5 h-3.5 text-blue-500" /> : <Search className="w-3.5 h-3.5 text-muted-foreground" />}
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-medium truncate">{item.display_name.split(',')[0]}</span>
-                  <span className="text-[10px] text-muted-foreground truncate">{item.display_name.split(',').slice(1).join(',').trim()}</span>
-                </div>
-              </button>
-            ))}
+          <div className="relative">
+            <select
+              value={selectedUF || ""}
+              onChange={(e) => onSelectUF?.(e.target.value || null)}
+              className="appearance-none bg-secondary text-foreground text-sm pl-3 pr-8 py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
+            >
+              <option value="">Todos os Estados</option>
+              {UF_DATA.sort((a, b) => a.sigla.localeCompare(b.sigla)).map((uf) => (
+                <option key={uf.sigla} value={uf.sigla}>
+                  {uf.sigla} - {uf.nome}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
           </div>
-        )}
-      </div>
 
-      {/* Map Layers & Advanced Filters */}
-        <div className="flex items-center gap-2 bg-secondary/50 rounded-lg p-1 border border-border/50">
-        <Button
-          variant={showClientes ? "default" : "ghost"}
-          size="sm"
-          onClick={onToggleClientes}
-          className={`h-8 gap-2 px-3 ${showClientes ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background'}`}
-        >
-          <Users className="w-4 h-4" />
-          <span className="hidden md:inline text-xs font-semibold">Clientes</span>
-        </Button>
-        <Button
-          variant={showHeatmap ? "default" : "ghost"}
-          size="sm"
-          onClick={onToggleHeatmap}
-          className={`h-8 gap-2 px-3 ${showHeatmap ? 'bg-orange-500 text-white shadow-sm hover:bg-orange-600' : 'text-muted-foreground hover:bg-background'}`}
-        >
-          <Flame className="w-4 h-4" />
-          <span className="hidden md:inline text-xs font-semibold">Calor</span>
-        </Button>
-        {role === 'admin' && (
-          <Button
-            variant={showReps ? "default" : "ghost"}
-            size="sm"
-            onClick={onToggleReps}
-            className={`h-8 gap-2 px-3 ${showReps ? 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700' : 'text-muted-foreground hover:bg-background'}`}
-          >
-            <UserCheck className="w-4 h-4" />
-            <span className="hidden md:inline text-xs font-semibold">Representantes</span>
-          </Button>
-        )}
-
-        <div className="w-[1px] h-4 bg-border/50 mx-1" />
-
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="sm" className={`h-8 gap-2 px-2 hover:bg-background ${filtroRepresentante ? 'text-primary' : 'text-muted-foreground'}`}>
-              <Filter className="w-4 h-4" />
-              {filtroRepresentante && <Badge variant="secondary" className="h-4 px-1 text-[10px] bg-primary/20 text-primary border-0">{filtroRepresentante}</Badge>}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80 p-4 bg-card border-border shadow-2xl z-[3000]" align="end">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold flex items-center gap-2">
-                  <Filter className="w-4 h-4 text-primary" />
-                  Filtros Avançados
-                </h3>
-                {filtroRepresentante && (
-                  <Button variant="ghost" size="sm" onClick={() => onFilterRep(null)} className="h-6 text-[10px] text-destructive p-0">Limpar</Button>
-                )}
-              </div>
-
-              {/* Rep Filter - Admins Only */}
-              {role === 'admin' && (
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Representante</label>
-                  <div className="relative">
-                    <select 
-                      value={filtroRepresentante || ""}
-                      onChange={(e) => onFilterRep(e.target.value || null)}
-                      className="w-full bg-secondary text-foreground text-xs pl-3 pr-8 py-2 rounded-md border border-border appearance-none cursor-pointer"
-                    >
-                      <option value="">Todos os Representantes</option>
-                      {reps.filter(r => !r.isVago).sort((a,b) => a.name.localeCompare(b.name)).map(r => (
-                        <option key={r.code} value={r.code}>{r.code} — {r.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
-                  </div>
-                </div>
-              )}
-
-              {/* Municipality Filter */}
-              {selectedUF && (
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Município</label>
-                  <div className="relative">
-                    <select 
-                      className="w-full bg-secondary text-foreground text-xs pl-3 pr-8 py-2 rounded-md border border-border appearance-none cursor-pointer"
-                      onChange={(e) => {
-                        if (e.target.value) onSelectSuggestion?.({ place_id: 0, display_name: `${e.target.value}, ${selectedUF}, Brasil`, lat: "0", lon: "0", type: "city" });
-                      }}
-                    >
-                      <option value="">Todos os Municípios</option>
-                      {Array.from(new Set(clients.filter(c => c.uf === selectedUF).map(c => c.bairro || ""))).sort().filter(Boolean).map(mun => (
-                        <option key={mun} value={mun}>{mun}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
-                  </div>
-                </div>
-              )}
-
-              {/* Client Search */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Buscar Cliente</label>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                  <input 
-                    type="text"
-                    placeholder="Nome ou código..."
-                    value={clientSearchQuery}
-                    className="w-full bg-secondary text-foreground text-xs pl-8 pr-3 py-2 rounded-md border border-border"
-                    onChange={(e) => setClientSearchQuery(e.target.value)}
-                  />
-                  {clientSearchQuery && <button onClick={() => setClientSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"><X className="w-3 h-3" /></button>}
-                </div>
-                <ClientSearchList query={clientSearchQuery} onSelect={(c) => { onSelectClient?.(c); setClientSearchQuery(""); }} clients={clients} />
-              </div>
-
-              <p className="text-[10px] text-muted-foreground italic border-t border-border/50 pt-2">Filtros restringem a visualização de territórios e clientes no mapa.</p>
+          {/* General Search Bar */}
+          <div className="flex-1 max-w-xl mx-auto hidden md:flex items-center relative">
+            <div className="relative w-full group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Buscar município ou endereço..."
+                value={searchQuery}
+                onChange={(e) => onSearchChange?.(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && onSearchEnter) {
+                    onSearchEnter(searchQuery || "");
+                  }
+                }}
+                className="w-full bg-secondary/80 text-foreground text-sm pl-9 pr-3 h-10 rounded-lg border border-border/50 placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all group-hover:bg-secondary group-hover:border-border"
+              />
             </div>
-          </PopoverContent>
-        </Popover>
-      </div>
-      </>
+
+            {/* Suggestions Dropdown */}
+            {suggestions && suggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-xl z-[2000] overflow-hidden max-h-[300px] overflow-y-auto">
+                {suggestions.map((item, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => onSelectSuggestion?.(item)}
+                    className="w-full text-left px-4 py-2.5 hover:bg-muted flex items-center gap-3 transition-colors border-b border-border/50 last:border-0"
+                  >
+                    <div className="p-1.5 bg-secondary rounded-md">
+                      {item.type === 'city' || item.type === 'administrative' ? <MapPin className="w-3.5 h-3.5 text-blue-500" /> : <Search className="w-3.5 h-3.5 text-muted-foreground" />}
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-medium truncate">{item.display_name.split(',')[0]}</span>
+                      <span className="text-[10px] text-muted-foreground truncate">{item.display_name.split(',').slice(1).join(',').trim()}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Map Layers & Advanced Filters */}
+          <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+            <div className="flex items-center gap-1 bg-secondary/40 rounded-lg p-1 border border-border/40">
+              <Button
+                variant={showClientes ? "default" : "ghost"}
+                size="sm"
+                onClick={onToggleClientes}
+                className={`h-8 gap-2 px-3 ${showClientes ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background'}`}
+              >
+                <Users className="w-4 h-4" />
+                <span className="hidden md:inline text-xs font-semibold">Clientes</span>
+              </Button>
+              <Button
+                variant={showHeatmap ? "default" : "ghost"}
+                size="sm"
+                onClick={onToggleHeatmap}
+                className={`h-8 gap-2 px-3 ${showHeatmap ? 'bg-orange-500 text-white shadow-sm hover:bg-orange-600' : 'text-muted-foreground hover:bg-background'}`}
+              >
+                <Flame className="w-4 h-4" />
+                <span className="hidden md:inline text-xs font-semibold">Calor</span>
+              </Button>
+              {role === 'admin' && (
+                <Button
+                  variant={showReps ? "default" : "ghost"}
+                  size="sm"
+                  onClick={onToggleReps}
+                  className={`h-8 gap-2 px-3 ${showReps ? 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700' : 'text-muted-foreground hover:bg-background'}`}
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span className="hidden xl:inline text-[11px] font-bold">Representantes</span>
+                </Button>
+              )}
+
+              <div className="w-[1px] h-4 bg-border/40 mx-0.5" />
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className={`h-8 gap-2 px-2 hover:bg-background ${filtroRepresentante ? 'text-primary' : 'text-muted-foreground'}`}>
+                    <Filter className="w-4 h-4" />
+                    {filtroRepresentante && <Badge variant="secondary" className="h-4 px-1 text-[10px] bg-primary/20 text-primary border-0">{filtroRepresentante}</Badge>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-4 bg-card border-border shadow-2xl z-[3000]" align="end">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold flex items-center gap-2">
+                        <Filter className="w-4 h-4 text-primary" />
+                        Filtros Avançados
+                      </h3>
+                      {filtroRepresentante && (
+                        <Button variant="ghost" size="sm" onClick={() => onFilterRep?.(null)} className="h-6 text-[10px] text-destructive p-0">Limpar</Button>
+                      )}
+                    </div>
+
+                    {/* Rep Filter - Admins Only */}
+                    {role === 'admin' && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Representante</label>
+                        <div className="relative">
+                          <select 
+                            value={filtroRepresentante || ""}
+                            onChange={(e) => onFilterRep?.(e.target.value || null)}
+                            className="w-full bg-secondary text-foreground text-xs pl-3 pr-8 py-2 rounded-md border border-border appearance-none cursor-pointer"
+                          >
+                            <option value="">Todos os Representantes</option>
+                            {reps.filter(r => !r.isVago).sort((a,b) => a.name.localeCompare(b.name)).map(r => (
+                              <option key={r.code} value={r.code}>{r.code} — {r.name}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Municipality Filter */}
+                    {selectedUF && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Município</label>
+                        <div className="relative">
+                          <select 
+                            className="w-full bg-secondary text-foreground text-xs pl-3 pr-8 py-2 rounded-md border border-border appearance-none cursor-pointer"
+                            onChange={(e) => {
+                              if (e.target.value) onSelectSuggestion?.({ place_id: 0, display_name: `${e.target.value}, ${selectedUF}, Brasil`, lat: "0", lon: "0", type: "city" });
+                            }}
+                          >
+                            <option value="">Todos os Municípios</option>
+                            {Array.from(new Set(clients.filter(c => c.uf === selectedUF).map(c => c.bairro || ""))).sort().filter(Boolean).map(mun => (
+                              <option key={mun} value={mun}>{mun}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Client Search */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Buscar Cliente</label>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                        <input 
+                          type="text"
+                          placeholder="Nome ou código..."
+                          value={clientSearchQuery}
+                          className="w-full bg-secondary text-foreground text-xs pl-8 pr-3 py-2 rounded-md border border-border"
+                          onChange={(e) => setClientSearchQuery(e.target.value)}
+                        />
+                        {clientSearchQuery && <button onClick={() => setClientSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"><X className="w-3 h-3" /></button>}
+                      </div>
+                      <ClientSearchList query={clientSearchQuery} onSelect={(c) => { onSelectClient?.(c); setClientSearchQuery(""); }} clients={clients} />
+                    </div>
+
+                    <p className="text-[10px] text-muted-foreground italic border-t border-border/50 pt-2">Filtros restringem a visualização de territórios e clientes no mapa.</p>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Auth / Admin */}
@@ -304,21 +306,21 @@ export default function MapHeader({
         ) : (
           <div className="flex items-center gap-3">
             {userName && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/80 rounded-full border border-border/50">
+              <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-secondary/60 rounded-full border border-border/40">
                 <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
                   <User className="w-3 h-3 text-primary" />
                 </div>
-                <span className="text-xs font-bold text-foreground truncate max-w-[120px]">
+                <span className="text-[10px] font-bold text-foreground">
                   {userName.split(' ')[0]}
                 </span>
               </div>
             )}
             
-            <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="gap-2 h-8 px-2">
-              <Settings className="w-4 h-4" /> <span className="hidden sm:inline">{role === 'admin' ? 'Admin' : 'Painel'}</span>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="gap-2 h-8 px-2 hover:bg-primary/5 hover:text-primary">
+              <Settings className="w-3.5 h-3.5" /> <span className="hidden sm:inline text-[11px] font-bold">{role === 'admin' ? 'Admin' : 'Painel'}</span>
             </Button>
             <Button variant="ghost" size="sm" onClick={logout} className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10">
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5" />
             </Button>
           </div>
         )}

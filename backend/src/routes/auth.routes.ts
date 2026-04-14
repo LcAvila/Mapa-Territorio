@@ -30,19 +30,43 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
     const userId = req.user!.id;
     const isLoginRequest = req.query.login === 'true';
 
-    if (isLoginRequest) {
+    if (isLoginRequest && !req.isHttpFallback) {
       // Automatic Single Session Enforcement: 
-      // Incrementing token_version on every fresh login 
-      // will immediately 401 all other active sessions (kicking them).
-      await prisma.user.update({
-        where: { id: userId },
-        data: { token_version: { increment: 1 } }
-      });
-      console.log(`[AUTH] User ${userId} logged in. Incrementing token_version to enforce single session.`);
+      // Incrementing token_version on every fresh login (only if Prisma is UP)
+      try {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { token_version: { increment: 1 } }
+        });
+        console.log(`[AUTH] User ${userId} logged in. Incrementing token_version to enforce single session.`);
+      } catch (e) {
+        console.warn(`[AUTH] Could not increment token_version (Prisma Down). Skipping session enforcement.`);
+      }
     }
 
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: PUBLIC_USER_FIELDS });
-    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+    let user = null;
+    if (!req.isHttpFallback) {
+        try {
+            user = await prisma.user.findUnique({ where: { id: userId }, select: PUBLIC_USER_FIELDS });
+        } catch (e) {
+            console.warn(`[AUTH] Prisma failed to fetch PUBLIC_USER_FIELDS. Falling back to HTTP.`);
+        }
+    }
+
+    if (!user) {
+        // HTTP Fallback
+        const { data: httpUser, error } = await supabaseAdmin
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .single();
+        
+        if (error || !httpUser) return res.status(404).json({ message: 'Usuário não encontrado via HTTP' });
+        
+        // Map fields to match PUBLIC_USER_FIELDS
+        user = httpUser;
+    }
+
     res.json(user);
   } catch (error) {
     console.error('Error in /me:', error);

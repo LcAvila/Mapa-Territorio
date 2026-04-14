@@ -335,3 +335,12 @@ model FeedReaction {
   @@unique([postId, userId, emoji])
   @@map("feed_reactions")
 }
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  title     String
+  message   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@map(name: "notifications")
+}

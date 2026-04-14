@@ -24,6 +24,7 @@ import locationRoutes from './routes/location.routes';
 import feedRoutes from './routes/feed.routes';
 import birthdaysRoutes from './routes/birthdays.routes';
 import routingRoutes from './routes/routing.routes';
+import notificationsRoutes from './routes/notifications.routes';
 import { prisma } from './prisma';
 
 const app = express();
@@ -82,27 +83,11 @@ app.use('/api/clientes', clientesRoutes);
 app.use('/api/feed', feedRoutes);
 app.use('/api/birthdays', birthdaysRoutes);
 app.use('/api/routing', routingRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 async function bootstrap() {
-    // Garantir que existe o usuário 'admin' do Prisma igual tinha no SQLite.
-    const adminExists = await prisma.user.findUnique({ where: { username: 'admin' } });
-    if (!adminExists) {
-        const bcrypt = require('bcryptjs');
-        const adminPassword = await bcrypt.hash('admin123', 10);
-        await prisma.user.create({
-            data: {
-                username: 'admin',
-                password: adminPassword,
-                role: 'admin',
-                tipo: 'admin',
-                full_name: 'Administrador'
-            }
-        });
-        console.log(pc.green("✅ Admin master originado com sucesso."));
-    }
-
+    // Inicia o servidor PRIMEIRO, independente do banco
     app.listen(PORT, () => {
-        // console.clear(); // REMOVIDO PARA VERMOS OS LOGS
         console.log(pc.cyan("──────────────────────────────────────────────────"));
         console.log(pc.bold(pc.magenta("🚀 MAPA TERRITÓRIO - BACKEND")));
         console.log(pc.cyan("──────────────────────────────────────────────────"));
@@ -110,14 +95,36 @@ async function bootstrap() {
         console.log(`${pc.blue("🔗 URL Local:")} ${pc.underline(pc.white(`http://localhost:${PORT}`))}`);
         console.log(`${pc.blue("📂 Ambiente:")} ${pc.yellow(process.env.NODE_ENV || 'development')}`);
         console.log(`${pc.blue("🗄️ Database:")} ${pc.green("Prisma ORM")}`);
-        
-        // Logs de Supabase aqui dentro para garantir que apareçam
         console.log(`${pc.blue("☁️ Supabase URL:")} ${process.env.SUPABASE_URL ? pc.green("Conectado") : pc.red("FALTANDO")}`);
         console.log(`${pc.blue("☁️ Supabase Key:")} ${process.env.SUPABASE_ANON_KEY ? pc.green("Presente") : pc.red("FALTANDO")}`);
-        
         console.log(pc.cyan("──────────────────────────────────────────────────"));
         console.log(pc.gray("Aguardando requisições...\n"));
     });
+
+    // Seed do admin em background — não bloqueia o servidor
+    try {
+        const adminExists = await prisma.user.findUnique({ where: { username: 'admin' } });
+        if (!adminExists) {
+            const bcrypt = require('bcryptjs');
+            const adminPassword = await bcrypt.hash('admin123', 10);
+            await prisma.user.create({
+                data: {
+                    username: 'admin',
+                    password: adminPassword,
+                    role: 'admin',
+                    tipo: 'admin',
+                    full_name: 'Administrador'
+                }
+            });
+            console.log(pc.green("✅ Admin master criado com sucesso."));
+        } else {
+            console.log(pc.green("✅ Banco de dados conectado com sucesso."));
+        }
+    } catch (e) {
+        console.warn(pc.yellow("⚠️  Não foi possível conectar ao banco de dados na inicialização."));
+        console.warn(pc.yellow("   O servidor está online, mas as rotas que dependem do banco podem falhar."));
+        console.warn(pc.gray("   Verifique a conexão com o Supabase e reinicie o servidor."));
+    }
 }
 
 bootstrap()

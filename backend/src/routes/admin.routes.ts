@@ -66,8 +66,22 @@ router.post('/users/:id/kick', requireAdminMiddleware, async (req: any, res) => 
 });
 
 router.get('/users', requirePermission('users', 'view'), async (req, res) => {
-  const users = await prisma.user.findMany({ select: PUBLIC_USER_FIELDS, orderBy: { id: 'asc' } });
-  res.json(users);
+  try {
+    const users = await prisma.user.findMany({ select: PUBLIC_USER_FIELDS, orderBy: { id: 'asc' } });
+    res.json(users);
+  } catch (error) {
+    console.warn('[ADMIN] Prisma failed to fetch users list. Attempting HTTP Fallback...');
+    const { data, error: httpError } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .order('id', { ascending: true });
+    
+    if (httpError) {
+      console.error('[ADMIN] HTTP Fallback failed for users:', httpError.message);
+      return res.status(500).json({ message: 'Erro ao listar usuários (Modo Offline)' });
+    }
+    res.json(data);
+  }
 });
 
 router.post('/users', requirePermission('users', 'edit'), async (req: any, res) => {
@@ -269,34 +283,65 @@ router.get('/reps', requirePermission('reps', 'view'), async (req, res) => {
     where = { repCode: user.repCode };
   }
 
-  const reps = await prisma.user.findMany({ 
-    where,
-    select: {
-      repCode: true,
-      full_name: true,
-      username: true,
-      colorIndex: true,
-      isVago: true,
-      comissao: true,
-      _count: {
-        select: { clientes: true, territories: true }
-      }
-    },
-    orderBy: { repCode: 'asc' } 
-  });
+  try {
+    const reps = await prisma.user.findMany({ 
+      where,
+      select: {
+        repCode: true,
+        full_name: true,
+        username: true,
+        colorIndex: true,
+        isVago: true,
+        comissao: true,
+        _count: {
+          select: { clientes: true, territories: true }
+        }
+      },
+      orderBy: { repCode: 'asc' } 
+    });
 
-  // Map to the Representative format the frontend expects
-  const formattedReps = reps.map(r => ({
-    code: r.repCode || '',
-    name: r.full_name || r.username,
-    fullName: r.full_name,
-    colorIndex: r.colorIndex,
-    isVago: r.isVago,
-    comissao: r.comissao,
-    _count: r._count
-  })).filter(r => r.code !== ''); // Ensure only those with repCode are treated as reps
+    // Map to the Representative format the frontend expects
+    const formattedReps = reps.map(r => ({
+      code: r.repCode || '',
+      name: r.full_name || r.username,
+      fullName: r.full_name,
+      colorIndex: r.colorIndex,
+      isVago: r.isVago,
+      comissao: r.comissao,
+      _count: r._count
+    })).filter(r => r.code !== ''); // Ensure only those with repCode are treated as reps
 
-  res.json(formattedReps);
+    res.json(formattedReps);
+  } catch (error) {
+    console.warn('[ADMIN] Prisma failed to fetch reps list. Attempting HTTP Fallback...');
+    // Simple HTTP Fallback for reps
+    let query = supabaseAdmin
+      .from('users')
+      .select('*')
+      .not('repCode', 'is', null) // repCode != null
+      .or('role.eq.representante,tipo.eq.representante')
+      .order('repCode', { ascending: true });
+    
+    if (user && user.role === 'representante' && user.repCode) {
+      query = query.eq('repCode', user.repCode);
+    }
+
+    const { data: repsData, error: httpError } = await query;
+    
+    if (httpError) return res.status(500).json({ message: 'Erro ao listar representantes (Modo Offline)' });
+
+    const formatted = (repsData || []).map(r => ({
+      code: r.repCode || '',
+      name: r.full_name || r.username,
+      fullName: r.full_name,
+      colorIndex: r.colorIndex,
+      isVago: r.isVago === 1,
+      comissao: r.comissao,
+      _count: { clientes: 0, territories: 0 } // Counts limited in fallback mode
+    })).filter(r => r.code !== '');
+
+    res.json(formatted);
+  }
 });
 
 router.post('/reps', requireAdminMiddleware, async (req: any, res) => {
@@ -378,8 +423,25 @@ router.get('/territories', requirePermission('territories', 'view'), async (req,
     where.repCode = user.repCode;
   }
 
-  const ter = await prisma.territory.findMany({ where, orderBy: [{ uf: 'asc' }, { municipio: 'asc' }] });
-  res.json(ter);
+  try {
+    const ter = await prisma.territory.findMany({ where, orderBy: [{ uf: 'asc' }, { municipio: 'asc' }] });
+    res.json(ter);
+  } catch (error) {
+    console.warn('[ADMIN] Prisma failed to fetch territories. Falling back to HTTP.');
+    let query = supabaseAdmin
+        .from('territories')
+        .select('*')
+        .order('uf', { ascending: true })
+        .order('municipio', { ascending: true });
+    
+    if (user && user.role === 'representante' && user.repCode) {
+        query = query.eq('repCode', user.repCode);
+    }
+
+    const { data, error: httpError } = await query;
+    if (httpError) return res.status(500).json({ message: 'Erro ao listar territórios' });
+    res.json(data || []);
+  }
 });
 
 router.post('/territories/import', requireAdminMiddleware, async (req, res) => {
@@ -411,8 +473,19 @@ router.get('/modules', async (req, res) => {
 });
 
 router.get('/groups', async (req, res) => {
-  const groups = await prisma.group.findMany({ orderBy: { name: 'asc' } });
-  res.json(groups);
+  try {
+    const groups = await prisma.group.findMany({ orderBy: { name: 'asc' } });
+    res.json(groups);
+  } catch (error) {
+    console.warn('[ADMIN] Prisma failed to fetch groups. Falling back to HTTP.');
+    const { data, error: httpError } = await supabaseAdmin
+        .from('groups')
+        .select('*')
+        .order('name', { ascending: true });
+    
+    if (httpError) return res.status(500).json({ message: 'Erro ao listar grupos' });
+    res.json(data || []);
+  }
 });
 
 router.get('/users/:id/permissions', async (req, res) => {

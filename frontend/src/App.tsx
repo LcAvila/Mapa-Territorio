@@ -10,6 +10,7 @@ import Admin from "./pages/Admin";
 import Profile from "./pages/Profile";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NotFound from "./pages/NotFound";
+import NotificationSystem from "./components/NotificationSystem";
 
 import { ThemeProvider } from "./contexts/ThemeContext";
 
@@ -19,6 +20,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="dark" storageKey="mapa-theme">
       <AuthProvider>
+        <NotificationSystem />
         <TooltipProvider>
           <Toaster />
           <Sonner />

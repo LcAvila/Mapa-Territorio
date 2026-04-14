@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
+import DOMPurify from 'dompurify';
 
 export interface ClienteData {
   id_cliente?: number;
@@ -71,7 +74,7 @@ interface SystemUser { id: number; username: string; role: string; repCode: stri
 interface InterestRequest { id: number; nome: string; email: string | null; telefone: string | null; empresa: string | null; municipio: string; uf: string; modo: string | null; observacoes: string | null; status: 'pending' | 'accepted' | 'rejected'; created_at: string; userId?: number; repCode?: string; }
 
 interface Group { id: string; name: string; repCodes: string[]; createdAt: string; }
-interface Notification { id: string; title: string; message: string; targetAll: boolean; targetReps: string[]; sentAt: string; readBy: string[]; }
+interface SystemNotification { id: number; title: string; message: string; createdAt: string; }
 interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; repCode?: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; }
 interface ModulePermission { userId: number; moduleId: string; canView: boolean; canEdit: boolean; }
 
@@ -289,12 +292,9 @@ export default function Admin() {
 
   // ── LocalStorage state ────────────────────────────────────────────────────
   const [groups, setGroups] = useState<Group[]>(() => LS.get('admin_groups', []));
-  const [notifications, setNotifications] = useState<Notification[]>(() => LS.get('admin_notifications', []));
+  const [notifications, setNotifications] = useState<SystemNotification[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => LS.get('admin_audit', []));
-
-  const saveGroups = (g: Group[]) => { setGroups(g); LS.set('admin_groups', g); };
-  const saveNotifications = (n: Notification[]) => { setNotifications(n); LS.set('admin_notifications', n); };
-  const saveAuditLogs = (a: AuditLog[]) => { setAuditLogs(a); LS.set('admin_audit', a); };
 
   // ── Auth & Permissions ──────────────────────────────────────────────────
   const authHeaders = useMemo(() => ({
@@ -302,6 +302,21 @@ export default function Admin() {
     'Authorization': `Bearer ${token}`,
     'x-user-token-version': String(tokenVersion || 0)
   }), [token, tokenVersion]);
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setLoadingNotifications(true);
+      const res = await fetch(`${API}/api/notifications`, { headers: authHeaders });
+      if (res.ok) setNotifications(await res.json());
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  }, [authHeaders]);
+
+  const saveGroups = (g: Group[]) => { setGroups(g); LS.set('admin_groups', g); };
+  const saveAuditLogs = (a: AuditLog[]) => { setAuditLogs(a); LS.set('admin_audit', a); };
 
   const [myPermissions, setMyPermissions] = useState<ModulePermission[]>([]);
   const fetchMyPermissions = useCallback(async () => {
@@ -392,6 +407,7 @@ export default function Admin() {
     });
   }, [users, userSearch, userFilterOnline, userId]);
 
+
   const handleUserPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -437,6 +453,30 @@ export default function Admin() {
   const [auditFilterAction, setAuditFilterAction] = useState('');
   const [auditFilterUF, setAuditFilterUF] = useState('');
 
+  const filteredAudit = useMemo(() => {
+    return auditLogs.filter(log => {
+      if (auditFilterRep && (log.repCode || log.details).includes(auditFilterRep)) return false;
+      if (auditFilterUF && (log.uf || log.details).includes(auditFilterUF)) return false;
+      if (auditFilterAction && log.action !== auditFilterAction) return false;
+      return true;
+    });
+  }, [auditLogs, auditFilterRep, auditFilterUF, auditFilterAction]);
+
+  const auditActionLabel: Record<string, string> = {
+    'create_rep': 'Novo Representante',
+    'update_rep': 'Editou Representante',
+    'delete_rep': 'Removeu Representante',
+    'create_user': 'Novo Usuário',
+    'update_user': 'Editou Usuário',
+    'delete_user': 'Removeu Usuário',
+    'create_group': 'Novo Grupo',
+    'delete_group': 'Removeu Grupo',
+    'update_group': 'Editou Grupo',
+    'accepted': 'Interesse Aceito',
+    'rejected': 'Interesse Recusado',
+    'clear_notifications': 'Limpar Notificações',
+    'send_notification': 'Enviou Alerta'
+  };
 
   // ── Fetch all API data ─────────────────────────────────────────────────────
   const fetchGroups = useCallback(async () => {
@@ -509,7 +549,8 @@ export default function Admin() {
   useEffect(() => {
     fetchAll();
     fetchMyPermissions();
-  }, [fetchAll, fetchMyPermissions]); // Now includes dependencies
+    fetchNotifications();
+  }, [fetchAll, fetchMyPermissions, fetchNotifications]);
 
 
   useEffect(() => {
@@ -799,33 +840,75 @@ export default function Admin() {
   };
 
   // ── Notifications ─────────────────────────────────────────────────────────
-  const handleSendNotification = (e: React.FormEvent) => {
+  const handleSendNotification = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!notifTitle.trim() || !notifMessage.trim()) { toast.error('Título e mensagem obrigatórios'); return; }
-    if (!notifTargetAll && !notifTargetReps.length) { toast.error('Selecione ao menos um representante'); return; }
-    const n: Notification = { id: Date.now().toString(), title: notifTitle.trim(), message: notifMessage.trim(), targetAll: notifTargetAll, targetReps: notifTargetAll ? [] : notifTargetReps, sentAt: new Date().toISOString(), readBy: [] };
-    saveNotifications([n, ...notifications]);
-    addAudit('send_notification', 'Notificação', n.id, `Enviou "${n.title}" para ${notifTargetAll ? 'todos' : n.targetReps.join(',')}`);
-    setNotifTitle(''); setNotifMessage(''); setNotifTargetReps([]); setNotifTargetAll(true);
-    toast.success('Notificação enviada!');
+    if (!notifTitle.trim() || !notifMessage.trim()) { toast.error('Título e mensagem são obrigatórios'); return; }
+
+    try {
+      const res = await fetch(`${API}/api/notifications`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          title: notifTitle,
+          message: notifMessage
+        })
+      });
+
+      if (res.ok) {
+        toast.success('Alerta enviado com sucesso para todos os usuários!');
+        setNotifTitle('');
+        setNotifMessage('');
+        fetchNotifications();
+      } else {
+        const err = await res.json();
+        toast.error(err.message || 'Erro ao enviar alerta');
+      }
+    } catch (error) {
+      toast.error('Erro de conexão ao enviar alerta');
+    }
   };
 
-  // ── Audit filter ──────────────────────────────────────────────────────────
-  const filteredAudit = auditLogs.filter(a => {
-    if (auditFilterRep && a.repCode !== auditFilterRep) return false;
-    if (auditFilterUF && a.uf !== auditFilterUF) return false;
-    if (auditFilterAction && a.action !== auditFilterAction) return false;
-    return true;
-  });
-
-  const auditActionLabel: Record<string, string> = {
-    create_user: 'Criou usuário', delete_user: 'Removeu usuário', update_user: 'Editou usuário',
-    create_rep: 'Criou rep.', delete_rep: 'Removeu rep.', update_rep: 'Editou rep.',
-    assign_territory: 'Atribuiu território', delete_territory: 'Removeu território',
-    create_group: 'Criou grupo', delete_group: 'Removeu grupo', update_group: 'Editou grupo',
-    send_notification: 'Enviou notificação', accept_interest: 'Aceitou interesse', reject_interest: 'Recusou interesse',
+  const handleClearNotifications = async () => {
+    openConfirm('Limpar Histórico', 'Deseja realmente apagar todo o histórico de alertas?', async () => {
+      closeConfirm();
+      try {
+        const res = await fetch(`${API}/api/notifications/clear`, {
+          method: 'DELETE',
+          headers: authHeaders
+        });
+        if (res.ok) {
+          toast.success('Histórico removido');
+          setNotifications([]);
+        } else {
+          toast.error('Erro ao limpar histórico');
+        }
+      } catch (error) {
+        toast.error('Erro de conexão');
+      }
+    });
   };
 
+  const quillModules = {
+    toolbar: [
+      [{ 'header': [1, 2, 3, false] }],
+      [{ 'font': [] }],
+      [{ 'size': ['small', false, 'large', 'huge'] }],
+      ['bold', 'italic', 'underline', 'strike'],
+      [{ 'color': [] }, { 'background': [] }],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+      [{ 'align': [] }],
+      ['link', 'image'],
+      ['clean']
+    ],
+  };
+
+  const quillFormats = [
+    'header', 'font', 'size',
+    'bold', 'italic', 'underline', 'strike',
+    'color', 'background',
+    'list', 'bullet', 'align',
+    'link', 'image'
+  ];
 
   const pendingInterests = interests.filter(i => i.status === 'pending').length;
 
@@ -1471,7 +1554,8 @@ export default function Admin() {
                       fullName: '', email: '', password: '', confirmPassword: '',
                       role: 'user', repCode: '', code: '', documentType: 'cpf',
                       document: '', companyName: '', birthDate: '', telefone: '', photo: '',
-                      cargo: '', groupId: '', tipo: 'normal', colorIndex: 0
+                      cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
+                      cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: ''
                     });
                     setIsUserModalOpen(true);
                   }}>
@@ -2112,13 +2196,13 @@ export default function Admin() {
           {/* ━━ GRUPOS ━━ */}
           {activeTab === 'groups' && (
             <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
-              <div className="xl:col-span-2">
+              <div className="xl:col-span-1">
                 <Card className="border-border/40">
                   <CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-sm"><div className="w-7 h-7 bg-primary/15 rounded-md flex items-center justify-center"><UsersRound className="w-3.5 h-3.5 text-primary" /></div>Novo Grupo</CardTitle><CardDescription className="text-xs">Agrupe representantes por região ou critério</CardDescription></CardHeader>
                   <CardContent><form onSubmit={handleCreateGroup} className="space-y-3"><div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Nome do Grupo *</label><Input placeholder="Ex: Rio de Janeiro" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} required /></div><Button className="w-full gap-2" type="submit"><Plus className="w-4 h-4" />Criar Grupo</Button></form></CardContent>
                 </Card>
               </div>
-              <div className="xl:col-span-3">
+              <div className="xl:col-span-4">
                 <Card className="border-border/40">
                   <CardHeader className="pb-3"><div className="flex items-center justify-between"><CardTitle className="text-sm flex items-center gap-2"><UsersRound className="w-4 h-4 text-primary" />Grupos Criados</CardTitle><span className="text-xs text-muted-foreground bg-secondary/50 px-2.5 py-1 rounded-full">{groups.length} total</span></div></CardHeader>
                   <CardContent className="p-0">
@@ -2127,7 +2211,7 @@ export default function Admin() {
                         <div key={g.id} className="px-4 py-3">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3"><div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center"><UsersRound className="w-4 h-4 text-primary" /></div>
-                              <div><p className="text-sm font-semibold">{g.name}</p><p className="text-[10px] text-muted-foreground">{g.repCodes.length} representante(s) ┬À {new Date(g.createdAt).toLocaleDateString('pt-BR')}</p></div>
+                              <div><p className="text-sm font-semibold">{g.name}</p><p className="text-[10px] text-muted-foreground">{g.repCodes.length} representante(s) • {new Date(g.createdAt).toLocaleDateString('pt-BR')}</p></div>
                             </div>
                             <div className="flex gap-1">
                               <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-primary/10 hover:text-primary" onClick={() => { setExpandedGroup(expandedGroup === g.id ? null : g.id); setGroupAddReps(g.repCodes); }}><ChevronRight className={`w-3.5 h-3.5 transition-transform ${expandedGroup === g.id ? 'rotate-90' : ''}`} /></Button>
@@ -2145,43 +2229,115 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ━━ NOTIFICA├çÕES ━━ */}
+          {/* ━━ NOTIFICAÇÕES ━━ */}
           {activeTab === 'notifications' && (
             <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
               <div className="xl:col-span-2">
-                <Card className="border-border/40">
-                  <CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-sm"><div className="w-7 h-7 bg-primary/15 rounded-md flex items-center justify-center"><Bell className="w-3.5 h-3.5 text-primary" /></div>Enviar Mensagem</CardTitle><CardDescription className="text-xs">Envie notificações para representantes</CardDescription></CardHeader>
-                  <CardContent>
-                    <form onSubmit={handleSendNotification} className="space-y-3">
-                      <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Título *</label><Input placeholder="Ex: Reunião amanhã" value={notifTitle} onChange={e => setNotifTitle(e.target.value)} required /></div>
-                      <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Mensagem *</label><textarea className="w-full min-h-[100px] px-3 py-2.5 bg-background border border-input rounded-md text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground" placeholder="Digite sua mensagem..." value={notifMessage} onChange={e => setNotifMessage(e.target.value)} required /></div>
-                      <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Destinatários</label>
-                        <div className="flex gap-2">
-                          <button type="button" onClick={() => setNotifTargetAll(true)} className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold border transition-all flex items-center justify-center gap-1.5 ${notifTargetAll ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground'}`}><Globe className="w-3.5 h-3.5" />Todos</button>
-                          <button type="button" onClick={() => setNotifTargetAll(false)} className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold border transition-all flex items-center justify-center gap-1.5 ${!notifTargetAll ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground'}`}><Users className="w-3.5 h-3.5" />Específicos</button>
-                        </div>
-                        {!notifTargetAll && (<div className="space-y-1 mt-2"><label className="text-[10px] text-muted-foreground">Selecione:</label><MultiRepSelect reps={reps} value={notifTargetReps} onChange={setNotifTargetReps} /></div>)}
+                <Card className="border-border/40 overflow-hidden bg-card/50 backdrop-blur-sm shadow-xl">
+                  <CardHeader className="pb-4 bg-primary/5 border-b border-border/10">
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <div className="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center">
+                        <Bell className="w-4 h-4 text-primary animate-pulse" />
                       </div>
-                      <Button className="w-full gap-2" type="submit"><Send className="w-4 h-4" />Enviar Notificação</Button>
+                      Enviar Alerta Global
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      O alerta aparecerá instantaneamente na tela de todos os usuários logados.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <form onSubmit={handleSendNotification} className="space-y-6">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Título do Alerta</Label>
+                        <Input 
+                          placeholder="Ex: Atualização Importante" 
+                          value={notifTitle} 
+                          onChange={e => setNotifTitle(e.target.value)} 
+                          className="h-11 font-semibold text-base"
+                          required 
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Mensagem Detalhada</Label>
+                        <div className="quill-editor-wrapper">
+                          <ReactQuill 
+                            theme="snow"
+                            value={notifMessage}
+                            onChange={setNotifMessage}
+                            modules={quillModules}
+                            formats={quillFormats}
+                            placeholder="Escreva sua mensagem aqui..."
+                          />
+                        </div>
+                      </div>
+
+                      <Button className="w-full gap-2 h-12 text-base font-bold shadow-lg shadow-primary/20" type="submit">
+                        <Send className="w-5 h-5" /> Enviar Alerta Agora
+                      </Button>
                     </form>
                   </CardContent>
                 </Card>
               </div>
+
               <div className="xl:col-span-3">
-                <Card className="border-border/40">
-                  <CardHeader className="pb-3"><div className="flex items-center justify-between"><CardTitle className="text-sm flex items-center gap-2"><MessageSquare className="w-4 h-4 text-primary" />Mensagens Enviadas</CardTitle><span className="text-xs text-muted-foreground bg-secondary/50 px-2.5 py-1 rounded-full">{notifications.length} total</span></div></CardHeader>
-                  <CardContent className="p-0">
-                    {notifications.length === 0 ? (<div className="py-16 text-center text-muted-foreground"><Bell className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Nenhuma mensagem enviada</p></div>) : (
-                      <div className="divide-y divide-border/30 max-h-[calc(100vh-320px)] overflow-y-auto">{notifications.map(n => (
-                        <div key={n.id} className="px-4 py-3 hover:bg-secondary/20">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-foreground">{n.title}</p><p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
-                              <span className={`mt-1.5 inline-block text-[10px] px-2 py-0.5 rounded-full font-medium ${n.targetAll ? 'bg-primary/15 text-primary' : 'bg-secondary text-muted-foreground'}`}>{n.targetAll ? 'Todos os representantes' : `${n.targetReps.length} rep(s) específico(s)`}</span>
+                <Card className="border-border/40 bg-card/50 backdrop-blur-sm h-full flex flex-col shadow-xl">
+                  <CardHeader className="pb-3 border-b border-border/10 flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-primary" />
+                        Histórico de Alertas
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Últimos alertas enviados pelo sistema
+                      </CardDescription>
+                    </div>
+                    {notifications.length > 0 && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-destructive hover:bg-destructive/10 h-8 gap-1.5 font-bold"
+                        onClick={handleClearNotifications}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Limpar Histórico
+                      </Button>
+                    )}
+                  </CardHeader>
+                  <CardContent className="p-0 flex-1 overflow-hidden">
+                    {loadingNotifications ? (
+                      <div className="py-20 text-center flex flex-col items-center gap-3">
+                        <Loader2 className="w-8 h-8 animate-spin text-primary opacity-50" />
+                        <p className="text-sm text-muted-foreground">Carregando histórico...</p>
+                      </div>
+                    ) : notifications.length === 0 ? (
+                      <div className="py-32 text-center text-muted-foreground">
+                        <Bell className="w-12 h-12 mx-auto mb-4 opacity-10" />
+                        <p className="text-sm">Nenhum alerta enviado no histórico</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-border/20 overflow-y-auto h-full max-h-[calc(100vh-320px)] custom-scrollbar">
+                        {notifications.map(n => (
+                          <div key={n.id} className="px-6 py-5 hover:bg-primary/5 transition-colors group">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1 min-w-0">
+                                <h4 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">{n.title}</h4>
+                                <div 
+                                  className="text-sm text-muted-foreground mt-2 line-clamp-3 opacity-80"
+                                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(n.message) }}
+                                />
+                                <div className="mt-3 flex items-center gap-3">
+                                  <span className="text-[10px] uppercase font-black text-primary/40 tracking-widest">Global</span>
+                                  <div className="w-1 h-1 rounded-full bg-border" />
+                                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium">
+                                    <Clock className="w-3 h-3" />
+                                    {new Date(n.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                            <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">{new Date(n.sentAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
-                        </div>
-                      ))}</div>
+                        ))}
+                      </div>
                     )}
                   </CardContent>
                 </Card>
