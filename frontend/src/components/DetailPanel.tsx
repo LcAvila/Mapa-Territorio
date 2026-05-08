@@ -10,6 +10,7 @@ import type { TerritoryAssignment } from "@/data/territories";
 interface DetailPanelProps {
   municipio: string;
   uf: string;
+  municipioId?: number;
   modo: "planejamento" | "atendimento";
   onClose: () => void;
   onViewBairros?: (code: number | null) => void;
@@ -23,7 +24,7 @@ interface DetailPanelProps {
 import { useApiRepresentatives, useApiTerritories } from "@/hooks/use-api-data";
 
 export default function DetailPanel({ 
-  municipio, uf, modo, onClose, onViewBairros, ufCode, 
+  municipio, uf, municipioId, modo, onClose, onViewBairros, ufCode, 
   isBairrosActive, onDeselectState, showClientes, onToggleClientes 
 }: DetailPanelProps) {
   const { role, estado_end } = useAuth();
@@ -34,10 +35,22 @@ export default function DetailPanel({
 
   const repCodes = getMunicipioResponsaveis(municipio, uf, modo, apiTerritories);
 
+  const normalizeCityName = (value: string) =>
+    value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
   const handleViewBairros = () => {
-    if (!onViewBairros || !municipiosInfo) return;
+    if (!onViewBairros) return;
     if (isBairrosActive) { onViewBairros(null); return; }
-    const mun = municipiosInfo.find((m: { nome: string; id: number }) => m.nome.toLowerCase() === municipio.toLowerCase());
+
+    // Prefer already selected municipality IBGE code (most reliable path).
+    if (municipioId) {
+      onViewBairros(municipioId);
+      return;
+    }
+
+    if (!municipiosInfo) return;
+    const targetName = normalizeCityName(municipio);
+    const mun = municipiosInfo.find((m: { nome: string; id: number }) => normalizeCityName(m.nome) === targetName);
     if (mun) onViewBairros(mun.id);
   };
 

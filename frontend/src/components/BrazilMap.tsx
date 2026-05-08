@@ -29,9 +29,10 @@ interface BrazilMapProps {
   onSearchEnter?: (q: string) => void;
   suggestions?: SearchSuggestion[];
   onSelectSuggestion?: (item: SearchSuggestion) => void;
-  onSelectMunicipio: (municipio: string, uf: string) => void;
+  onSelectMunicipio: (municipio: string, uf: string, ibgeCode?: number) => void;
   searchQuery: string;
   municipioCodeForBairros?: number | null;
+  selectedMunicipioCode?: number | null;
   onDeactivateBairros?: () => void;
   selectedMunicipioName?: string | null;
   showClientes: boolean;
@@ -255,7 +256,7 @@ function HeatmapLayer({ points }: { points: [number, number, number][] }) {
 export default function BrazilMap({
   selectedUF, modo, filtroRepresentante, mostrarVagos,
   onSelectUF, onSelectMunicipio, searchQuery,
-  municipioCodeForBairros, onDeactivateBairros, selectedMunicipioName, showClientes, showHeatmap,
+  municipioCodeForBairros, selectedMunicipioCode, onDeactivateBairros, selectedMunicipioName, showClientes, showHeatmap,
   onContextMenuState, onContextMenuMunicipio,
   flyToLocation, searchResultGeo,
   selectedClients = [], onSelectClients, onResetMap, onZoomToLocation
@@ -285,6 +286,18 @@ export default function BrazilMap({
 
   const ufInfo = selectedUF ? getUFBySigla(selectedUF) : null;
   const { data: citiesMetadata } = useCitiesMetadata(selectedUF);
+  const { data: municipioNamesByCode } = useMunicipioNames(ufInfo?.codigo ?? null);
+  const citiesList = useMemo(() => {
+    if (Array.isArray(citiesMetadata)) return citiesMetadata;
+    if (citiesMetadata && typeof citiesMetadata === "object") {
+      const maybeData = (citiesMetadata as { data?: unknown; cities?: unknown }).data;
+      const maybeCities = (citiesMetadata as { data?: unknown; cities?: unknown }).cities;
+      if (Array.isArray(maybeData)) return maybeData;
+      if (Array.isArray(maybeCities)) return maybeCities;
+    }
+    return [];
+  }, [citiesMetadata]);
+
   const { data: municipiosGeo } = useMunicipiosGeoJSON(ufInfo?.codigo ?? null);
   const { data: neighborhoodsGeo, isLoading: loadingNeighborhoods } = useNeighborhoodsGeoJSON(
     municipioCodeForBairros || null,
@@ -296,13 +309,21 @@ export default function BrazilMap({
   const zoom = ufInfo ? ufInfo.zoom : 4;
 
   const munGeo = useMemo(() => {
-    if (!municipiosGeo || !selectedMunicipioName || !citiesMetadata || !Array.isArray(citiesMetadata)) return null;
-    const city = citiesMetadata.find(
+    if (!municipiosGeo) return null;
+
+    if (selectedMunicipioCode) {
+      return (municipiosGeo.features as GeoJSONFeature[])?.find(
+        (f) => String(f.properties?.codarea) === String(selectedMunicipioCode)
+      ) || null;
+    }
+
+    if (!selectedMunicipioName || citiesList.length === 0) return null;
+    const city = citiesList.find(
       (c: { name: string; ibgeCode: number | string }) => c.name.toLowerCase() === selectedMunicipioName.toLowerCase()
     );
     if (!city) return null;
     return (municipiosGeo.features as GeoJSONFeature[])?.find((f) => String(f.properties?.codarea) === String(city.ibgeCode)) || null;
-  }, [municipiosGeo, selectedMunicipioName, citiesMetadata]);
+  }, [municipiosGeo, selectedMunicipioCode, selectedMunicipioName, citiesList]);
 
   const stateGeo = useMemo(() => {
     if (!statesGeo || !selectedUF) return null;
@@ -351,12 +372,13 @@ export default function BrazilMap({
   const municipioStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
     const blank = { fillColor: "hsl(220, 15%, 20%)", weight: 1, opacity: 0.6, color: "hsl(220, 15%, 28%)", fillOpacity: 0.4 };
-    if (!citiesMetadata || !Array.isArray(citiesMetadata) || !selectedUF) return blank;
+    if (!selectedUF) return blank;
 
     const codArea = f?.properties?.codarea;
     if (!codArea) return blank;
-    const city = citiesMetadata.find((c: { ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea));
-    const name = city?.name || "";
+    const city = citiesList.find((c: { ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea));
+    const ibgeName = municipioNamesByCode?.[String(codArea)];
+    const name = city?.name || ibgeName || String(f?.properties?.name || f?.properties?.nome || "").trim() || `Município ${codArea}`;
     const reps = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
 
     // Only highlight if the search query is a specific word that matches name/rep
@@ -393,7 +415,7 @@ export default function BrazilMap({
       fillOpacity: rep.isVago ? 0.3 : 0.55,
       dashArray: rep.isVago ? "6 4" : undefined,
     };
-  }, [citiesMetadata, selectedUF, modo, filtroRepresentante, mostrarVagos, searchQuery, apiTerritories, apiReps, selectedClients]);
+  }, [citiesList, municipioNamesByCode, selectedUF, modo, filtroRepresentante, mostrarVagos, searchQuery, apiTerritories, apiReps, selectedClients]);
 
   const stateOutlineStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
@@ -413,13 +435,14 @@ export default function BrazilMap({
   const targetMunicipioStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
     const codArea = f?.properties?.codarea;
-    const city = Array.isArray(citiesMetadata) ? citiesMetadata?.find((c: { ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea)) : undefined;
-    const name = city?.name || "";
+    const city = citiesList.find((c: { ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea));
+    const ibgeName = municipioNamesByCode?.[String(codArea)];
+    const name = city?.name || ibgeName || "";
     const isTarget = name.toLowerCase() === (selectedMunicipioName || "").toLowerCase();
     return isTarget
       ? { fillColor: "transparent", weight: 2.5, opacity: 1, color: "hsl(168, 70%, 70%)", fillOpacity: 0 }
       : { fillColor: "transparent", weight: 0, opacity: 0, color: "transparent", fillOpacity: 0 };
-  }, [citiesMetadata, selectedMunicipioName]);
+  }, [citiesList, municipioNamesByCode, selectedMunicipioName]);
 
   const onEachNeighborhood = useCallback((feature: unknown, layer: L.Layer) => {
     const f = feature as GeoJSONFeature;
@@ -483,11 +506,12 @@ export default function BrazilMap({
 
   const onEachMunicipio = useCallback((feature: unknown, layer: L.Layer) => {
     const f = feature as GeoJSONFeature;
-    if (!citiesMetadata || !Array.isArray(citiesMetadata) || !selectedUF) return;
+    if (!selectedUF) return;
     const codArea = f?.properties?.codarea;
     if (!codArea) return;
-    const city = citiesMetadata.find((c: { name: string; ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea));
-    const name = city?.name || `Município ${codArea}`;
+    const city = citiesList.find((c: { name: string; ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea));
+    const ibgeName = municipioNamesByCode?.[String(codArea)];
+    const name = city?.name || ibgeName || String(f?.properties?.name || f?.properties?.nome || "").trim() || `Município ${codArea}`;
     const reps = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
 
     // Role-based restrictions mapping
@@ -522,7 +546,8 @@ export default function BrazilMap({
       },
       click: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
-        onSelectMunicipio(name, selectedUF);
+        const ibgeCode = Number(codArea);
+        onSelectMunicipio(name, selectedUF, Number.isFinite(ibgeCode) ? ibgeCode : undefined);
       },
       dblclick: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
@@ -535,7 +560,7 @@ export default function BrazilMap({
         onContextMenuMunicipio?.(name, selectedUF, e.originalEvent.clientX, e.originalEvent.clientY);
       },
     });
-  }, [citiesMetadata, selectedUF, modo, municipioStyle, onSelectMunicipio, apiTerritories, apiReps, onContextMenuMunicipio, role, estado_end, onResetMap, onSelectUF]);
+  }, [citiesList, municipioNamesByCode, selectedUF, modo, municipioStyle, onSelectMunicipio, apiTerritories, apiReps, onContextMenuMunicipio, role, estado_end, onResetMap, onSelectUF]);
 
   // ── Neighborhood label markers — names from Brasil Aberto metadata if possible ───
   const markers: Array<{ center: L.LatLng; name: string }> = [];
@@ -635,7 +660,7 @@ export default function BrazilMap({
 
         {/* Auto-zoom to features when selected */}
         {neighborhoodGeo && <ZoomToFeature geoJson={neighborhoodGeo} maxZoom={16} />}
-        {!neighborhoodGeo && munGeo && <ZoomToFeature geoJson={munGeo} maxZoom={13} />}
+        {!neighborhoodGeo && munGeo && <ZoomToFeature geoJson={munGeo} maxZoom={15} />}
         {!neighborhoodGeo && !munGeo && stateGeo && <ZoomToFeature geoJson={stateGeo} maxZoom={ufInfo?.zoom || 7} />}
 
         <TileLayer
@@ -685,20 +710,21 @@ export default function BrazilMap({
           )}
 
         {/* Municipalities layer (Level 2) - Always show when a state is selected */}
-        {municipiosGeo && selectedUF && citiesMetadata && (
-          <Pane name="municipiosPane" style={{ zIndex: 200 }}>
-            <GeoJSON
-              key={`muns-${selectedUF}-${modo}-${filtroRepresentante}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}-${citiesMetadata?.length || 0}`}
-              data={municipiosGeo} style={municipioStyle} onEachFeature={onEachMunicipio}
-            />
-          </Pane>
+        {municipiosGeo && selectedUF && (
+          <GeoJSON
+            key={`muns-${selectedUF}-${modo}-${filtroRepresentante}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}-${citiesList.length}`}
+            data={municipiosGeo}
+            style={municipioStyle}
+            onEachFeature={onEachMunicipio}
+            interactive={true}
+          />
         )}
 
         {/* Bairros layer (Level 3) */}
         {municipioCodeForBairros && (
-          <Pane name="bairrosPane" style={{ zIndex: 450, pointerEvents: 'none' }}>
+          <Pane name="bairrosPane" style={{ zIndex: 450, pointerEvents: 'auto' }}>
             {/* Show selected municipality boundary */}
-            {municipiosGeo && selectedUF && citiesMetadata && (
+            {municipiosGeo && selectedUF && (
               <GeoJSON
                 key={`muns-bg-${municipioCodeForBairros}`}
                 data={municipiosGeo}
@@ -714,6 +740,7 @@ export default function BrazilMap({
                 data={neighborhoodsGeo}
                 style={neighborhoodStyle}
                 onEachFeature={onEachNeighborhood}
+                interactive={true}
               />
             )}
 

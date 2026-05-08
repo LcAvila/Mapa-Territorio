@@ -1069,7 +1069,7 @@ export default function Admin() {
                                   border: '1px solid hsl(var(--admin-sidebar-accent) / 0.25)',
                                   textTransform: 'uppercase',
                                 }}>
-                                  PRESEN├çA ATIVA
+                                  PRESENÇA ATIVA
                                 </span>
                               </div>
                             </div>
@@ -1250,7 +1250,7 @@ export default function Admin() {
           })()}
 
 
-          {/* ━━ USU├üRIOS ━━ */}
+          {/* ━━ USUÁRIOS ━━ */}
           {activeTab === 'users' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
               <div className="flex flex-col md:flex-row gap-4 items-center justify-between pb-2">
@@ -1712,7 +1712,7 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ━━ TERRIT├ôRIOS ━━ */}
+          {/* ━━ TERRITÓRIOS ━━ */}
           {activeTab === 'territories' && (
             <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
               <div className="xl:col-span-2 space-y-4">
@@ -1733,14 +1733,14 @@ export default function Admin() {
                         </label>
                         {includeBairro && (<div className="space-y-1.5 pl-2 border-l-2 border-primary/30"><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Bairro</label><SearchableSelect options={bairroOptions} value={selectedBairro} onChange={setSelectedBairro} placeholder={selectedMunicipio ? 'Selecione...' : 'Selecione o município primeiro'} disabled={!selectedMunicipio} loading={loadingSubdistritos} /></div>)}
                       </div>
-                      <Button type="button" variant="outline" className="w-full gap-2 border-primary/30 hover:bg-primary/5" onClick={handleAddToStaged} disabled={!selectedRep || !selectedUF || !selectedMunicipioName}><Plus className="w-4 h-4" />Adicionar ├á Lista</Button>
+                      <Button type="button" variant="outline" className="w-full gap-2 border-primary/30 hover:bg-primary/5" onClick={handleAddToStaged} disabled={!selectedRep || !selectedUF || !selectedMunicipioName}><Plus className="w-4 h-4" />Adicionar à Lista</Button>
                     </>)}
                   </CardContent>
                 </Card>
                 {staged.length > 0 && (<Card className="border-primary/30 bg-primary/5">
                   <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Check className="w-4 h-4 text-primary" />Lista ({staged.length})</CardTitle></CardHeader>
                   <CardContent className="space-y-2">
-                    {staged.map((item, i) => { const r = reps.find(r => r.code === item.repCode); return (<div key={i} className="flex items-center gap-2 bg-card rounded-md px-3 py-2 border border-border/50"><div className="flex-1 min-w-0"><p className="text-xs font-semibold truncate">{item.municipio}/{item.uf}</p><p className="text-[10px] text-primary">{r ? r.name : item.repCode} ┬À {item.modo === 'planejamento' ? 'Plan.' : 'Atend.'}</p></div><button onClick={() => setStaged(s => s.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button></div>); })}
+                    {staged.map((item, i) => { const r = reps.find(r => r.code === item.repCode); return (<div key={i} className="flex items-center gap-2 bg-card rounded-md px-3 py-2 border border-border/50"><div className="flex-1 min-w-0"><p className="text-xs font-semibold truncate">{item.municipio}/{item.uf}</p><p className="text-[10px] text-primary">{r ? r.name : item.repCode} — {item.modo === 'planejamento' ? 'Plan.' : 'Atend.'}</p></div><button onClick={() => setStaged(s => s.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button></div>); })}
                     <Button className="w-full gap-2 mt-2" onClick={handleConfirmStaged}><Check className="w-4 h-4" />Confirmar Todos ({staged.length})</Button>
                     <Button variant="ghost" size="sm" className="w-full text-muted-foreground hover:text-destructive" onClick={() => setStaged([])}>Limpar Lista</Button>
                   </CardContent>
@@ -1798,7 +1798,7 @@ export default function Admin() {
                         <div key={g.id} className="px-4 py-3">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3"><div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center"><UsersRound className="w-4 h-4 text-primary" /></div>
-                              <div><p className="text-sm font-semibold">{g.name}</p><p className="text-[10px] text-muted-foreground">{g.repCodes.length} representante(s) ┬À {new Date(g.createdAt).toLocaleDateString('pt-BR')}</p></div>
+                              <div><p className="text-sm font-semibold">{g.name}</p><p className="text-[10px] text-muted-foreground">{g.repCodes.length} representante(s) — {new Date(g.createdAt).toLocaleDateString('pt-BR')}</p></div>
                             </div>
                             <div className="flex gap-1">
                               <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-primary/10 hover:text-primary" onClick={() => { setExpandedGroup(expandedGroup === g.id ? null : g.id); setGroupAddReps(g.repCodes); }}><ChevronRight className={`w-3.5 h-3.5 transition-transform ${expandedGroup === g.id ? 'rotate-90' : ''}`} /></Button>
@@ -1816,7 +1816,7 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ━━ NOTIFICA├çÕES ━━ */}
+          {/* ━━ NOTIFICAÇÕES ━━ */}
           {activeTab === 'notifications' && (
             <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
               <div className="xl:col-span-2">
@@ -1910,7 +1910,7 @@ export default function Admin() {
                     <div className="flex items-center gap-2 mb-3"><Icon className={`w-4 h-4 ${color}`} /><h3 className="text-sm font-semibold">{label}</h3><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge}`}>{items.length}</span></div>
                     <Card className="border-border/40 overflow-hidden"><Table>
                       <TableHeader><TableRow className="hover:bg-transparent border-border/40">
-                        <TableHead className="pl-4">Solicitante</TableHead><TableHead>├ürea</TableHead><TableHead className="w-20">Modo</TableHead><TableHead className="w-28">Data</TableHead>
+                        <TableHead className="pl-4">Solicitante</TableHead><TableHead>Área</TableHead><TableHead className="w-20">Modo</TableHead><TableHead className="w-28">Data</TableHead>
                         {key === 'pending' && <TableHead className="w-36 pr-4">Ação</TableHead>}
                       </TableRow></TableHeader>
                       <TableBody>{items.map(req => (
@@ -1932,7 +1932,7 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ━━ PERSONALIZA├ç├âO ━━ */}
+          {/* ━━ PERSONALIZAÇÃO ━━ */}
           {activeTab === 'personal' && (
             <div className="max-w-3xl space-y-6">
               <Card className="border-border/40">

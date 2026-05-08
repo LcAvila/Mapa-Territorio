@@ -53,33 +53,43 @@ const Index = () => {
   // Interest modal state
   const [interestTarget, setInterestTarget] = useState<{ municipio: string; uf: string } | null>(null);
 
+  const normalizeCityName = useCallback(
+    (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(),
+    []
+  );
+
   const handleSelectUF = useCallback((uf: string | null) => {
     setSelectedUF(uf);
     setSelectedMunicipio(null);
     setMunicipioCodeForBairros(null);
   }, []);
 
-  const handleSelectMunicipio = useCallback(async (nome: string, uf: string) => {
-    setSelectedMunicipio({ nome, uf });
-    
-    // Automatically load neighborhoods for the selected municipality
+  const handleSelectMunicipio = useCallback(async (nome: string, uf: string, ibgeCode?: number) => {
+    setSelectedMunicipio({ nome, uf, id: ibgeCode });
+
+    // Auto-activate bairros when municipality is clicked.
+    if (ibgeCode) {
+      setMunicipioCodeForBairros(ibgeCode);
+      return;
+    }
+
+    // Fallback by name if code is unavailable.
     const ufInfo = getUFBySigla(uf);
     if (!ufInfo) return;
-    
     try {
       const res = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${ufInfo.codigo}/municipios`);
-      if (res.ok) {
-        const data: { id: number; nome: string }[] = await res.json();
-        const mun = data.find(m => m.nome.toLowerCase() === nome.toLowerCase());
-        if (mun) {
-          setMunicipioCodeForBairros(mun.id);
-          setSelectedMunicipio({ nome, uf, id: mun.id });
-        }
+      if (!res.ok) return;
+      const data: { id: number; nome: string }[] = await res.json();
+      const targetName = normalizeCityName(nome);
+      const mun = data.find(m => normalizeCityName(m.nome) === targetName);
+      if (mun) {
+        setSelectedMunicipio({ nome, uf, id: mun.id });
+        setMunicipioCodeForBairros(mun.id);
       }
     } catch {
-      // Failed to load neighborhoods silently
+      // Ignore fallback errors silently.
     }
-  }, []);
+  }, [normalizeCityName]);
 
   const handleContextMenuState = useCallback((nome: string, uf: string, x: number, y: number) => {
     setContextMenu({ x, y, type: 'state', nome, uf });
@@ -103,7 +113,8 @@ const Index = () => {
       const res = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${ufInfo.codigo}/municipios`);
       if (!res.ok) throw new Error();
       const data: { id: number; nome: string }[] = await res.json();
-      const mun = data.find(m => m.nome.toLowerCase() === nome.toLowerCase());
+      const targetName = normalizeCityName(nome);
+      const mun = data.find(m => normalizeCityName(m.nome) === targetName);
       if (mun) {
         setMunicipioCodeForBairros(mun.id);
         toast.success(`Bairros de ${nome} carregados!`, { id: 'bairros' });
@@ -113,7 +124,7 @@ const Index = () => {
     } catch {
       toast.error('Erro ao carregar bairros', { id: 'bairros' });
     }
-  }, [handleSelectUF, handleSelectMunicipio]);
+  }, [handleSelectUF, handleSelectMunicipio, normalizeCityName]);
 
   const handleAddressSearch = useCallback(async (query: string) => {
     if (!query || query.length < 3) return;
@@ -302,9 +313,9 @@ const Index = () => {
           onSelectMunicipio={handleSelectMunicipio}
           searchQuery={flyToLocation ? "" : searchQuery} // Disable highlights if we have a flyTo target
           municipioCodeForBairros={municipioCodeForBairros}
+          selectedMunicipioCode={selectedMunicipio?.id ?? null}
           onDeactivateBairros={() => {
             setMunicipioCodeForBairros(null);
-            setSelectedMunicipio(null);
           }}
           selectedMunicipioName={selectedMunicipio?.nome}
           showClientes={showClientes}
@@ -343,6 +354,7 @@ const Index = () => {
               <DetailPanel
                 municipio={selectedMunicipio.nome}
                 uf={selectedMunicipio.uf}
+                municipioId={selectedMunicipio.id}
                 modo={modo}
                 onClose={() => setSelectedMunicipio(null)}
                 onViewBairros={setMunicipioCodeForBairros}

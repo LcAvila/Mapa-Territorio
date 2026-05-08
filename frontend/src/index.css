@@ -1131,9 +1131,9 @@
   stroke-width: 2.5px !important;
 }
 
-/* Fix for custom Leaflet topPane pointer events */
+/* topPane deve deixar passar clique fora dos marcadores */
 .leaflet-topPane-pane {
-  pointer-events: auto !important;
+  pointer-events: none !important;
 }
 
 /* From Uiverse.io by Yaksh37 */
@@ -1556,4 +1556,4 @@ button#space-btn div.shooting-star-4 {
 .quill-editor-wrapper .ql-tooltip a.ql-action,
 .quill-editor-wrapper .ql-tooltip a.ql-remove {
   color: hsl(var(--primary)) !important;
-}
+}

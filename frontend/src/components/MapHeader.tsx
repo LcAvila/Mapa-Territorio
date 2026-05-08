@@ -99,7 +99,7 @@ export default function MapHeader({
       {/* Logo / Brand */}
       <div className="flex items-center gap-4 shrink-0 cursor-pointer group" onClick={() => navigate('/mapa')}>
         <div className="relative">
-          <img src="/Logo.png" alt="Logo" className="h-16 w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
+          <img src="/Logo.png" alt="Logo" className="h-14 w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
           <div className="absolute inset-0 bg-primary/10 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
         </div>
       </div>

@@ -1338,7 +1338,7 @@ export default function Admin() {
                                   border: '1px solid hsl(var(--admin-sidebar-accent) / 0.25)',
                                   textTransform: 'uppercase',
                                 }}>
-                                  PRESEN├çA ATIVA
+                                  PRESENÇA ATIVA
                                 </span>
                               </div>
                             </div>
@@ -1519,7 +1519,7 @@ export default function Admin() {
           })()}
 
 
-          {/* ━━ USU├üRIOS ━━ */}
+          {/* ━━ USUÁRIOS ━━ */}
           {activeTab === 'users' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
               <div className="flex flex-col md:flex-row gap-4 items-center justify-between pb-2">
@@ -2087,7 +2087,7 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ━━ TERRIT├ôRIOS ━━ */}
+          {/* ━━ TERRITÓRIOS ━━ */}
           {activeTab === 'territories' && (() => {
             const computedTerritories = (() => {
               const map = new globalThis.Map<string, { municipio: string, uf: string, repCodes: Set<string>, clientCount: number }>();
@@ -2395,7 +2395,7 @@ export default function Admin() {
                     <div className="flex items-center gap-2 mb-3"><Icon className={`w-4 h-4 ${color}`} /><h3 className="text-sm font-semibold">{label}</h3><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge}`}>{items.length}</span></div>
                     <Card className="border-border/40 overflow-hidden"><Table>
                       <TableHeader><TableRow className="hover:bg-transparent border-border/40">
-                        <TableHead className="pl-4">Solicitante</TableHead><TableHead>├ürea</TableHead><TableHead className="w-20">Modo</TableHead><TableHead className="w-28">Data</TableHead>
+                        <TableHead className="pl-4">Solicitante</TableHead><TableHead>Área</TableHead><TableHead className="w-20">Modo</TableHead><TableHead className="w-28">Data</TableHead>
                         {key === 'pending' && <TableHead className="w-36 pr-4">Ação</TableHead>}
                       </TableRow></TableHeader>
                       <TableBody>{items.map(req => (
@@ -2427,7 +2427,7 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ━━ PERSONALIZA├ç├âO ━━ */}
+          {/* ━━ PERSONALIZAÇÃO ━━ */}
           {activeTab === 'personal' && (
             <div className="max-w-3xl space-y-6">
               <Card className="border-border/40">
