@@ -340,6 +340,8 @@ model Notification {
   id        Int      @id @default(autoincrement())
   title     String
   message   String   @db.Text
+  targetAll Boolean  @default(true)
+  targetUserIds Json?
   createdAt DateTime @default(now())
 
   @@map(name: "notifications")

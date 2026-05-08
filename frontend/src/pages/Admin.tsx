@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import ReactQuill from 'react-quill';
+import ReactQuill, { Quill } from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import DOMPurify from 'dompurify';
 
@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -49,7 +50,6 @@ import { ResumoRoteiroPanel } from '../components/admin/rotas/ResumoRoteiroPanel
 import { RotasProvider } from '../contexts/RotasContext';
 import MiniMapBrasil from '../components/admin/MiniMapBrasil';
 import UserProfileManager from '../components/admin/users/UserProfileManager';
-import { SocialFeedPanel } from '../components/admin/SocialFeedPanel';
 import SpaceButton from '../components/admin/SpaceButton';
 import { API_BASE_URL } from '@/lib/api-base';
 
@@ -75,11 +75,11 @@ interface SystemUser { id: number; username: string; role: string; repCode: stri
 interface InterestRequest { id: number; nome: string; email: string | null; telefone: string | null; empresa: string | null; municipio: string; uf: string; modo: string | null; observacoes: string | null; status: 'pending' | 'accepted' | 'rejected'; created_at: string; userId?: number; repCode?: string; }
 
 interface Group { id: string; name: string; repCodes: string[]; createdAt: string; }
-interface SystemNotification { id: number; title: string; message: string; createdAt: string; }
+interface SystemNotification { id: number; title: string; message: string; createdAt: string; targetAll?: boolean; targetUserIds?: number[]; }
 interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; repCode?: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; }
 interface ModulePermission { userId: number; moduleId: string; canView: boolean; canEdit: boolean; }
 
-type TabId = 'comunidade' | 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha' | 'roteiro_seq' | 'resumo_roteiro';
+type TabId = 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha' | 'roteiro_seq' | 'resumo_roteiro';
 
 interface NavItem {
   id: TabId | 'settings' | 'rotas_menu' | 'users_menu';
@@ -93,6 +93,15 @@ interface NavItem {
 
 const API = API_BASE_URL;
 const IBGE = 'https://servicodados.ibge.gov.br/api/v1/localidades';
+const NOTIF_FONT_WHITELIST = ['inter', 'roboto', 'open-sans', 'lato', 'montserrat', 'poppins', 'nunito', 'source-sans', 'merriweather', 'playfair'];
+const NOTIF_SIZE_WHITELIST = ['12px', '14px', '16px', '18px', '20px', '24px', '28px', '32px'];
+
+const QuillFont = Quill.import('formats/font');
+QuillFont.whitelist = NOTIF_FONT_WHITELIST;
+Quill.register(QuillFont, true);
+const QuillSize = Quill.import('attributors/style/size');
+QuillSize.whitelist = NOTIF_SIZE_WHITELIST;
+Quill.register(QuillSize, true);
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 const LS = {
@@ -237,6 +246,7 @@ function ColorPicker({ value, onChange, disabled }: { value: number; onChange: (
 export default function Admin() {
   const { token, logout, repCode: myRepCode, userId, tokenVersion } = useAuth();
   const navigate = useNavigate();
+  const quillRef = React.useRef<ReactQuill | null>(null);
 
   // Security: redirect if no token
   useEffect(() => {
@@ -255,7 +265,9 @@ export default function Admin() {
 
 
   const { role } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabId>('comunidade');
+  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
 
   // ── Brand / Personalização ────────────────────────────────────────────────
@@ -337,7 +349,6 @@ export default function Admin() {
   // ── Dashboard filters ─────────────────────────────────────────────────────
   const [dashFilterRep, setDashFilterRep] = useState('');
   const [dashFilterUF, setDashFilterUF] = useState('');
-  const [dashFilterModo, setDashFilterModo] = useState('');
   const [dashSearch, setDashSearch] = useState('');
 
   const addAudit = useCallback((action: string, entity: string, entityId: string, details: string, extra?: Partial<AuditLog>) => {
@@ -447,7 +458,8 @@ export default function Admin() {
   const [notifTitle, setNotifTitle] = useState('');
   const [notifMessage, setNotifMessage] = useState('');
   const [notifTargetAll, setNotifTargetAll] = useState(true);
-  const [notifTargetReps, setNotifTargetReps] = useState<string[]>([]);
+  const [notifTargetUsers, setNotifTargetUsers] = useState<number[]>([]);
+  const [notifUserSearch, setNotifUserSearch] = useState('');
 
   // ── Audit filters ──────────────────────────────────────────────────────────
   const [auditFilterRep, setAuditFilterRep] = useState('');
@@ -844,6 +856,7 @@ export default function Admin() {
   const handleSendNotification = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!notifTitle.trim() || !notifMessage.trim()) { toast.error('Título e mensagem são obrigatórios'); return; }
+    if (!notifTargetAll && notifTargetUsers.length === 0) { toast.error('Selecione ao menos um usuário destinatário'); return; }
 
     try {
       const res = await fetch(`${API}/api/notifications`, {
@@ -851,14 +864,22 @@ export default function Admin() {
         headers: authHeaders,
         body: JSON.stringify({
           title: notifTitle,
-          message: notifMessage
+          message: notifMessage,
+          targetAll: notifTargetAll,
+          targetUserIds: notifTargetAll ? [] : notifTargetUsers
         })
       });
 
       if (res.ok) {
-        toast.success('Alerta enviado com sucesso para todos os usuários!');
+        toast.success(notifTargetAll
+          ? 'Alerta enviado com sucesso para todos os usuários!'
+          : `Alerta enviado com sucesso para ${notifTargetUsers.length} usuário(s)!`
+        );
         setNotifTitle('');
         setNotifMessage('');
+        setNotifTargetAll(true);
+        setNotifTargetUsers([]);
+        setNotifUserSearch('');
         fetchNotifications();
       } else {
         const err = await res.json();
@@ -889,19 +910,55 @@ export default function Admin() {
     });
   };
 
-  const quillModules = {
-    toolbar: [
-      [{ 'header': [1, 2, 3, false] }],
-      [{ 'font': [] }],
-      [{ 'size': ['small', false, 'large', 'huge'] }],
-      ['bold', 'italic', 'underline', 'strike'],
-      [{ 'color': [] }, { 'background': [] }],
-      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-      [{ 'align': [] }],
-      ['link', 'image'],
-      ['clean']
-    ],
-  };
+  const openImagePickerForEditor = useCallback(() => {
+    const quill = quillRef.current?.getEditor();
+    if (!quill) return;
+
+    const input = document.createElement('input');
+    input.setAttribute('type', 'file');
+    input.setAttribute('accept', 'image/*');
+    input.click();
+
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        toast.error('Selecione um arquivo de imagem válido.');
+        return;
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        toast.error('Imagem muito grande. Limite de 8MB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const range = quill.getSelection(true);
+        const index = range ? range.index : quill.getLength();
+        quill.insertEmbed(index, 'image', reader.result, 'user');
+        quill.setSelection(index + 1, 0);
+      };
+      reader.readAsDataURL(file);
+    };
+  }, []);
+
+  const quillModules = useMemo(() => ({
+    toolbar: {
+      container: [
+        [{ font: NOTIF_FONT_WHITELIST }],
+        [{ size: NOTIF_SIZE_WHITELIST }],
+        [{ header: [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ color: [] }, { background: [] }],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        [{ align: [] }],
+        ['link', 'image'],
+        ['clean'],
+      ],
+      handlers: {
+        image: openImagePickerForEditor,
+      },
+    },
+  }), [openImagePickerForEditor]);
 
   const quillFormats = [
     'header', 'font', 'size',
@@ -912,6 +969,23 @@ export default function Admin() {
   ];
 
   const pendingInterests = interests.filter(i => i.status === 'pending').length;
+  const dailyMessages = [
+    "O sucesso é a soma de pequenos esforços repetidos dia após dia.",
+    "A persistência é o caminho do êxito.",
+    "A única maneira de fazer um excelente trabalho é amar o que você faz.",
+    "Grandes jornadas começam com um pequeno passo.",
+    "Sua limitação é apenas sua imaginação.",
+    "Pense positivo e coisas boas acontecerão.",
+    "O melhor momento para plantar uma árvore foi há 20 anos. O segundo melhor é agora.",
+    "Você é mais forte do que imagina.",
+    "Acredite em si próprio e o resto virá naturalmente.",
+    "O que você faz hoje pode melhorar todos os seus amanhãs."
+  ];
+  const getDayMessage = () => {
+    const today = new Date();
+    const index = (today.getFullYear() + today.getMonth() + today.getDate()) % dailyMessages.length;
+    return dailyMessages[index];
+  };
 
   // Current user info for sidebar profile
   const { userName: authUserName } = useAuth();
@@ -919,9 +993,9 @@ export default function Admin() {
   const displayName = authUserName || currentUser?.full_name || currentUser?.fullName || currentUser?.username || 'Admin';
   const displayEmail = currentUser?.username || '';
   const displayPhoto = currentUser?.photo || '';
+  const displayCargo = currentUser?.cargo || currentUser?.tipo || role || 'usuário';
 
   const navItems: NavItem[] = [
-    { id: 'comunidade' as const, label: 'Comunidade', icon: Users, restrict: ['admin', 'supervisor', 'representante'] },
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard, restrict: ['admin', 'supervisor', 'representante'] },
     {
       id: 'users_menu' as const, label: 'Usuários', icon: UsersRound, restrict: ['admin', 'supervisor'], subItems: [
@@ -1123,7 +1197,41 @@ export default function Admin() {
             </div>
           </div>
           <div className="admin-header-right">
-            <ThemeToggle />
+            <Popover open={showNotifMenu} onOpenChange={setShowNotifMenu}>
+              <PopoverTrigger asChild>
+                <button className="admin-header-icon-btn relative" title="Notificações">
+                  <Bell style={{ width: 15, height: 15 }} />
+                  {notifications.length > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-destructive text-[9px] leading-[15px] text-white font-bold text-center">
+                      {notifications.length > 9 ? '9+' : notifications.length}
+                    </span>
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[360px] p-0" align="end">
+                <div className="px-4 py-3 border-b border-border/60">
+                  <h4 className="text-sm font-bold">Central de Notificações</h4>
+                  <p className="text-[11px] text-muted-foreground">Últimos alertas do sistema</p>
+                </div>
+                <div className="max-h-[360px] overflow-y-auto custom-scrollbar divide-y divide-border/40">
+                  {loadingNotifications ? (
+                    <div className="py-8 text-center text-xs text-muted-foreground">Carregando...</div>
+                  ) : notifications.length === 0 ? (
+                    <div className="py-10 text-center text-xs text-muted-foreground">Nenhuma notificação</div>
+                  ) : (
+                    notifications.map((n) => (
+                      <div key={n.id} className="px-4 py-3 hover:bg-secondary/40 transition-colors">
+                        <p className="text-xs font-semibold text-foreground">{n.title}</p>
+                        <div className="text-[11px] text-muted-foreground mt-1 line-clamp-2" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(n.message) }} />
+                        <p className="text-[10px] text-muted-foreground mt-2">
+                          {new Date(n.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
             <button className="admin-header-icon-btn" onClick={fetchAll} title="Recarregar dados">
               <RefreshCw style={{ width: 15, height: 15 }} />
             </button>
@@ -1150,21 +1258,48 @@ export default function Admin() {
                 <span>{pendingInterests} pendente(s)</span>
               </div>
             )}
-            <button
-              className="admin-header-action-btn text-destructive hover:bg-destructive/10 border-destructive/20"
-              onClick={() => { logout(); navigate('/login'); }}
-              title="Sair do sistema"
-            >
-              <LogOut style={{ width: 15, height: 15 }} />
-              <span className="hidden sm:inline">Sair</span>
-            </button>
+            <Popover open={showUserMenu} onOpenChange={setShowUserMenu}>
+              <PopoverTrigger asChild>
+                <button className="hidden sm:flex items-center gap-2.5 px-2.5 py-1.5 bg-secondary/60 rounded-xl border border-border/40 hover:bg-secondary/80 transition-colors min-w-[175px] text-left">
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-primary/20 flex items-center justify-center shrink-0 border border-primary/20">
+                    {displayPhoto ? (
+                      <img src={displayPhoto} alt={displayName} className="w-full h-full object-cover" />
+                    ) : (
+                      <User style={{ width: 14, height: 14 }} className="text-primary" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold leading-tight truncate">{displayName}</p>
+                    <p className="text-[10px] text-muted-foreground leading-tight capitalize truncate">{String(displayCargo).toLowerCase()}</p>
+                  </div>
+                  <ChevronDown style={{ width: 13, height: 13 }} className="text-muted-foreground ml-auto shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-44 p-1.5" align="end">
+                <div className="flex items-center justify-between px-2.5 py-2 border-b border-border/60 mb-1">
+                  <span className="text-[11px] font-semibold text-muted-foreground">Tema</span>
+                  <ThemeToggle />
+                </div>
+                <button
+                  className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors"
+                  onClick={() => { setShowUserMenu(false); navigate('/admin'); }}
+                >
+                  <Settings style={{ width: 14, height: 14 }} />
+                  Painel
+                </button>
+                <button
+                  className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold rounded-md text-destructive hover:bg-destructive/10 transition-colors"
+                  onClick={() => { setShowUserMenu(false); logout(); navigate('/login'); }}
+                >
+                  <LogOut style={{ width: 14, height: 14 }} />
+                  Sair
+                </button>
+              </PopoverContent>
+            </Popover>
           </div>
         </header>
 
         <main className="admin-content">
-
-          {/* ━━ COMUNIDADE (Social Feed) ━━ */}
-          {activeTab === 'comunidade' && <SocialFeedPanel />}
 
           {/* ━━ DASHBOARD ━━ */}
           {activeTab === 'dashboard' && (() => {
@@ -1172,7 +1307,6 @@ export default function Admin() {
             const filteredClientes = clientes.filter(c => {
               if (dashFilterRep && c.repCode !== dashFilterRep) return false;
               if (dashFilterUF && c.uf !== dashFilterUF) return false;
-              // Ignore dashFilterModo for clients as it acts on territories mostly
               if (dashSearch) {
                 const q = dashSearch.toLowerCase();
                 const repName = reps.find(r => r.code === c.repCode)?.name?.toLowerCase() || '';
@@ -1191,14 +1325,26 @@ export default function Admin() {
             const ufEntries = Object.entries(byUF).sort((a, b) => b[1].length - a[1].length);
 
             // Unique UFs and reps for dropdowns
-            const allUFs = [...new Set(territories.map(t => t.uf))].sort();
+            const allUFs = [...new Set([
+              ...territories.map(t => (t.uf || '').trim().toUpperCase()),
+              ...clientes.map(c => (c.uf || '').trim().toUpperCase()),
+            ].filter(Boolean))].sort();
             const activeReps = reps.filter(r => !r.isVago);
 
-            const clearFilters = () => { setDashFilterRep(''); setDashFilterUF(''); setDashFilterModo(''); setDashSearch(''); };
-            const hasFilters = dashFilterRep || dashFilterUF || dashFilterModo || dashSearch;
+            const clearFilters = () => { setDashFilterRep(''); setDashFilterUF(''); setDashSearch(''); };
+            const hasFilters = dashFilterRep || dashFilterUF || dashSearch;
 
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20, height: '100%' }}>
+                <div className="admin-card" style={{ padding: '14px 20px', borderLeft: '3px solid hsl(var(--admin-sidebar-accent))' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <MessageSquare style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.02em' }}>Mensagem do Dia</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'hsl(var(--muted-foreground))', fontStyle: 'italic' }}>
+                    "{getDayMessage()}"
+                  </p>
+                </div>
 
                 {/* ── FILTER BAR ── */}
                 <div className="admin-card" style={{ padding: '14px 20px' }}>
@@ -1246,25 +1392,6 @@ export default function Admin() {
                       <option value="">Todos os Estados</option>
                       {allUFs.map(uf => <option key={uf} value={uf}>{uf}</option>)}
                     </select>
-
-                    {/* Modo buttons */}
-                    <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1.5px solid hsl(var(--border))' }}>
-                      {['', 'planejamento', 'atendimento'].map((m, i) => (
-                        <button
-                          key={m}
-                          onClick={() => setDashFilterModo(m)}
-                          style={{
-                            height: 36, padding: '0 14px', fontSize: '0.75rem', fontWeight: 600,
-                            background: dashFilterModo === m ? 'hsl(var(--admin-sidebar-bg))' : 'hsl(var(--background))',
-                            color: dashFilterModo === m ? 'hsl(var(--admin-sidebar-accent))' : 'hsl(var(--muted-foreground))',
-                            border: 'none', borderLeft: i > 0 ? '1.5px solid hsl(var(--border))' : 'none',
-                            cursor: 'pointer', whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {m === '' ? 'Todos' : m === 'planejamento' ? 'Planejamento' : 'Atendimento'}
-                        </button>
-                      ))}
-                    </div>
 
                     {/* Clear */}
                     {hasFilters && (
@@ -2232,117 +2359,193 @@ export default function Admin() {
 
           {/* ━━ NOTIFICAÇÕES ━━ */}
           {activeTab === 'notifications' && (
-            <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
-              <div className="xl:col-span-2">
-                <Card className="border-border/40 overflow-hidden bg-card/50 backdrop-blur-sm shadow-xl">
-                  <CardHeader className="pb-4 bg-primary/5 border-b border-border/10">
-                    <CardTitle className="flex items-center gap-2 text-sm">
-                      <div className="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center">
-                        <Bell className="w-4 h-4 text-primary animate-pulse" />
-                      </div>
-                      Enviar Alerta Global
+            <div className="space-y-5">
+              <form onSubmit={handleSendNotification} className="grid grid-cols-1 xl:grid-cols-[minmax(300px,0.9fr)_minmax(520px,1.6fr)] gap-5">
+                <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl">
+                  <CardHeader className="pb-3 border-b border-border/10">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-primary" />
+                      Meta do Alerta
                     </CardTitle>
                     <CardDescription className="text-xs">
-                      O alerta aparecerá instantaneamente na tela de todos os usuários logados.
+                      Defina o título e os destinatários do aviso.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="pt-6">
-                    <form onSubmit={handleSendNotification} className="space-y-6">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Título do Alerta</Label>
-                        <Input 
-                          placeholder="Ex: Atualização Importante" 
-                          value={notifTitle} 
-                          onChange={e => setNotifTitle(e.target.value)} 
-                          className="h-11 font-semibold text-base"
-                          required 
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Mensagem Detalhada</Label>
-                        <div className="quill-editor-wrapper">
-                          <ReactQuill 
-                            theme="snow"
-                            value={notifMessage}
-                            onChange={setNotifMessage}
-                            modules={quillModules}
-                            formats={quillFormats}
-                            placeholder="Escreva sua mensagem aqui..."
-                          />
-                        </div>
-                      </div>
+                  <CardContent className="pt-5 space-y-5">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Título do Aviso</Label>
+                      <Input
+                        placeholder="Ex: Atualização Importante"
+                        value={notifTitle}
+                        onChange={e => setNotifTitle(e.target.value)}
+                        className="h-11 font-semibold text-base"
+                        required
+                      />
+                    </div>
 
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Destinatários</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setNotifTargetAll(true); setNotifTargetUsers([]); }}
+                          className={`h-10 rounded-md border text-sm font-semibold transition-colors ${notifTargetAll
+                            ? 'bg-primary/15 text-primary border-primary/40'
+                            : 'bg-background text-muted-foreground border-border hover:text-foreground'}`}
+                        >
+                          Todos
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNotifTargetAll(false)}
+                          className={`h-10 rounded-md border text-sm font-semibold transition-colors ${!notifTargetAll
+                            ? 'bg-primary/15 text-primary border-primary/40'
+                            : 'bg-background text-muted-foreground border-border hover:text-foreground'}`}
+                        >
+                          Usuários Específicos
+                        </button>
+                      </div>
+                    </div>
+
+                    {!notifTargetAll && (
+                      <div className="space-y-2">
+                        <Input
+                          value={notifUserSearch}
+                          onChange={e => setNotifUserSearch(e.target.value)}
+                          placeholder="Buscar usuário por nome ou login..."
+                          className="h-9 text-sm"
+                        />
+                        <div className="rounded-md border border-border bg-background/40 max-h-52 overflow-y-auto custom-scrollbar divide-y divide-border/30">
+                          {users
+                            .filter(u => {
+                              const q = notifUserSearch.trim().toLowerCase();
+                              if (!q) return true;
+                              const name = (u.full_name || u.fullName || '').toLowerCase();
+                              const username = (u.username || '').toLowerCase();
+                              return name.includes(q) || username.includes(q);
+                            })
+                            .slice(0, 120)
+                            .map(u => {
+                              const checked = notifTargetUsers.includes(u.id);
+                              return (
+                                <label key={u.id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-secondary/50">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                      setNotifTargetUsers(prev => checked ? prev.filter(id => id !== u.id) : [...prev, u.id]);
+                                    }}
+                                    className="accent-primary"
+                                  />
+                                  <span className="text-xs font-medium text-foreground truncate">
+                                    {u.full_name || u.fullName || u.username}
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground ml-auto truncate">{u.username}</span>
+                                </label>
+                              );
+                            })}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          {notifTargetUsers.length} usuário(s) selecionado(s)
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl flex flex-col">
+                  <CardHeader className="pb-3 border-b border-border/10">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-primary" />
+                      Conteúdo do Alerta
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Campo de texto avançado para formatar o aviso.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-5 flex-1 flex flex-col">
+                    <div className="quill-editor-wrapper quill-alert-editor flex-1 rounded-xl border border-border/60 overflow-hidden bg-background/70 shadow-inner">
+                      <ReactQuill
+                        ref={quillRef}
+                        theme="snow"
+                        value={notifMessage}
+                        onChange={setNotifMessage}
+                        modules={quillModules}
+                        formats={quillFormats}
+                        placeholder="Escreva sua mensagem aqui..."
+                      />
+                    </div>
+                    <div className="pt-4">
                       <Button className="w-full gap-2 h-12 text-base font-bold shadow-lg shadow-primary/20" type="submit">
                         <Send className="w-5 h-5" /> Enviar Alerta Agora
                       </Button>
-                    </form>
+                    </div>
                   </CardContent>
                 </Card>
-              </div>
+              </form>
 
-              <div className="xl:col-span-3">
-                <Card className="border-border/40 bg-card/50 backdrop-blur-sm h-full flex flex-col shadow-xl">
-                  <CardHeader className="pb-3 border-b border-border/10 flex flex-row items-center justify-between">
-                    <div>
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <MessageSquare className="w-4 h-4 text-primary" />
-                        Histórico de Alertas
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        Últimos alertas enviados pelo sistema
-                      </CardDescription>
+              <Card className="border-border/40 bg-card/50 backdrop-blur-sm flex flex-col shadow-xl">
+                <CardHeader className="pb-3 border-b border-border/10 flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-primary" />
+                      Histórico de Mensagens Enviadas
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Últimos alertas enviados pelo sistema.
+                    </CardDescription>
+                  </div>
+                  {notifications.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:bg-destructive/10 h-8 gap-1.5 font-bold"
+                      onClick={handleClearNotifications}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Limpar Histórico
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent className="p-0 flex-1 overflow-hidden">
+                  {loadingNotifications ? (
+                    <div className="py-20 text-center flex flex-col items-center gap-3">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary opacity-50" />
+                      <p className="text-sm text-muted-foreground">Carregando histórico...</p>
                     </div>
-                    {notifications.length > 0 && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="text-destructive hover:bg-destructive/10 h-8 gap-1.5 font-bold"
-                        onClick={handleClearNotifications}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" /> Limpar Histórico
-                      </Button>
-                    )}
-                  </CardHeader>
-                  <CardContent className="p-0 flex-1 overflow-hidden">
-                    {loadingNotifications ? (
-                      <div className="py-20 text-center flex flex-col items-center gap-3">
-                        <Loader2 className="w-8 h-8 animate-spin text-primary opacity-50" />
-                        <p className="text-sm text-muted-foreground">Carregando histórico...</p>
-                      </div>
-                    ) : notifications.length === 0 ? (
-                      <div className="py-32 text-center text-muted-foreground">
-                        <Bell className="w-12 h-12 mx-auto mb-4 opacity-10" />
-                        <p className="text-sm">Nenhum alerta enviado no histórico</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-border/20 overflow-y-auto h-full max-h-[calc(100vh-320px)] custom-scrollbar">
-                        {notifications.map(n => (
-                          <div key={n.id} className="px-6 py-5 hover:bg-primary/5 transition-colors group">
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex-1 min-w-0">
-                                <h4 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">{n.title}</h4>
-                                <div 
-                                  className="text-sm text-muted-foreground mt-2 line-clamp-3 opacity-80"
-                                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(n.message) }}
-                                />
-                                <div className="mt-3 flex items-center gap-3">
-                                  <span className="text-[10px] uppercase font-black text-primary/40 tracking-widest">Global</span>
-                                  <div className="w-1 h-1 rounded-full bg-border" />
-                                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium">
-                                    <Clock className="w-3 h-3" />
-                                    {new Date(n.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                                  </div>
+                  ) : notifications.length === 0 ? (
+                    <div className="py-24 text-center text-muted-foreground">
+                      <Bell className="w-12 h-12 mx-auto mb-4 opacity-10" />
+                      <p className="text-sm">Nenhuma mensagem enviada</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border/20 overflow-y-auto max-h-[420px] custom-scrollbar">
+                      {notifications.map(n => (
+                        <div key={n.id} className="px-6 py-5 hover:bg-primary/5 transition-colors group">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">{n.title}</h4>
+                              <div
+                                className="text-sm text-muted-foreground mt-2 line-clamp-3 opacity-80"
+                                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(n.message) }}
+                              />
+                              <div className="mt-3 flex items-center gap-3">
+                                <span className="text-[10px] uppercase font-black text-primary/40 tracking-widest">
+                                  {n.targetAll ? 'Global' : `${Array.isArray(n.targetUserIds) ? n.targetUserIds.length : 0} usuário(s)`}
+                                </span>
+                                <div className="w-1 h-1 rounded-full bg-border" />
+                                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium">
+                                  <Clock className="w-3 h-3" />
+                                  {new Date(n.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                 </div>
                               </div>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           )}
 

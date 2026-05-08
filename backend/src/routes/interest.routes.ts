@@ -57,11 +57,35 @@ router.get('/', authenticate, requirePermission('interests', 'view'), async (req
 router.put('/:id/status', authenticate, requirePermission('interests', 'edit'), async (req, res) => {
   const id = Number(req.params.id);
   const { status } = req.body;
+  if (!['accepted', 'rejected'].includes(status)) {
+    return res.status(400).json({ message: 'Status inválido' });
+  }
   
   const existing = await prisma.interestRequest.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ message: 'Não encontrado' });
   
   const int = await prisma.interestRequest.update({ where: { id }, data: { status } });
+
+  // Notify requester user about status update
+  if (existing.userId) {
+    try {
+      const title = status === 'accepted' ? 'Interesse Aceito' : 'Interesse Recusado';
+      const message = status === 'accepted'
+        ? `Seu interesse em <strong>${existing.municipio}/${existing.uf}</strong> foi <strong>aceito</strong>.`
+        : `Seu interesse em <strong>${existing.municipio}/${existing.uf}</strong> foi <strong>recusado</strong>.`;
+
+      await prisma.notification.create({
+        data: {
+          title,
+          message,
+          targetAll: false,
+          targetUserIds: [existing.userId],
+        },
+      });
+    } catch (err) {
+      console.error('[INTEREST] Error creating status notification:', err);
+    }
+  }
   
   // Automated Territory Creation on ACCEPT
   if (status === 'accepted' && existing.repCode) {

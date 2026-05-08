@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/auth-context-core';
+import { API_BASE_URL } from '@/lib/api-base';
 import {
   Dialog,
   DialogContent,
@@ -16,12 +18,72 @@ interface Notification {
   id: number;
   title: string;
   message: string;
+  targetAll?: boolean;
+  targetUserIds?: number[] | null;
   createdAt: string;
 }
 
 export default function NotificationSystem() {
+  const { userId, token, tokenVersion } = useAuth();
   const [currentNotification, setCurrentNotification] = useState<Notification | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const currentUserId = userId || Number(localStorage.getItem('userId') || 0) || null;
+  const seenKey = currentUserId ? `seen_notifications_user_${currentUserId}` : 'seen_notifications_guest';
+
+  const isNotificationForCurrentUser = (notif: Notification): boolean => {
+    const targetIds = Array.isArray(notif.targetUserIds)
+      ? notif.targetUserIds.map((id) => Number(id))
+      : [];
+    return !!notif.targetAll || (!!currentUserId && targetIds.includes(currentUserId));
+  };
+
+  const wasSeen = (id: number): boolean => {
+    try {
+      const seen = JSON.parse(localStorage.getItem(seenKey) || '[]') as number[];
+      return seen.includes(id);
+    } catch {
+      return false;
+    }
+  };
+
+  const markSeen = (id: number) => {
+    try {
+      const seen = JSON.parse(localStorage.getItem(seenKey) || '[]') as number[];
+      if (seen.includes(id)) return;
+      const updated = [id, ...seen].slice(0, 200);
+      localStorage.setItem(seenKey, JSON.stringify(updated));
+    } catch {
+      localStorage.setItem(seenKey, JSON.stringify([id]));
+    }
+  };
+
+  const openModalForNotification = (notif: Notification) => {
+    setCurrentNotification(notif);
+    setIsOpen(true);
+    markSeen(notif.id);
+  };
+
+  const fetchLatestNotification = async () => {
+    if (!token || !currentUserId) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/notifications`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'x-user-token-version': String(tokenVersion || 0),
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as Notification[];
+      const candidate = data.find((n) => isNotificationForCurrentUser(n) && !wasSeen(n.id));
+      if (candidate) {
+        openModalForNotification(candidate);
+      }
+    } catch {
+      // silent fallback
+    }
+  };
 
   useEffect(() => {
     // Listen for new notifications in real-time
@@ -37,8 +99,9 @@ export default function NotificationSystem() {
         (payload) => {
           console.log('[REALTIME] Nova notificação recebida:', payload);
           const newNotif = payload.new as Notification;
-          setCurrentNotification(newNotif);
-          setIsOpen(true);
+          if (!isNotificationForCurrentUser(newNotif)) return;
+          if (wasSeen(newNotif.id)) return;
+          openModalForNotification(newNotif);
         }
       )
       .subscribe();
@@ -46,7 +109,26 @@ export default function NotificationSystem() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentUserId, seenKey]);
+
+  useEffect(() => {
+    if (!token || !currentUserId) return;
+
+    // First sync as soon as auth/session is ready
+    fetchLatestNotification();
+
+    // Hard fallback for near-real-time delivery if websocket event fails
+    const intervalId = window.setInterval(fetchLatestNotification, 2000);
+
+    // When tab gains focus, sync immediately
+    const onFocus = () => { fetchLatestNotification(); };
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [token, tokenVersion, currentUserId, seenKey]);
 
   const handleClose = () => {
     setIsOpen(false);

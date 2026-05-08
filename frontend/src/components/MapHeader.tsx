@@ -9,15 +9,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { ThemeToggle } from "./ThemeToggle";
+import { API_BASE_URL } from "@/lib/api-base";
 
-interface AdminNotification {
-  id: string;
+interface UserNotification {
+  id: number;
   title: string;
   message: string;
-  targetAll: boolean;
-  targetReps: string[];
-  sentAt: string;
-  readBy: string[];
+  targetAll?: boolean;
+  targetUserIds?: number[] | null;
+  createdAt: string;
 }
 
 interface MapHeaderProps {
@@ -56,43 +56,76 @@ export default function MapHeader({
 }: MapHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { repCode, userName } = useAuth();
+  const { repCode, userName, userId, token, tokenVersion } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
+  const [notifications, setNotifications] = useState<UserNotification[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
 
   // ── Notifications Logic ──
-  const [notifications, setNotifications] = useState<AdminNotification[]>(() => {
-    try { return JSON.parse(localStorage.getItem('admin_notifications') || '[]'); } catch { return []; }
-  });
+  const currentUserId = userId || Number(localStorage.getItem('userId') || 0) || null;
+  const seenKey = currentUserId ? `seen_notifications_user_${currentUserId}` : 'seen_notifications_guest';
+  const fullUserName = userName || localStorage.getItem('userName') || 'Usuário';
+  const userCargo = localStorage.getItem('cargo') || localStorage.getItem('tipo') || role || 'usuário';
+  const userPhoto = localStorage.getItem('photo') || '';
+  const seenIds = useMemo(() => {
+    try {
+      return new Set<number>(JSON.parse(localStorage.getItem(seenKey) || '[]'));
+    } catch {
+      return new Set<number>();
+    }
+  }, [seenKey, showNotifications]);
 
   const myNotifications = useMemo(() => {
-    if (!repCode) return [];
     return notifications
-      .filter(n => n.targetAll || (n.targetReps && n.targetReps.includes(repCode)))
-      .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
-  }, [notifications, repCode]);
+      .slice()
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [notifications]);
 
-  const unreadCount = myNotifications.filter(n => !n.readBy.includes(repCode)).length;
+  const unreadCount = myNotifications.filter(n => !seenIds.has(n.id)).length;
 
-  const markAsRead = (id: string) => {
-    if (!repCode) return;
-    const updated = notifications.map(n => {
-      if (n.id === id && !n.readBy.includes(repCode)) {
-        return { ...n, readBy: [...n.readBy, repCode] };
-      }
-      return n;
-    });
-    setNotifications(updated);
-    localStorage.setItem('admin_notifications', JSON.stringify(updated));
+  const markAsRead = (id: number) => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(seenKey) || '[]') as number[];
+      if (raw.includes(id)) return;
+      localStorage.setItem(seenKey, JSON.stringify([id, ...raw].slice(0, 200)));
+    } catch {
+      localStorage.setItem(seenKey, JSON.stringify([id]));
+    }
   };
 
+  const fetchNotifications = React.useCallback(async () => {
+    if (!token || !currentUserId) return;
+    try {
+      setLoadingNotifications(true);
+      const res = await fetch(`${API_BASE_URL}/api/notifications`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'x-user-token-version': String(tokenVersion || 0),
+        },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setNotifications(Array.isArray(data) ? data : []);
+    } catch {
+      // silent
+    } finally {
+      setLoadingNotifications(false);
+    }
+  }, [token, tokenVersion, currentUserId]);
+
   React.useEffect(() => {
-    const handleStorage = () => {
-      try { setNotifications(JSON.parse(localStorage.getItem('admin_notifications') || '[]')); } catch { /* ignore */ }
-    };
-    window.addEventListener('storage', handleStorage);
-    return () => { window.removeEventListener('storage', handleStorage); };
-  }, []);
+    fetchNotifications();
+    const intervalId = window.setInterval(fetchNotifications, 4000);
+    return () => window.clearInterval(intervalId);
+  }, [fetchNotifications]);
+
+  React.useEffect(() => {
+    if (!showNotifications) return;
+    // mark all currently visible notifications as read when opening the center
+    myNotifications.forEach(n => markAsRead(n.id));
+  }, [showNotifications, myNotifications]);
 
   return (
     <header className="bg-card/95 backdrop-blur-sm border-b border-border px-4 py-2.5 flex items-center gap-3 md:gap-6 sticky top-0 z-[1000] shadow-sm">
@@ -288,30 +321,92 @@ export default function MapHeader({
 
       {/* Auth / Admin */}
       <div className="flex items-center gap-2 ml-auto lg:ml-0">
-        <ThemeToggle />
         {!isAuthenticated ? (
           <Button variant="outline" size="sm" onClick={() => navigate('/login')} className="gap-2 border-primary/20">
             <LogIn className="w-4 h-4" /> Entrar
           </Button>
         ) : (
           <div className="flex items-center gap-3">
-            {userName && (
-              <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-secondary/60 rounded-full border border-border/40">
-                <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
-                  <User className="w-3 h-3 text-primary" />
+            <Popover open={showNotifications} onOpenChange={setShowNotifications}>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="sm" className="relative h-8 w-8 p-0 hover:bg-primary/5 hover:text-primary">
+                  <Bell className="w-4 h-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-[10px] leading-4 text-white font-bold text-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[360px] p-0 bg-card border-border shadow-2xl z-[3000]" align="end">
+                <div className="px-4 py-3 border-b border-border/60 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold">Central de Notificações</h4>
+                    <p className="text-[11px] text-muted-foreground">Atualizações e respostas dos seus interesses</p>
+                  </div>
                 </div>
-                <span className="text-[10px] font-bold text-foreground">
-                  {userName.split(' ')[0]}
-                </span>
-              </div>
-            )}
+                <div className="max-h-[360px] overflow-y-auto custom-scrollbar divide-y divide-border/40">
+                  {loadingNotifications ? (
+                    <div className="py-8 text-center text-xs text-muted-foreground">Carregando...</div>
+                  ) : myNotifications.length === 0 ? (
+                    <div className="py-10 text-center text-xs text-muted-foreground">Nenhuma notificação</div>
+                  ) : (
+                    myNotifications.map((n) => (
+                      <div key={n.id} className="px-4 py-3 hover:bg-secondary/40 transition-colors">
+                        <p className="text-xs font-semibold text-foreground">{n.title}</p>
+                        <div
+                          className="text-[11px] text-muted-foreground mt-1 line-clamp-2"
+                          dangerouslySetInnerHTML={{ __html: n.message }}
+                        />
+                        <p className="text-[10px] text-muted-foreground mt-2">
+                          {new Date(n.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Popover open={showUserMenu} onOpenChange={setShowUserMenu}>
+              <PopoverTrigger asChild>
+                <button className="hidden sm:flex items-center gap-2.5 px-2.5 py-1.5 bg-secondary/60 rounded-xl border border-border/40 hover:bg-secondary/80 transition-colors min-w-[165px] text-left">
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-primary/20 flex items-center justify-center shrink-0 border border-primary/20">
+                    {userPhoto ? (
+                      <img src={userPhoto} alt={fullUserName} className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-4 h-4 text-primary" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-foreground leading-tight truncate">{fullUserName}</p>
+                    <p className="text-[10px] text-muted-foreground leading-tight capitalize truncate">{String(userCargo).toLowerCase()}</p>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-auto shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-44 p-1.5 bg-card border-border shadow-2xl z-[3000]" align="end">
+                <div className="flex items-center justify-between px-2.5 py-2 border-b border-border/60 mb-1">
+                  <span className="text-[11px] font-semibold text-muted-foreground">Tema</span>
+                  <ThemeToggle />
+                </div>
+                <button
+                  className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors"
+                  onClick={() => { setShowUserMenu(false); navigate('/admin'); }}
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  Painel
+                </button>
+                <button
+                  className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold rounded-md text-destructive hover:bg-destructive/10 transition-colors"
+                  onClick={() => { setShowUserMenu(false); logout(); }}
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Sair
+                </button>
+              </PopoverContent>
+            </Popover>
             
-            <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="gap-2 h-8 px-2 hover:bg-primary/5 hover:text-primary">
-              <Settings className="w-3.5 h-3.5" /> <span className="hidden sm:inline text-[11px] font-bold">{role === 'admin' ? 'Admin' : 'Painel'}</span>
-            </Button>
-            <Button variant="ghost" size="sm" onClick={logout} className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10">
-              <LogOut className="w-3.5 h-3.5" />
-            </Button>
           </div>
         )}
       </div>

@@ -66,10 +66,14 @@ app.use(helmet());
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // Limit each IP to 200 requests per window
+  max: isDev ? 3000 : 200, // In dev allow heavier traffic (polling/realtime fallback)
   message: { message: 'Muitas requisições deste IP, tente novamente em 15 minutos.' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Notification polling/realtime fallback can be frequent; do not rate-limit this route.
+    return req.path.startsWith('/api/notifications');
+  },
 });
 app.use('/api/', globalLimiter);
 
