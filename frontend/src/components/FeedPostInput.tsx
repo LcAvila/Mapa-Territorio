@@ -6,6 +6,7 @@ import { Grid } from '@giphy/react-components';
 import { useAuth } from '@/contexts/auth-context-core';
 import { toast } from 'sonner';
 import { Button } from './ui/button';
+import { API_BASE_URL } from '@/lib/api-base';
 
 // Chave pública de testes do Giphy Docs
 const gf = new GiphyFetch('sXpGFDGpz0Dv1VDJCjm8wSmM62402T6v'); 
@@ -37,7 +38,7 @@ export default function FeedPostInput({ onPostCreated, defaultText = "" }: { onP
 
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/feed/post', {
+      const res = await fetch(`${API_BASE_URL}/api/feed/post`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

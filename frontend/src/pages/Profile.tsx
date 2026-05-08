@@ -8,8 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { Camera, Save, ArrowLeft, User, MapPin, Phone, FileText, Lock, ShieldCheck, Loader2, Building2, ChevronDown, Fingerprint } from 'lucide-react';
+import { API_BASE_URL } from '@/lib/api-base';
 
-const API = 'http://localhost:3001';
+const API = API_BASE_URL;
 
 interface UserProfile {
     id: number;

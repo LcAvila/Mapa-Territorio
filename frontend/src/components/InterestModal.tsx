@@ -3,8 +3,9 @@ import { X, HandHeart, MapPin, Loader2, CheckCircle2, MessageSquare } from 'luci
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context-core';
+import { API_BASE_URL } from '@/lib/api-base';
 
-const API = 'http://localhost:3001';
+const API = API_BASE_URL;
 
 interface InterestModalProps {
     municipio: string;

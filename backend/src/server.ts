@@ -36,27 +36,31 @@ app.use((req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3001;
-
+// ─── CORS ────────────────────────────────────────────────────────────────────
+const isDev = (process.env.NODE_ENV || 'development') !== 'production';
 const allowedOrigins = [
   process.env.FRONTEND_URL,
-  'http://localhost:8080',
-  'http://127.0.0.1:8080',
-  'http://localhost:5173'
 ].filter(Boolean) as string[];
+//** */ ─── Fechamento CORS ────────────────────────────────────────────────────────────────────
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Em dev, libera qualquer origem (incluindo IPs da rede local).
+      if (isDev) return callback(null, true);
 
-app.use(cors({
-  origin: (origin, callback) => {
-    // Permite requisições sem origin (como mobile ou curl)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.log(`[CORS] Bloqueado: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true
-}));
+      // Permite requisições sem origin (como mobile ou curl).
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.log(`[CORS] Bloqueado: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+  })
+);
 
 app.use(helmet());
 

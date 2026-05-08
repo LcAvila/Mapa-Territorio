@@ -51,6 +51,7 @@ import MiniMapBrasil from '../components/admin/MiniMapBrasil';
 import UserProfileManager from '../components/admin/users/UserProfileManager';
 import { SocialFeedPanel } from '../components/admin/SocialFeedPanel';
 import SpaceButton from '../components/admin/SpaceButton';
+import { API_BASE_URL } from '@/lib/api-base';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 interface Representative {
@@ -90,7 +91,7 @@ interface NavItem {
   subItems?: { id: TabId; label: string; icon: React.ElementType; count?: number; }[];
 }
 
-const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+const API = API_BASE_URL;
 const IBGE = 'https://servicodados.ibge.gov.br/api/v1/localidades';
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────

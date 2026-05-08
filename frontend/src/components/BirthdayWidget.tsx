@@ -4,6 +4,7 @@ import { Cake, Gift } from 'lucide-react';
 import { Button } from './ui/button';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { API_BASE_URL } from '@/lib/api-base';
 
 interface BirthdayUser {
   id: number;
@@ -22,7 +23,7 @@ export default function BirthdayWidget({ onCongratulate }: { onCongratulate: (na
       try {
         const token = localStorage.getItem('token');
         const tokenVersion = localStorage.getItem('tokenVersion') || '0';
-        const res = await fetch('http://localhost:3001/api/birthdays/month', {
+        const res = await fetch(`${API_BASE_URL}/api/birthdays/month`, {
           headers: { 
             'Authorization': `Bearer ${token}`,
             'x-user-token-version': tokenVersion

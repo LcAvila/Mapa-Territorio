@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { API_BASE_URL } from '@/lib/api-base';
 
 interface Module {
   id: string;
@@ -120,7 +121,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
     push: user.notif_push ?? true
   });
 
-  const API = 'http://localhost:3001';
+  const API = API_BASE_URL;
   const token = localStorage.getItem('token');
   const tokenVersion = localStorage.getItem('tokenVersion');
   const authHeaders = useMemo(() => ({ 

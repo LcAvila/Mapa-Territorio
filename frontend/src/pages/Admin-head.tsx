@@ -44,6 +44,7 @@ import { RotasProvider } from '../contexts/RotasContext';
 import MiniMapBrasil from '../components/admin/MiniMapBrasil';
 import UserProfileManager from '../components/admin/users/UserProfileManager';
 import SpaceButton from '../components/admin/SpaceButton';
+import { API_BASE_URL } from '@/lib/api-base';
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 interface Representative { 
   code: string; 
@@ -82,7 +83,7 @@ interface NavItem {
   subItems?: { id: TabId; label: string; icon: React.ElementType; count?: number; }[];
 }
 
-const API = 'http://localhost:3001';
+const API = API_BASE_URL;
 const IBGE = 'https://servicodados.ibge.gov.br/api/v1/localidades';
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────

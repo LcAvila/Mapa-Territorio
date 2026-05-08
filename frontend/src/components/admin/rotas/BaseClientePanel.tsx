@@ -21,6 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { AddressMapPicker } from './AddressMapPicker';
+import { API_BASE_URL } from '@/lib/api-base';
 
 interface Cliente {
   id_cliente: number;
@@ -57,7 +58,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
   const [filterRep, setFilterRep] = useState('');
   const [filterStatus, setFilterStatus] = useState('Todos');
 
-  const API_URL = 'http://localhost:3001/api/clientes';
+  const API_URL = `${API_BASE_URL}/api/clientes`;
 
   const [formData, setFormData] = useState({
     codigo_cliente: '',
@@ -87,7 +88,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
     if (formData.cidade && formData.uf) {
       const fetchBairros = async () => {
         try {
-          const res = await fetch(`http://localhost:3001/api/location/bairros/${encodeURIComponent(formData.cidade)}/${encodeURIComponent(formData.uf)}`);
+          const res = await fetch(`${API_BASE_URL}/api/location/bairros/${encodeURIComponent(formData.cidade)}/${encodeURIComponent(formData.uf)}`);
           if (res.ok) {
             const data = await res.json();
             setBairrosLocais(data.map((b: { id: number, bairro: string }) => b.bairro));
@@ -163,7 +164,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
     try {
       const searchAddress = `${endereco_completo}${numero ? ', ' + numero : ''}${bairro ? ', ' + bairro : ''}, ${cidade}, ${uf}, Brasil`;
       const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:3001/api/geocode?address=${encodeURIComponent(searchAddress)}`, {
+      const res = await fetch(`${API_BASE_URL}/api/geocode?address=${encodeURIComponent(searchAddress)}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -207,7 +208,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
     try {
       const token = localStorage.getItem('token');
       const tokenVersion = localStorage.getItem('tokenVersion') || '0';
-      const res = await fetch('http://localhost:3001/api/admin/reps', {
+      const res = await fetch(`${API_BASE_URL}/api/admin/reps`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'x-user-token-version': tokenVersion

@@ -19,6 +19,7 @@ import { getUFByCode, getUFBySigla } from "@/data/uf-codes";
 import { getMunicipioResponsaveis } from "@/data/territories";
 import { getRepColor, getRepByCode } from "@/data/representatives";
 import { useApiRepresentatives, useApiTerritories, useApiClientes, Representative, TerritoryAssignment, Cliente, GeoJSONFeatureCollection, GeoJSONFeature, SearchSuggestion } from "@/hooks/use-api-data";
+import { API_BASE_URL } from "@/lib/api-base";
 
 interface BrazilMapProps {
   selectedUF: string | null;
@@ -47,7 +48,7 @@ interface BrazilMapProps {
   onZoomToLocation?: (center: [number, number], zoom: number) => void;
 }
 
-const API_BASE = "http://localhost:3001";
+const API_BASE = API_BASE_URL;
 
 function MapController({ center, zoom, flyToLocation, selectedUF }: { center: [number, number]; zoom: number; flyToLocation?: { center: [number, number]; zoom: number } | null; selectedUF: string | null }) {
   const map = useMap();

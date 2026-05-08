@@ -6,8 +6,9 @@
 import { useState, useCallback } from "react";
 import { useAuth } from "@/contexts/auth-context-core";
 import { Cliente } from "./use-api-data";
+import { API_BASE_URL } from "@/lib/api-base";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_BASE = API_BASE_URL;
 
 export interface RouteWaypoint {
   lat: number;

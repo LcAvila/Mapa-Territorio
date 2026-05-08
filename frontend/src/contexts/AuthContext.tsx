@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AuthContext } from './auth-context-core';
 import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
+import { API_BASE_URL } from '@/lib/api-base';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
@@ -32,7 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                 // If we have a token but missing core metadata (common after refresh), restore it
                 if (!localStorage.getItem('role') || !localStorage.getItem('userId')) {
-                    fetch(`${import.meta.env.VITE_API_URL}/api/auth/me`, {
+                    fetch(`${API_BASE_URL}/api/auth/me`, {
                         headers: { 'Authorization': `Bearer ${existingToken}` }
                     })
                     .then(r => r.json())

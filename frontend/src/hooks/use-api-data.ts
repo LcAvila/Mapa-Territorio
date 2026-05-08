@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context-core";
+import { API_BASE_URL } from "@/lib/api-base";
 
-const API_BASE = 'http://localhost:3001';
+const API_BASE = API_BASE_URL;
 
 export interface Representative {
   code: string;

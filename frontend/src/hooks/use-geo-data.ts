@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import { API_BASE_URL } from "@/lib/api-base";
 
-const API_BASE = "http://localhost:3001/api/location";
+const API_BASE = `${API_BASE_URL}/api/location`;
 const IBGE_MALHAS = "https://servicodados.ibge.gov.br/api/v3/malhas";
 const IBGE_LOC = "https://servicodados.ibge.gov.br/api/v1/localidades";
 

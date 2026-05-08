@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/auth-context-core';
 import { Heart, MessageSquare, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { API_BASE_URL } from '@/lib/api-base';
 
 interface Comment {
   id: number;
@@ -46,7 +47,7 @@ export default function FeedList({ refreshTrigger }: { refreshTrigger: number })
   const fetchPosts = useCallback(async () => {
     try {
       const tokenVersion = localStorage.getItem('tokenVersion') || '0';
-      const res = await fetch('http://localhost:3001/api/feed', {
+      const res = await fetch(`${API_BASE_URL}/api/feed`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'x-user-token-version': tokenVersion
@@ -69,7 +70,7 @@ export default function FeedList({ refreshTrigger }: { refreshTrigger: number })
 
   const handleReact = async (postId: number, emoji: string) => {
     try {
-      const res = await fetch('http://localhost:3001/api/feed/react', {
+      const res = await fetch(`${API_BASE_URL}/api/feed/react`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

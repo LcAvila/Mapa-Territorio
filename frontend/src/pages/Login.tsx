@@ -5,6 +5,7 @@ import { Eye, EyeOff, User, Lock, Loader2, ShieldCheck, ChevronRight } from 'luc
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_BASE_URL } from '@/lib/api-base';
 
 export default function Login() {
     const [username, setUsername] = useState('');
@@ -32,7 +33,7 @@ export default function Login() {
                 return;
             }
 
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/me?login=true`, {
+            const response = await fetch(`${API_BASE_URL}/api/auth/me?login=true`, {
                 headers: { 'Authorization': `Bearer ${authData.session?.access_token}` },
             });
 
