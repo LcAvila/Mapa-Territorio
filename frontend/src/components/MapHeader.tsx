@@ -117,8 +117,6 @@ export default function MapHeader({
 
   React.useEffect(() => {
     fetchNotifications();
-    const intervalId = window.setInterval(fetchNotifications, 4000);
-    return () => window.clearInterval(intervalId);
   }, [fetchNotifications]);
 
   React.useEffect(() => {

@@ -9,11 +9,14 @@ datasource db {
 }
 
 model User {
-  id           Int       @id @default(autoincrement())
-  username     String    @unique
+  id            Int      @id @default(autoincrement())
+  supabase_id   String?  @unique
+  username      String   @unique
   password     String
   role         String    @default("user") // admin, supervisor, user
-  tipo         String    @default("representante")
+  tipo         String    @default("Usuário")
+  userTypeId    Int?
+  userType      UserType? @relation(fields: [userTypeId], references: [id])
   full_name    String?
   cpf_cnpj     String?
   telefone     String?
@@ -49,7 +52,7 @@ model User {
   last_active       DateTime @default(now())
   token_version     Int      @default(0)
 
-  // Relações
+  // Relations
   permissions       UserPermission[]
   alocacoes         AlocacaoSupervisor[]
   visitasLogistica  DistanciasLogistica[]
@@ -58,15 +61,16 @@ model User {
   historicosVisitas HistoricoVisitas[]
   activities        UserActivity[]
 
-  // Relations following repCode
-  territories  Territory[]
-  bairros      Bairro[]
-  clientes     Cliente[]
+  // Novas relações diretas
+  territories  Territory[] @relation("UserTerritories")
+  bairros      Bairro[]    @relation("UserBairros")
+  clientes     Cliente[]   @relation("UserClientes")
+  interests    InterestRequest[] @relation("UserInterests")
+
   FeedPost     FeedPost[]
   FeedComment  FeedComment[]
   FeedReaction FeedReaction[]
 
-  @@index([repCode])
   @@map("users")
 }
 
@@ -103,8 +107,8 @@ model Territory {
   municipio String?
   uf        String?
   modo      String?
-  repCode   String?
-  rep       User?   @relation(fields: [repCode], references: [repCode], onDelete: SetNull)
+  userId    Int?
+  user      User?   @relation("UserTerritories", fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("territories")
 }
@@ -116,8 +120,8 @@ model Bairro {
   municipio String?
   uf        String?
   modo      String?
-  repCode   String?
-  rep       User?   @relation(fields: [repCode], references: [repCode], onDelete: SetNull)
+  userId    Int?
+  user      User?   @relation("UserBairros", fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("bairros")
 }
@@ -134,7 +138,7 @@ model InterestRequest {
   observacoes String?
   status      String   @default("pending")
   userId      Int?
-  repCode     String?
+  user        User?    @relation("UserInterests", fields: [userId], references: [id], onDelete: SetNull)
   created_at  DateTime @default(now())
 
   @@map("interest_requests")
@@ -172,12 +176,10 @@ model Cliente {
   status_ativo      Boolean                @default(true)
   data_cadastro     DateTime               @default(now())
   data_atualizacao  DateTime               @updatedAt
-  supervisorName    String?
-  classificacao     String?
   semana            String?
   prioridade        String?
-  repCode           String?
-  rep               User?                  @relation(fields: [repCode], references: [repCode], onDelete: SetNull)
+  userId            Int?
+  user              User?                  @relation("UserClientes", fields: [userId], references: [id], onDelete: SetNull)
   alocacoes         AlocacaoSupervisor[]
   classificacoes    ClassificacaoCliente[]
   distancias        DistanciasLogistica[]
@@ -337,12 +339,29 @@ model FeedReaction {
 }
 
 model Notification {
-  id        Int      @id @default(autoincrement())
-  title     String
-  message   String   @db.Text
-  targetAll Boolean  @default(true)
+  id            Int      @id @default(autoincrement())
+  title         String
+  message       String   @db.Text
+  targetAll     Boolean  @default(true)
   targetUserIds Json?
-  createdAt DateTime @default(now())
+  senderName    String?  @default("Sistema")
+  createdAt     DateTime @default(now())
 
   @@map(name: "notifications")
+}
+
+model UserType {
+  id              Int      @id @default(autoincrement())
+  name            String   @unique
+  color           String   @default("#3b82f6")
+  icon            String   @default("User")
+  showInMenu      Boolean  @default(false)
+  active          Boolean  @default(true)
+  isAdmin         Boolean  @default(false)
+  isSystemDefault Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+  users           User[]
+
+  @@map(name: "user_types")
 }

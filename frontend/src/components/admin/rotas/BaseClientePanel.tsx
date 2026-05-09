@@ -38,9 +38,12 @@ interface Cliente {
   numero: string | null;
   latitude: number | null;
   longitude: number | null;
-  repCode: string | null;
-  supervisorName: string | null;
-  classificacao: string | null;
+  userId: number | null;
+  user?: {
+    id: number;
+    username: string;
+    full_name: string | null;
+  };
   semana: string | null;
   prioridade: string | null;
   status_ativo: boolean;
@@ -55,7 +58,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
   const [editingClientId, setEditingClientId] = useState<number | null>(null);
 
   const [filterUF, setFilterUF] = useState('');
-  const [filterRep, setFilterRep] = useState('');
+  const [filterUser, setFilterUser] = useState('');
   const [filterStatus, setFilterStatus] = useState('Todos');
 
   const API_URL = `${API_BASE_URL}/api/clientes`;
@@ -74,13 +77,11 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
     regiao: '',
     latitude: null as number | null,
     longitude: null as number | null,
-    repCode: '',
-    supervisorName: '',
-    classificacao: '',
+    userId: '' as string | number,
     semana: '',
     prioridade: ''
   });
-  const [reps, setReps] = useState<{ code: string, name: string }[]>([]);
+  const [systemUsers, setSystemUsers] = useState<{ id: number, username: string, full_name: string | null }[]>([]);
   const [fetchingCep, setFetchingCep] = useState(false);
   const [bairrosLocais, setBairrosLocais] = useState<string[]>([]);
 
@@ -204,23 +205,23 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
     }
   };
 
-  const fetchReps = async () => {
+  const fetchSystemUsers = async () => {
     try {
       const token = localStorage.getItem('token');
       const tokenVersion = localStorage.getItem('tokenVersion') || '0';
-      const res = await fetch(`${API_BASE_URL}/api/admin/reps`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/users`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'x-user-token-version': tokenVersion
         }
       });
-      if (res.ok) setReps(await res.json());
-    } catch (e) { console.error('Erro ao buscar representantes', e); }
+      if (res.ok) setSystemUsers(await res.json());
+    } catch (e) { console.error('Erro ao buscar usuários', e); }
   };
 
   useEffect(() => {
     fetchClientes();
-    fetchReps();
+    fetchSystemUsers();
   }, []);
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -271,7 +272,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
         codigo_cliente: '', nome_cliente: '', nome_abreviado: '', cnpj: '',
         cep: '', endereco_completo: '', numero: '', bairro: '', cidade: '', uf: '', regiao: '',
         latitude: null, longitude: null,
-        repCode: '', supervisorName: '', classificacao: '', semana: '', prioridade: ''
+        userId: '', semana: '', prioridade: ''
       });
       fetchClientes();
     } catch (error: unknown) {
@@ -299,9 +300,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
       regiao: client.regiao || '',
       latitude: client.latitude || null,
       longitude: client.longitude || null,
-      repCode: client.repCode || '',
-      supervisorName: client.supervisorName || '',
-      classificacao: client.classificacao || '',
+      userId: client.userId || '',
       semana: client.semana || '',
       prioridade: client.prioridade || ''
     });
@@ -336,7 +335,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
     if (filterStatus === 'Ativos' && !c.status_ativo) return false;
     if (filterStatus === 'Inativos' && c.status_ativo) return false;
     if (filterUF && c.uf !== filterUF) return false;
-    if (filterRep && c.repCode !== filterRep) return false;
+    if (filterUser && c.userId?.toString() !== filterUser) return false;
     const q = searchTerm.toLowerCase();
     if (q) return (
       c.nome_cliente?.toLowerCase().includes(q) || 
@@ -474,24 +473,12 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="repCode">Representante</Label>
+                    <Label htmlFor="userId">Usuário Responsável</Label>
                     <div className="flex gap-2">
-                      <select id="repCode" name="repCode" value={formData.repCode} onChange={handleSelectChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                      <select id="userId" name="userId" value={formData.userId} onChange={handleSelectChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
                         <option value="">— Selecione —</option>
-                        {reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
+                        {systemUsers.map(u => <option key={u.id} value={u.id}>{u.full_name || u.username}</option>)}
                       </select>
-                      {onSwitchToReps && (
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          size="icon" 
-                          className="shrink-0" 
-                          title="Cadastrar novo representante"
-                          onClick={onSwitchToReps}
-                        >
-                          <Plus className="w-4 h-4" />
-                        </Button>
-                      )}
                     </div>
                   </div>
 
@@ -550,17 +537,17 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
                 ))}
               </select>
               <select
-                value={filterRep}
-                onChange={e => setFilterRep(e.target.value)}
+                value={filterUser}
+                onChange={e => setFilterUser(e.target.value)}
                 className="h-9 px-3 rounded-md text-xs border border-input bg-background/50 text-foreground max-w-[150px]"
               >
-                <option value="">Todos Reps</option>
-                {reps.map(r => (
-                  <option key={r.code} value={r.code}>{r.code}</option>
+                <option value="">Todos Usuários</option>
+                {systemUsers.map(u => (
+                  <option key={u.id} value={u.id.toString()}>{u.full_name || u.username}</option>
                 ))}
               </select>
-              {(searchTerm || filterStatus !== 'Todos' || filterUF || filterRep) && (
-                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => { setSearchTerm(''); setFilterStatus('Todos'); setFilterUF(''); setFilterRep(''); }}>
+              {(searchTerm || filterStatus !== 'Todos' || filterUF || filterUser) && (
+                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => { setSearchTerm(''); setFilterStatus('Todos'); setFilterUF(''); setFilterUser(''); }}>
                   <X className="w-4 h-4" />
                 </Button>
               )}
@@ -588,9 +575,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
                     <TableHead className="whitespace-nowrap h-10 min-w-[250px]">Razão Social / Fantasia</TableHead>
                     <TableHead className="whitespace-nowrap h-10">CNPJ</TableHead>
                     <TableHead className="whitespace-nowrap h-10">Cidade / UF</TableHead>
-                    <TableHead className="whitespace-nowrap h-10">Representante</TableHead>
-                    <TableHead className="whitespace-nowrap h-10">Supervisor</TableHead>
-                    <TableHead className="whitespace-nowrap h-10">Classif.</TableHead>
+                    <TableHead className="whitespace-nowrap h-10">Usuário Responsável</TableHead>
                     <TableHead className="whitespace-nowrap h-10 text-center">Status</TableHead>
                     <TableHead className="whitespace-nowrap h-10 text-right pr-4">Ações</TableHead>
                   </TableRow>
@@ -613,13 +598,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
                           </div>
                         </TableCell>
                         <TableCell className="text-xs py-2">
-                          <span className="font-semibold">{row.repCode || '-'}</span>
-                        </TableCell>
-                        <TableCell className="text-xs py-2">{row.supervisorName || '-'}</TableCell>
-                        <TableCell className="text-xs py-2">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${row.classificacao === 'Estratégico' ? 'bg-purple-500/10 text-purple-600' : 'bg-blue-500/10 text-blue-600'}`}>
-                            {row.classificacao || '-'}
-                          </span>
+                          <span className="font-semibold">{row.user?.full_name || row.user?.username || 'Não vinculado'}</span>
                         </TableCell>
                         <TableCell className="text-xs py-2 text-center">
                            {row.status_ativo ? (

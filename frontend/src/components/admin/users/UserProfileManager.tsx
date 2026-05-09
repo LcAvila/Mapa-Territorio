@@ -27,7 +27,6 @@ interface SystemUser {
   id: number;
   username: string;
   role: string;
-  repCode: string | null;
   full_name?: string;
   fullName?: string;
   photo?: string;
@@ -56,6 +55,7 @@ interface SystemUser {
   estado_end?: string;
   area_atuacao?: string;
   base_logistica?: string;
+  userTypeId?: number;
 }
 
 interface UserActivity {
@@ -70,10 +70,10 @@ interface UserProfileManagerProps {
   user: SystemUser;
   onClose: () => void;
   onUpdate: () => void;
-  reps: { code: string; name: string }[];
+  userTypes?: { id: number; name: string; color: string }[];
 }
 
-const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, onUpdate, reps }) => {
+const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, onUpdate, userTypes = [] }) => {
   const [activeTab, setActiveTab] = useState<'profile' | 'org' | 'perms' | 'notif' | 'settings' | 'history'>('profile');
   const [loading, setLoading] = useState(false);
   
@@ -81,9 +81,8 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
   const [formData, setFormData] = useState({
     fullName: user.full_name || user.fullName || '',
     username: user.username || '',
-    email: user.email || user.username || '',
+    email: user.email || '',
     role: user.role || 'user',
-    repCode: user.repCode || '',
     photo: user.photo || '',
     colorIndex: user.colorIndex ?? 0,
     comissao: user.comissao ?? 0,
@@ -102,12 +101,15 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
     cidade: user.cidade || '',
     estado_end: user.estado_end || '',
     area_atuacao: user.area_atuacao || '',
-    base_logistica: user.base_logistica || ''
+    base_logistica: user.base_logistica || '',
+    userTypeId: user.userTypeId || ''
   });
 
   const [permissions, setPermissions] = useState<UserPermission[]>([]);
   const [availableModules, setAvailableModules] = useState<Module[]>([]);
   const [showPwd, setShowPwd] = useState(false);
+  const [showPwdFields, setShowPwdFields] = useState(false);
+  const [showConfirmPwd, setShowConfirmPwd] = useState(false);
   
   // New States
   const [activities, setActivities] = useState<UserActivity[]>([]);
@@ -129,6 +131,47 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
     'Authorization': `Bearer ${token}`,
     'x-user-token-version': tokenVersion || '0'
   }), [token, tokenVersion]);
+
+  useEffect(() => {
+    // Sync local form state when the user prop changes (e.g., after onUpdate fetches fresh data)
+    setFormData({
+      fullName: user.full_name || user.fullName || '',
+      username: user.username || '',
+      email: user.email || '',
+      role: user.role || 'user',
+      photo: user.photo || '',
+      colorIndex: user.colorIndex ?? 0,
+      comissao: user.comissao ?? 0,
+      isVago: user.isVago ?? 0,
+      telefone: user.telefone || '',
+      birthDate: user.birth_date ? new Date(user.birth_date).toISOString().split('T')[0] : '',
+      code: user.code || '',
+      cpf_cnpj: user.cpf_cnpj || '',
+      password: '',
+      confirmPassword: '',
+      cep: user.cep || '',
+      logradouro: user.logradouro || '',
+      numero: user.numero || '',
+      complemento: user.complemento || '',
+      bairro_end: user.bairro_end || '',
+      cidade: user.cidade || '',
+      estado_end: user.estado_end || '',
+      area_atuacao: user.area_atuacao || '',
+      base_logistica: user.base_logistica || '',
+      userTypeId: user.userTypeId || ''
+    });
+    
+    setConfig({
+      default_workspace: user.default_workspace || 'dashboard',
+      inactivity_limit: user.inactivity_limit || 30
+    });
+    
+    setNotifPrefs({
+      email: user.notif_email ?? true,
+      sms: user.notif_sms ?? false,
+      push: user.notif_push ?? true
+    });
+  }, [user]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -179,6 +222,18 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
   };
 
   const handleSaveProfile = async () => {
+    // Validação de E-mail
+    if (!formData.email) {
+      toast.error('O campo E-mail é obrigatório.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      toast.error('Por favor, insira um e-mail válido (exemplo@dominio.com).');
+      return;
+    }
+
     if (formData.password && formData.password !== formData.confirmPassword) {
       toast.error('As senhas não coincidem');
       return;
@@ -200,6 +255,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
         body: JSON.stringify({
           username: formData.username,
           full_name: formData.fullName,
+          email: formData.email, // Incluindo o email no corpo da requisição
           role: formData.role,
           repCode: formData.repCode,
           photo: formData.photo,
@@ -218,16 +274,20 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
           cidade: formData.cidade,
           estado_end: formData.estado_end,
           area_atuacao: formData.area_atuacao,
-          base_logistica: formData.base_logistica
+          base_logistica: formData.base_logistica,
+          userTypeId: formData.userTypeId ? Number(formData.userTypeId) : null
         })
       });
 
       if (res.ok) {
         toast.success('Perfil atualizado com sucesso!');
         onUpdate();
+        // Limpa as senhas após salvar com sucesso para evitar re-uso acidental
+        setFormData(prev => ({ ...prev, password: '', confirmPassword: '' }));
+        setShowPwdFields(false);
       } else {
         const err = await res.json();
-        toast.error(err.message || 'Erro ao atualizar');
+        toast.error(`${err.message}${err.details ? ': ' + err.details : ''}` || 'Erro ao atualizar');
       }
     } catch (error) {
       toast.error('Erro de conexão');
@@ -244,10 +304,26 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
         headers: authHeaders,
         body: JSON.stringify({ permissions })
       });
-      if (res.ok) toast.success('Permissões atualizadas!');
-      else toast.error('Erro ao salvar permissões');
-    } catch { toast.error('Erro de conexão'); }
-    finally { setLoading(false); }
+      
+      const result = await res.json();
+      
+      if (res.ok) {
+        toast.success(result.message || 'Permissões atualizadas!');
+        if (result.promoted) {
+          toast.info('Usuário promovido a ADMIN automaticamente!');
+          // Atualiza o estado local para refletir a nova role imediatamente
+          setFormData(prev => ({ ...prev, role: 'admin' }));
+        }
+        // Dispara o fetchAll do Admin.tsx para atualizar o card na lista
+        onUpdate();
+      } else {
+        toast.error(result.message || 'Erro ao salvar permissões');
+      }
+    } catch { 
+      toast.error('Erro de conexão'); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleSaveConfig = async () => {
@@ -286,9 +362,28 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
     setPermissions(prev => {
       const existing = prev.find(p => p.moduleId === moduleId);
       if (existing) {
-        return prev.map(p => p.moduleId === moduleId ? { ...p, [field]: !p[field] } : p);
+        return prev.map(p => {
+          if (p.moduleId === moduleId) {
+            const newState = { ...p, [field]: !p[field] };
+            
+            // Se marcou 'Editar', obrigatoriamente marca 'Visualizar'
+            if (field === 'canEdit' && newState.canEdit) {
+              newState.canView = true;
+            }
+            
+            // Se desmarcou 'Visualizar', obrigatoriamente desmarca 'Editar'
+            if (field === 'canView' && !newState.canView) {
+              newState.canEdit = false;
+            }
+            
+            return newState;
+          }
+          return p;
+        });
       } else {
-        return [...prev, { moduleId, canView: field === 'canView', canEdit: field === 'canEdit' }];
+        // Se for novo, e marcou editar, já nasce com visualizar
+        const canViewInitial = field === 'canView' || field === 'canEdit';
+        return [...prev, { moduleId, canView: canViewInitial, canEdit: field === 'canEdit' }];
       }
     });
   };
@@ -313,7 +408,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
           <UserInfoHome>
             <h3>{formData.fullName || 'Sem Nome'}</h3>
             <p>Usuário desde {new Date().toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }).toUpperCase()}</p>
-            <Button variant="outline" size="sm" className="mt-2 h-7 text-[10px] gap-1" onClick={() => setShowPwd(!showPwd)}>
+            <Button variant="outline" size="sm" className="mt-2 h-7 text-[10px] gap-1" onClick={() => setShowPwdFields(!showPwdFields)}>
               <Lock size={10} /> ALTERAR SENHA
             </Button>
           </UserInfoHome>
@@ -368,7 +463,12 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
               </div>
               <div className="field">
                 <Label>E-mail *</Label>
-                <Input value={formData.email} onChange={e => setFormData({...formData, email: e.target.value, username: e.target.value})} />
+                <Input 
+                  type="email" 
+                  value={formData.email} 
+                  onChange={e => setFormData({...formData, email: e.target.value})} 
+                  placeholder="exemplo@email.com"
+                />
               </div>
               <div className="field">
                 <Label>Código Único (ID)</Label>
@@ -388,17 +488,43 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
                 <Input type="date" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
               </div>
               
-              {showPwd && (
+              {showPwdFields && (
                 <div className="col-span-full grid grid-cols-2 gap-4 mt-4 p-4 rounded-lg bg-primary/5 border border-primary/10">
                   <div className="field">
                     <Label>Nova Senha</Label>
                     <div className="relative">
-                      <Input type={showPwd ? 'text' : 'password'} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
+                      <Input 
+                        type={showPwd ? 'text' : 'password'} 
+                        value={formData.password} 
+                        onChange={e => setFormData({...formData, password: e.target.value})} 
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPwd(!showPwd)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
                     </div>
                   </div>
                   <div className="field">
                     <Label>Confirmar Senha</Label>
-                    <Input type={showPwd ? 'text' : 'password'} value={formData.confirmPassword} onChange={e => setFormData({...formData, confirmPassword: e.target.value})} />
+                    <div className="relative">
+                      <Input 
+                        type={showConfirmPwd ? 'text' : 'password'} 
+                        value={formData.confirmPassword} 
+                        onChange={e => setFormData({...formData, confirmPassword: e.target.value})} 
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPwd(!showConfirmPwd)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        {showConfirmPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -439,16 +565,16 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
             <FormGrid>
               <div className="section-title">Dados Organizacionais</div>
               <div className="field">
-                <Label>Cargo / Papel</Label>
+                <Label>Tipo de Usuário (Categoria)</Label>
                 <select 
                   className="w-full h-10 px-3 bg-background border rounded-md text-sm"
-                  value={formData.role} 
-                  onChange={e => setFormData({...formData, role: e.target.value})}
+                  value={formData.userTypeId} 
+                  onChange={e => setFormData({...formData, userTypeId: e.target.value})}
                 >
-                  <option value="user">Representantes</option>
-                  <option value="supervisor">Supervisores</option>
-                  <option value="promotor">Promotores</option>
+                  <option value="">— Selecionar —</option>
+                  {userTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
+                <p className="text-[10px] text-muted-foreground mt-1">Categoria personalizada definida nas configurações de sistema. O nível de acesso é definido pelo tipo selecionado.</p>
               </div>
               <div className="field">
                 <Label>Representante Vinculado</Label>
@@ -485,29 +611,6 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
                       <option value={1}>Vago / Inativo</option>
                     </select>
                   </div>
-                  <div className="field">
-                    <Label>Cor no Mapa</Label>
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="w-10 h-10 rounded border" 
-                        style={{ backgroundColor: `hsl(${(formData.colorIndex * 30) % 360}, 70%, 50%)` }} 
-                      />
-                      <Input 
-                        type="number" 
-                        value={formData.colorIndex} 
-                        onChange={e => setFormData({...formData, colorIndex: parseInt(e.target.value)})} 
-                        min={0} 
-                        max={12}
-                      />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">O índice de cor (1-12) define a cor das regiões no mapa.</p>
-                  </div>
-                </>
-              )}
-
-              {formData.role === 'supervisor' && (
-                <>
-                  <div className="section-title mt-6">Dados do Supervisor</div>
                   <div className="field">
                     <Label>Base Logística</Label>
                     <Input value={formData.base_logistica} onChange={e => setFormData({...formData, base_logistica: e.target.value})} placeholder="Ex: Fábrica Compactor" />

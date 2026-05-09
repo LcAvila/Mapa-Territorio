@@ -100,8 +100,8 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
 };
 
 export const requireAdmin = (req: AuthRequest, res: ExResponse, next: ExNextFunction) => {
-  if (req.user?.role !== 'admin' && req.user?.role !== 'supervisor') {
-    return res.status(403).json({ message: 'Acesso restrito' });
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ message: 'Acesso restrito a administradores' });
   }
   next();
 };
@@ -110,39 +110,44 @@ export const requirePermission = (moduleId: string, level: 'view' | 'edit' = 'vi
   return async (req: AuthRequest, res: ExResponse, next: ExNextFunction) => {
     if (!req.user) return res.status(401).json({ message: 'Não autenticado' });
     
-    // Admin and Supervisor have full access bypass
-    if (req.user.role === 'admin' || req.user.role === 'supervisor') return next();
+    // Admin has full access bypass
+    if (req.user.role === 'admin') return next();
 
-    // Representatives have default view access to their data modules
-    const DEFAULT_REP_VIEW_MODULES = ['clients', 'reps', 'territories', 'interests', 'groups'];
-    const isRep = req.user.role === 'representante' || req.user.tipo === 'representante';
+    console.log(`[PERMS] Checking ${level} for module ${moduleId} (User: ${req.user.id}, Role: ${req.user.role})`);
 
-    if (isRep && level === 'view' && DEFAULT_REP_VIEW_MODULES.includes(moduleId)) {
+    // Standard users have default view access to certain modules
+    const DEFAULT_VIEW_MODULES = ['clients', 'reps', 'territories', 'interests', 'groups', 'notifications', 'baserotas', 'clientes'];
+    const isStandardUser = req.user.role === 'user';
+
+    if (isStandardUser && level === 'view' && DEFAULT_VIEW_MODULES.includes(moduleId)) {
       return next();
     }
 
     try {
-      const permission = await prisma.userPermission.findUnique({
-        where: {
-          userId_moduleId: {
-            userId: req.user.id,
-            moduleId: moduleId
-          }
-        }
-      });
+      // Usando queryRaw para garantir que pegamos as permissões mesmo se o Prisma Client estiver "preso"
+      const perms: any[] = await prisma.$queryRawUnsafe(
+        'SELECT "canView", "canEdit" FROM "user_permissions" WHERE "userId" = $1 AND "moduleId" = $2',
+        req.user.id, moduleId
+      );
+
+      const permission = perms[0];
 
       if (!permission) {
+        console.warn(`[PERMS] No permission record found for module: ${moduleId}`);
         return res.status(403).json({ message: `Sem permissão para o módulo: ${moduleId}` });
       }
 
       if (level === 'view' && !permission.canView) {
+        console.warn(`[PERMS] View access denied for module: ${moduleId}`);
         return res.status(403).json({ message: 'Acesso de visualização negado' });
       }
 
       if (level === 'edit' && !permission.canEdit) {
+        console.warn(`[PERMS] Edit access denied for module: ${moduleId}`);
         return res.status(403).json({ message: 'Acesso de edição negado' });
       }
 
+      console.log(`[PERMS] Access granted for module: ${moduleId}`);
       next();
     } catch (error) {
       console.error('Permission check error:', error);

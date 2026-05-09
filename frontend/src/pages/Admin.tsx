@@ -3,6 +3,34 @@ import ReactQuill, { Quill } from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import DOMPurify from 'dompurify';
 
+const ICON_LIST = {
+  User: User,
+  Users: Users,
+  ShieldCheck: ShieldCheck,
+  ShieldAlert: ShieldAlert,
+  UserCog: UserCog,
+  Contact: Contact,
+  Briefcase: Briefcase,
+  GraduationCap: GraduationCap,
+  Microscope: Microscope,
+  Stethoscope: Stethoscope,
+  Headset: Headset,
+  Construction: Construction,
+  ShoppingBag: ShoppingBag,
+  Truck: Truck,
+  ChefHat: ChefHat,
+  Coffee: Coffee,
+  Plane: Plane,
+  HeartPulse: HeartPulse,
+  Hammer: Hammer,
+  Wrench: Wrench,
+  Camera: Camera,
+  MapPin: MapPin,
+  Bell: Bell,
+  Activity: Activity,
+  Database: Database
+};
+
 export interface ClienteData {
   id_cliente?: number;
   codigo_cliente?: string;
@@ -26,7 +54,8 @@ import {
   Building2, Filter, RefreshCw, ChevronRight, MessageSquare, Globe, Activity,
   TrendingUp, AlertCircle, BadgeCheck, Palette, Upload, ImageOff, Download, Truck, Settings,
   Database, Layers, Grid3X3, Calendar, FileSpreadsheet, Camera, Percent, Mail, Phone, MapPinned,
-  Route, BarChart2
+  Route, BarChart2, ShieldAlert, UserCog, Contact, GraduationCap, Microscope, Stethoscope, 
+  Headset, Construction, ShoppingBag, ChefHat, Coffee, Plane, HeartPulse, Hammer, Wrench, LucideIcon
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -71,15 +100,27 @@ interface Representative {
   _count?: { clientes: number; territories: number; };
 }
 interface Territory { id: number; municipio: string; uf: string; repCode: string; modo: string; }
-interface SystemUser { id: number; username: string; role: string; repCode: string | null; code?: string; fullName?: string; full_name?: string; document?: string; cpf_cnpj?: string; documentType?: 'cpf' | 'cnpj'; companyName?: string; company_name?: string; birth_date?: string; birthDate?: string; telefone?: string; email?: string; photo?: string; cargo?: string; groupId?: number; last_active?: string; tipo?: string; cep?: string; logradouro?: string; numero?: string; complemento?: string; bairro_end?: string; cidade?: string; estado_end?: string; area_atuacao?: string; base_logistica?: string; }
+interface SystemUser { id: number; username: string; role: string; repCode: string | null; code?: string; fullName?: string; full_name?: string; document?: string; cpf_cnpj?: string; documentType?: 'cpf' | 'cnpj'; companyName?: string; company_name?: string; birth_date?: string; birthDate?: string; telefone?: string; email?: string; photo?: string; cargo?: string; groupId?: number; last_active?: string; tipo?: string; userTypeId?: number; userType?: UserType; cep?: string; logradouro?: string; numero?: string; complemento?: string; bairro_end?: string; cidade?: string; estado_end?: string; area_atuacao?: string; base_logistica?: string; created_at?: string; createdAt?: string; }
 interface InterestRequest { id: number; nome: string; email: string | null; telefone: string | null; empresa: string | null; municipio: string; uf: string; modo: string | null; observacoes: string | null; status: 'pending' | 'accepted' | 'rejected'; created_at: string; userId?: number; repCode?: string; }
+
+interface UserType {
+  id: number;
+  name: string;
+  color: string;
+  icon: string;
+  showInMenu: boolean;
+  active: boolean;
+  isAdmin: boolean;
+  isSystemDefault: boolean;
+  createdAt: string;
+}
 
 interface Group { id: string; name: string; repCodes: string[]; createdAt: string; }
 interface SystemNotification { id: number; title: string; message: string; createdAt: string; targetAll?: boolean; targetUserIds?: number[]; }
 interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; repCode?: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; }
 interface ModulePermission { userId: number; moduleId: string; canView: boolean; canEdit: boolean; }
 
-type TabId = 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha' | 'roteiro_seq' | 'resumo_roteiro';
+type TabId = 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha' | 'roteiro_seq' | 'resumo_roteiro' | 'user_types' | 'system' | `user_type_${number}`;
 
 interface NavItem {
   id: TabId | 'settings' | 'rotas_menu' | 'users_menu';
@@ -257,6 +298,7 @@ export default function Admin() {
   const [reps, setReps] = useState<Representative[]>([]);
   const [territories, setTerritories] = useState<Territory[]>([]);
   const [users, setUsers] = useState<SystemUser[]>([]);
+  const [userTypes, setUserTypes] = useState<UserType[]>([]);
   const [interests, setInterests] = useState<InterestRequest[]>([]);
   const [clientes, setClientes] = useState<ClienteData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -307,6 +349,24 @@ export default function Admin() {
   const [groups, setGroups] = useState<Group[]>(() => LS.get('admin_groups', []));
   const [notifications, setNotifications] = useState<SystemNotification[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [seenNotifications, setSeenNotifications] = useState<number[]>(() => {
+    const key = userId ? `seen_notifications_user_${userId}` : 'seen_notifications_guest';
+    return LS.get<number[]>(key, []);
+  });
+
+  const unreadCount = useMemo(() => {
+    return notifications.filter(n => !seenNotifications.includes(n.id)).length;
+  }, [notifications, seenNotifications]);
+
+  const markAllAsSeen = useCallback(() => {
+    if (notifications.length === 0) return;
+    const key = userId ? `seen_notifications_user_${userId}` : 'seen_notifications_guest';
+    const allIds = notifications.map(n => n.id);
+    const updated = Array.from(new Set([...allIds, ...seenNotifications])).slice(0, 500);
+    setSeenNotifications(updated);
+    LS.set(key, updated);
+  }, [notifications, seenNotifications, userId]);
+
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => LS.get('admin_audit', []));
 
   // ── Auth & Permissions ──────────────────────────────────────────────────
@@ -379,8 +439,79 @@ export default function Admin() {
     repCode: '', code: '', documentType: 'cpf' as 'cpf' | 'cnpj',
     document: '', companyName: '', birthDate: '', telefone: '', photo: '',
     cargo: '', groupId: '', tipo: 'normal' as 'normal' | 'representante' | 'promotor' | 'supervisor', colorIndex: 0,
-    cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: ''
+    cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
+    userTypeId: '' // Added
   });
+
+  // ── UserTypes form ────────────────────────────────────────────────────────
+  const [isUserTypeModalOpen, setIsUserTypeModalOpen] = useState(false);
+  const [editingUserTypeId, setEditingUserTypeId] = useState<number | null>(null);
+  const [userTypeForm, setUserTypeForm] = useState({
+    name: '',
+    color: '#3b82f6',
+    icon: 'User',
+    showInMenu: false,
+    active: true,
+    isAdmin: false
+  });
+
+  const handleSaveUserType = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userTypeForm.name) return toast.error('O nome é obrigatório');
+
+    try {
+      const url = editingUserTypeId 
+        ? `${API}/api/admin/user-types/${editingUserTypeId}`
+        : `${API}/api/admin/user-types`;
+      
+      const method = editingUserTypeId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: authHeaders,
+        body: JSON.stringify(userTypeForm)
+      });
+
+      if (res.ok) {
+        toast.success(editingUserTypeId ? 'Tipo atualizado!' : 'Tipo criado!');
+        setIsUserTypeModalOpen(false);
+        fetchUserTypes();
+        addAudit(editingUserTypeId ? 'update_user_type' : 'create_user_type', 'UserType', String(editingUserTypeId || 'new'), `Tipo: ${userTypeForm.name}`);
+      } else {
+        const data = await res.json();
+        toast.error(data.message || 'Erro ao salvar tipo');
+      }
+    } catch (error) {
+      toast.error('Erro de conexão');
+    }
+  };
+
+  const handleDeleteUserType = async (id: number, name: string) => {
+    openConfirm(
+      'Remover Tipo de Usuário?',
+      `Isso removerá o tipo "${name}" e desvinculará todos os usuários deste tipo. Esta ação não pode ser desfeita.`,
+      async () => {
+        try {
+          const res = await fetch(`${API}/api/admin/user-types/${id}`, {
+            method: 'DELETE',
+            headers: authHeaders
+          });
+          if (res.ok) {
+            toast.success('Tipo removido');
+            fetchUserTypes();
+            addAudit('delete_user_type', 'UserType', String(id), `Tipo: ${name}`);
+          } else {
+            toast.error('Erro ao remover tipo');
+          }
+        } catch (error) {
+          toast.error('Erro de conexão');
+        } finally {
+          closeConfirm();
+        }
+      }
+    );
+  };
+
   const [groupsData, setGroupsData] = useState<{ id: number, name: string }[]>([]);
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
@@ -388,16 +519,25 @@ export default function Admin() {
     username: '', fullName: '', document: '', password: '', confirmPassword: '',
     role: 'user' as 'user' | 'supervisor' | 'admin',
     repCode: '', code: '', photo: '', telefone: '', birthDate: '',
-    cargo: '', companyName: '', groupId: ''
+    cargo: '', companyName: '', groupId: '',
+    userTypeId: '' // Added
   });
   const [showEditPwd, setShowEditPwd] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isRepModalOpen, setIsRepModalOpen] = useState(false);
   const [userSearch, setUserSearch] = useState('');
   const [userFilterOnline, setUserFilterOnline] = useState(false);
+  const [userSortBy, setUserSortBy] = useState<'name' | 'code' | 'date' | 'role'>('name');
 
   const filteredUsers = useMemo(() => {
-    return users.filter(u => {
+    const filtered = users.filter(u => {
+      // Filter by dynamic user type if applicable
+      if (activeTab.startsWith('user_type_')) {
+        const typeId = parseInt(activeTab.replace('user_type_', ''));
+        // @ts-ignore
+        if (Number(u.userTypeId) !== typeId) return false;
+      }
+
       const name = (u.full_name || u.fullName || u.username).toLowerCase();
       const email = u.username.toLowerCase();
       const search = userSearch.toLowerCase();
@@ -417,7 +557,32 @@ export default function Admin() {
 
       return true;
     });
-  }, [users, userSearch, userFilterOnline, userId]);
+
+    // Ordenação
+    return [...filtered].sort((a, b) => {
+      if (userSortBy === 'name') {
+        const nameA = (a.full_name || a.fullName || a.username).toLowerCase();
+        const nameB = (b.full_name || b.fullName || b.username).toLowerCase();
+        return nameA.localeCompare(nameB);
+      }
+      if (userSortBy === 'code') {
+        const codeA = (a.code || '').toLowerCase();
+        const codeB = (b.code || '').toLowerCase();
+        return codeA.localeCompare(codeB);
+      }
+      if (userSortBy === 'date') {
+        const dateA = new Date(a.created_at || a.createdAt || 0).getTime();
+        const dateB = new Date(b.created_at || b.createdAt || 0).getTime();
+        return dateB - dateA; // Mais recentes primeiro
+      }
+      if (userSortBy === 'role') {
+        const roleA = (a.role || 'user').toLowerCase();
+        const roleB = (b.role || 'user').toLowerCase();
+        return roleA.localeCompare(roleB);
+      }
+      return 0;
+    });
+  }, [users, userSearch, userFilterOnline, userId, userSortBy, activeTab]);
 
 
   const handleUserPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
@@ -499,18 +664,26 @@ export default function Admin() {
     } catch (error) { console.error('Error fetching groups:', error); }
   }, [authHeaders]);
 
+  const fetchUserTypes = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/admin/user-types`, { headers: authHeaders });
+      if (res.ok) setUserTypes(await res.json());
+    } catch (error) { console.error('Error fetching user types:', error); }
+  }, [authHeaders]);
+
   const fetchAll = useCallback(async () => {
     if (!initialLoadDone) setLoading(true);
     try {
-      const [rR, tR, uR, iR, cR] = await Promise.all([
+      const [rR, tR, uR, iR, cR, utR] = await Promise.all([
         fetch(`${API}/api/admin/reps`, { headers: authHeaders }),
         fetch(`${API}/api/admin/territories`, { headers: authHeaders }),
         fetch(`${API}/api/admin/users`, { headers: authHeaders }),
         fetch(`${API}/api/interest`, { headers: authHeaders }),
         fetch(`${API}/api/clientes`, { headers: authHeaders }),
+        fetch(`${API}/api/admin/user-types`, { headers: authHeaders }),
       ]);
 
-      const responses = [rR, tR, uR, iR, cR];
+      const responses = [rR, tR, uR, iR, cR, utR];
       const unauth = responses.find(r => r.status === 401);
       if (unauth) {
         toast.error('Sessão encerrada ou inválida. Faça login novamente.');
@@ -518,12 +691,13 @@ export default function Admin() {
         return;
       }
 
-      if (rR.ok && tR.ok && uR.ok && iR.ok && cR.ok) {
+      if (rR.ok && tR.ok && uR.ok && iR.ok && cR.ok && utR.ok) {
         setReps(await rR.json());
         setTerritories(await tR.json());
         setUsers(await uR.json());
         setInterests(await iR.json());
         setClientes(await cR.json());
+        setUserTypes(await utR.json());
       }
       // Also fetch groups
       await fetchGroups();
@@ -734,20 +908,14 @@ export default function Admin() {
     if (newUser.password !== newUser.confirmPassword) { toast.error('As senhas não coincidem!'); return; }
 
     // Mapeia tipo de cadastro → role do sistema
-    const roleMap: Record<string, string> = {
-      supervisor:    'supervisor',
-      representante: 'representante',
-      promotor:      'user',
-      normal:        'user',
-    };
-    const resolvedRole = roleMap[newUser.tipo] ?? 'user';
+    const selectedType = userTypes.find(t => String(t.id) === newUser.userTypeId);
 
     const body: Record<string, string | number | null | boolean> = {
       code: newUser.code,
       full_name: newUser.fullName,
       username: newUser.email || newUser.code,
       password: newUser.password,
-      role: resolvedRole,
+      role: selectedType?.isAdmin ? 'admin' : 'user',
       tipo: newUser.tipo || 'normal',
       repCode: newUser.repCode || null,
       telefone: newUser.telefone,
@@ -765,7 +933,8 @@ export default function Admin() {
       cidade: newUser.cidade,
       estado_end: newUser.estado_end,
       area_atuacao: newUser.area_atuacao,
-      base_logistica: newUser.base_logistica
+      base_logistica: newUser.base_logistica,
+      userTypeId: newUser.userTypeId ? Number(newUser.userTypeId) : null
     };
 
     try {
@@ -778,7 +947,8 @@ export default function Admin() {
           role: 'user', repCode: '', code: '', documentType: 'cpf',
           document: '', companyName: '', birthDate: '', telefone: '', photo: '',
           cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
-          cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: ''
+          cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
+          userTypeId: ''
         });
         setIsUserModalOpen(false);
         fetchAll();
@@ -801,18 +971,39 @@ export default function Admin() {
   const handleUpdateUser = async (id: number) => {
     if (!editUserForm.username.trim()) { toast.error('Email (Username) obrigatório'); return; }
     if (editUserForm.password && editUserForm.password !== editUserForm.confirmPassword) { toast.error('As senhas não coincidem!'); return; }
-    const body: Record<string, string> = { username: editUserForm.username, role: editUserForm.role, repCode: editUserForm.repCode, full_name: editUserForm.fullName };
+    
+    const selectedType = userTypes.find(t => String(t.id) === editUserForm.userTypeId);
+
+    const body: Record<string, any> = { 
+      username: editUserForm.username, 
+      role: selectedType?.isAdmin ? 'admin' : 'user', 
+      repCode: editUserForm.repCode || null, 
+      full_name: editUserForm.fullName,
+      telefone: editUserForm.telefone,
+      cpf_cnpj: editUserForm.document,
+      birth_date: editUserForm.birthDate || null,
+      cargo: editUserForm.cargo,
+      company_name: editUserForm.companyName,
+      groupId: editUserForm.groupId ? Number(editUserForm.groupId) : null,
+      userTypeId: editUserForm.userTypeId ? Number(editUserForm.userTypeId) : null
+    };
+
     if (editUserForm.password.trim()) body.password = editUserForm.password;
     if (editUserForm.photo) body.photo = editUserForm.photo;
-    const res = await fetch(`${API}/api/admin/users/${id}`, { method: 'PUT', headers: authHeaders, body: JSON.stringify(body) });
-    if (res.ok) {
-      toast.success('Usuário atualizado!');
-      addAudit('update_user', 'Usuário', String(id), `Atualizou usuário ${editUserForm.username}`);
-      setEditingUserId(null);
-      setIsUserModalOpen(false);
-      fetchAll();
+
+    try {
+      const res = await fetch(`${API}/api/admin/users/${id}`, { method: 'PUT', headers: authHeaders, body: JSON.stringify(body) });
+      if (res.ok) {
+        toast.success('Usuário atualizado!');
+        addAudit('update_user', 'Usuário', String(id), `Atualizou usuário ${editUserForm.username}`);
+        setEditingUserId(null);
+        setIsUserModalOpen(false);
+        fetchAll();
+      }
+      else { const err = await res.json(); toast.error(err.message || 'Erro'); }
+    } catch (err) {
+      toast.error('Erro ao atualizar usuário');
     }
-    else { const err = await res.json(); toast.error(err.message || 'Erro'); }
   };
 
   const handleInterestStatus = async (id: number, status: 'accepted' | 'rejected') => {
@@ -993,21 +1184,29 @@ export default function Admin() {
   const displayName = authUserName || currentUser?.full_name || currentUser?.fullName || currentUser?.username || 'Admin';
   const displayEmail = currentUser?.username || '';
   const displayPhoto = currentUser?.photo || '';
-  const displayCargo = currentUser?.cargo || currentUser?.tipo || role || 'usuário';
+  const displayCargo = currentUser?.cargo || role || 'usuário';
 
   const navItems: NavItem[] = [
-    { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard, restrict: ['admin', 'supervisor', 'representante'] },
+    { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
     {
-      id: 'users_menu' as const, label: 'Usuários', icon: UsersRound, restrict: ['admin', 'supervisor'], subItems: [
-        { id: 'users' as const, label: 'Lista de Usuários', icon: UserPlus, count: users.length },
-        { id: 'reps' as const, label: 'Representantes', icon: Briefcase, count: reps.length },
+      id: 'users_menu' as const, label: 'Usuários', icon: UsersRound, restrict: ['admin'], subItems: [
+        { id: 'users' as const, label: 'Todos os Usuários', icon: UserPlus, count: users.length },
+        // Dynamic User Types submenus
+        ...userTypes
+          .filter(t => t.showInMenu && t.active)
+          .map(t => ({
+            id: `user_type_${t.id}` as TabId,
+            label: t.name,
+            icon: User,
+            count: users.filter(u => u.userTypeId === t.id).length
+          })),
         { id: 'groups' as const, label: 'Grupos', icon: UsersRound, count: groups.length },
       ]
     },
-    { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor'] },
-    { id: 'territories' as const, label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin', 'supervisor'] },
+    { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin'] },
+    { id: 'territories' as const, label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin'] },
     {
-      id: 'rotas_menu' as const, label: 'Planejamento de Áreas', icon: Truck, restrict: ['admin', 'supervisor'], subItems: [
+      id: 'rotas_menu' as const, label: 'Planejamento de Áreas', icon: Truck, restrict: ['admin'], subItems: [
         { id: 'leituraplanilha' as const, label: 'Leitura Excel', icon: FileSpreadsheet },
         { id: 'roteiro_seq' as const, label: 'Roteiro Sequencial', icon: Route },
         { id: 'resumo_roteiro' as const, label: 'Resumo Roteiro', icon: BarChart2 },
@@ -1019,10 +1218,10 @@ export default function Admin() {
       ]
     },
     { id: 'interests' as const, label: 'Interesses', icon: HandHeart, count: pendingInterests, badge: pendingInterests > 0, restrict: ['admin'] },
-    { id: 'notifications' as const, label: 'Enviar Alerta', icon: Bell, count: notifications.length, restrict: ['admin'] },
+    { id: 'notifications' as const, label: 'Enviar Alerta', icon: Bell, count: unreadCount, badge: unreadCount > 0, restrict: ['admin'] },
     {
       id: 'settings' as const, label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
-        { id: 'personal' as const, label: 'Personalização', icon: Palette },
+        { id: 'system' as const, label: 'Sistema', icon: Settings },
         { id: 'audit' as const, label: 'Auditoria', icon: ScrollText, count: auditLogs.length },
       ]
     }
@@ -1030,26 +1229,26 @@ export default function Admin() {
     // If it's a core section (like dashboard), allow or check specific permission if needed
     if (item.id === 'dashboard') return true;
 
-    // Check role-based restriction first
-    if (item.restrict && !item.restrict.includes(role || '')) return false;
-
-    // Check modular permission for specific areas
+    // Modular permission check
     const moduleMap: Record<string, string> = {
       'baserotas': 'clientes',
-      'reps': 'reps',
       'territories': 'territories',
       'rotas_menu': 'routes',
       'users_menu': 'users',
       'interests': 'interests',
       'notifications': 'notifications',
       'audit': 'audit',
-      'users': 'users'
+      'users': 'users',
+      'system': 'settings'
     };
 
     const moduleId = moduleMap[item.id as string];
-    if (moduleId && role !== 'admin') {
-      return canAccess(moduleId);
-    }
+    
+    // If user has explicit modular permission, grant access regardless of role restriction
+    if (moduleId && canAccess(moduleId)) return true;
+
+    // Otherwise, check role-based restriction
+    if (item.restrict && !item.restrict.includes(role || '')) return false;
 
     return true;
   });
@@ -1197,39 +1396,97 @@ export default function Admin() {
             </div>
           </div>
           <div className="admin-header-right">
-            <Popover open={showNotifMenu} onOpenChange={setShowNotifMenu}>
+            <Popover 
+              open={showNotifMenu} 
+              onOpenChange={(open) => {
+                setShowNotifMenu(open);
+                if (open) markAllAsSeen();
+              }}
+            >
               <PopoverTrigger asChild>
                 <button className="admin-header-icon-btn relative" title="Notificações">
                   <Bell style={{ width: 15, height: 15 }} />
-                  {notifications.length > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-destructive text-[9px] leading-[15px] text-white font-bold text-center">
-                      {notifications.length > 9 ? '9+' : notifications.length}
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-destructive text-[9px] leading-[15px] text-white font-bold text-center animate-in zoom-in duration-300">
+                      {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                   )}
                 </button>
               </PopoverTrigger>
-              <PopoverContent className="w-[360px] p-0" align="end">
-                <div className="px-4 py-3 border-b border-border/60">
-                  <h4 className="text-sm font-bold">Central de Notificações</h4>
-                  <p className="text-[11px] text-muted-foreground">Últimos alertas do sistema</p>
+              <PopoverContent className="w-[380px] p-0 shadow-2xl border-primary/10" align="end">
+                <div className="px-4 py-4 bg-primary/5 border-b border-border/60">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold flex items-center gap-2">
+                        Central de Notificações
+                        {unreadCount > 0 && (
+                          <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                            {unreadCount} nova(s)
+                          </span>
+                        )}
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground">Últimos alertas do sistema</p>
+                    </div>
+                    <Bell className="w-4 h-4 text-primary/40" />
+                  </div>
                 </div>
-                <div className="max-h-[360px] overflow-y-auto custom-scrollbar divide-y divide-border/40">
+                <div className="max-h-[420px] overflow-y-auto custom-scrollbar">
                   {loadingNotifications ? (
-                    <div className="py-8 text-center text-xs text-muted-foreground">Carregando...</div>
+                    <div className="py-12 flex flex-col items-center gap-3">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                      <p className="text-xs text-muted-foreground">Carregando alertas...</p>
+                    </div>
                   ) : notifications.length === 0 ? (
-                    <div className="py-10 text-center text-xs text-muted-foreground">Nenhuma notificação</div>
-                  ) : (
-                    notifications.map((n) => (
-                      <div key={n.id} className="px-4 py-3 hover:bg-secondary/40 transition-colors">
-                        <p className="text-xs font-semibold text-foreground">{n.title}</p>
-                        <div className="text-[11px] text-muted-foreground mt-1 line-clamp-2" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(n.message) }} />
-                        <p className="text-[10px] text-muted-foreground mt-2">
-                          {new Date(n.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                        </p>
+                    <div className="py-16 text-center">
+                      <div className="w-12 h-12 bg-secondary/50 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Bell className="w-5 h-5 text-muted-foreground/40" />
                       </div>
-                    ))
+                      <p className="text-xs text-muted-foreground">Nenhuma notificação por enquanto</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border/30">
+                      {notifications.map((n) => {
+                        const isRead = seenNotifications.includes(n.id);
+                        return (
+                          <div key={n.id} className={`group px-5 py-4 transition-all duration-200 ${isRead ? 'opacity-80' : 'bg-primary/[0.02] border-l-2 border-l-primary shadow-[inset_0_0_20px_rgba(var(--primary),0.01)]'}`}>
+                            <div className="flex justify-between items-start gap-3">
+                              <p className={`text-xs font-bold leading-tight ${isRead ? 'text-foreground/70' : 'text-foreground'}`}>
+                                {n.title}
+                              </p>
+                              {!isRead && (
+                                <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1 shadow-[0_0_8px_rgba(var(--primary),0.5)]" />
+                              )}
+                            </div>
+                            <div className="text-[11px] leading-relaxed text-muted-foreground mt-1.5 line-clamp-3 group-hover:line-clamp-none transition-all duration-300" 
+                              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(n.message) }} 
+                            />
+                            <div className="flex items-center gap-2 mt-3">
+                              <Clock className="w-3 h-3 text-muted-foreground/60" />
+                              <p className="text-[10px] text-muted-foreground/70 font-medium">
+                                {new Date(n.createdAt).toLocaleString('pt-BR', { 
+                                  day: '2-digit', 
+                                  month: '2-digit', 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
+                {notifications.length > 0 && (
+                  <div className="p-2 bg-secondary/20 border-t border-border/40 text-center">
+                    <button 
+                      onClick={() => { setActiveTab('notifications'); setShowNotifMenu(false); }}
+                      className="text-[10px] font-bold text-primary hover:underline transition-all"
+                    >
+                      Ver histórico completo
+                    </button>
+                  </div>
+                )}
               </PopoverContent>
             </Popover>
             <button className="admin-header-icon-btn" onClick={fetchAll} title="Recarregar dados">
@@ -1280,6 +1537,25 @@ export default function Admin() {
                   <span className="text-[11px] font-semibold text-muted-foreground">Tema</span>
                   <ThemeToggle />
                 </div>
+                <button
+                  className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors"
+                  onClick={() => { 
+                    setShowUserMenu(false); 
+                    // Use a fresh fetch to get current user data or find in list
+                    const me = users.find(u => u.id === Number(userId));
+                    if (me) {
+                      setEditingUserId(me.id);
+                      setIsUserModalOpen(true);
+                    } else {
+                      // Fallback if not in list yet
+                      setEditingUserId(Number(userId));
+                      setIsUserModalOpen(true);
+                    }
+                  }}
+                >
+                  <User style={{ width: 14, height: 14 }} />
+                  Perfil
+                </button>
                 <button
                   className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors"
                   onClick={() => { setShowUserMenu(false); navigate('/admin'); }}
@@ -1648,12 +1924,15 @@ export default function Admin() {
 
 
           {/* ━━ USUÁRIOS ━━ */}
-          {activeTab === 'users' && (
+          {(activeTab === 'users' || activeTab.startsWith('user_type_')) && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
               <div className="flex flex-col md:flex-row gap-4 items-center justify-between pb-2">
                 <div>
                   <h2 className="text-xl font-bold flex items-center gap-2">
-                    <Users className="w-6 h-6 text-primary" /> Gestão de Usuários
+                    <Users className="w-6 h-6 text-primary" /> 
+                    {activeTab.startsWith('user_type_') 
+                      ? userTypes.find(t => t.id === parseInt(activeTab.replace('user_type_', '')))?.name || 'Gestão de Usuários'
+                      : 'Gestão de Usuários'}
                   </h2>
                   <p className="text-sm text-muted-foreground">Controle de acesso e permissões.</p>
                 </div>
@@ -1667,6 +1946,49 @@ export default function Admin() {
                       onChange={(e) => setUserSearch(e.target.value)}
                     />
                   </div>
+
+                  {/* Filtro de Ordenação Estilizado */}
+                  <div className="flex items-center gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button className="flex items-center gap-2.5 bg-secondary/40 px-4 py-2 rounded-lg border border-border/40 hover:bg-secondary/60 transition-all group">
+                          <Filter className="w-3.5 h-3.5 text-primary group-hover:scale-110 transition-transform" />
+                          <div className="flex flex-col items-start leading-none">
+                            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter opacity-70">ORDENAR POR</span>
+                            <span className="text-xs font-bold text-foreground">
+                              {userSortBy === 'name' ? 'Nome' : 
+                               userSortBy === 'code' ? 'Código' : 
+                               userSortBy === 'role' ? 'Tipo de Usuário' : 'Data de Criação'}
+                            </span>
+                          </div>
+                          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-1" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-56 p-1.5 shadow-2xl border-primary/10" align="end">
+                        <div className="space-y-1">
+                          {[
+                            { id: 'name', label: 'Nome', icon: User },
+                            { id: 'code', label: 'Código', icon: Database },
+                            { id: 'role', label: 'Tipo de Usuário', icon: ShieldCheck },
+                            { id: 'date', label: 'Data de Criação', icon: Calendar },
+                          ].map((opt) => (
+                            <button
+                              key={opt.id}
+                              onClick={() => setUserSortBy(opt.id as any)}
+                              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md transition-all ${userSortBy === opt.id ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'hover:bg-secondary text-muted-foreground hover:text-foreground'}`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <opt.icon className={`w-4 h-4 ${userSortBy === opt.id ? 'text-white' : 'text-primary/60'}`} />
+                                <span className="text-xs font-bold">{opt.label}</span>
+                              </div>
+                              {userSortBy === opt.id && <Check className="w-3.5 h-3.5 text-white" />}
+                            </button>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
                   <Button
                     variant={userFilterOnline ? "default" : "outline"}
                     className={`gap-2 ${userFilterOnline ? 'bg-emerald-500 hover:bg-emerald-600 border-emerald-500 text-white' : ''}`}
@@ -1683,7 +2005,8 @@ export default function Admin() {
                       role: 'user', repCode: '', code: '', documentType: 'cpf',
                       document: '', companyName: '', birthDate: '', telefone: '', photo: '',
                       cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
-                      cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: ''
+                      cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
+                      userTypeId: ''
                     });
                     setIsUserModalOpen(true);
                   }}>
@@ -1701,37 +2024,56 @@ export default function Admin() {
                   {filteredUsers.map(u => {
                     const rawLastActive = u.last_active || (u as SystemUser & { lastActive?: string }).lastActive;
                     const lastDate = rawLastActive ? new Date(rawLastActive) : null;
-                    // epoch (new Date(0)) or null = never logged in sentinel → always offline
                     const hasEverLoggedIn = lastDate !== null && !isNaN(lastDate.getTime()) && lastDate.getFullYear() > 1970;
-                    const isOnline = hasEverLoggedIn && (
-                      (u.id === userId) || (Date.now() - lastDate!.getTime() < 300000)
-                    );
+                    const isOnline = hasEverLoggedIn && ((u.id === userId) || (Date.now() - lastDate!.getTime() < 300000));
                     const lastActive = hasEverLoggedIn ? lastDate : null;
+
+                    const userType = userTypes.find(t => t.id === Number(u.userTypeId));
+                    const isAdminType = userType?.isAdmin || u.role === 'admin';
+                    
+                    // Prioridade de cor:
+                    // 1. Se for Admin (tipo ou role), usa amarelo
+                    // 2. Se tiver um tipo personalizado com cor definida, usa a cor do tipo
+                    // 3. Padrão: Azul
+                    const cardColor = isAdminType ? '#fbbf24' : (userType?.color || '#3b82f6');
+                    
+                    const TypeIcon = userType?.icon && ICON_LIST[userType.icon as keyof typeof ICON_LIST] 
+                      ? ICON_LIST[userType.icon as keyof typeof ICON_LIST] 
+                      : (isAdminType ? ShieldCheck : (u.role === 'supervisor' ? Briefcase : User));
 
                     return (
                       <Card key={u.id} className="group relative overflow-hidden border-border/40 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 transform hover:-translate-y-1">
-                        <div className={`h-1.5 w-full absolute top-0 left-0 ${u.role === 'admin' ? 'bg-amber-500' : u.role === 'supervisor' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                        <div className="h-1.5 w-full absolute top-0 left-0" style={{ backgroundColor: cardColor }} />
                         <CardContent className="p-5">
                           <div className="flex flex-col items-center text-center space-y-3">
                             <div className="relative">
                               <div className="w-16 h-16 rounded-2xl bg-secondary border border-border/50 flex items-center justify-center overflow-hidden transition-transform group-hover:scale-105 duration-300">
                                 {u.photo ? <img src={u.photo} alt="Avatar" className="w-full h-full object-cover" /> : <User className="w-8 h-8 text-muted-foreground/30" />}
                               </div>
-                              <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-lg flex items-center justify-center border-2 border-card shadow-sm ${u.role === 'admin' ? 'bg-amber-500 text-white' : u.role === 'supervisor' ? 'bg-emerald-500 text-white' : 'bg-blue-500 text-white'}`}>
-                                {u.role === 'admin' ? <ShieldCheck className="w-3" /> : u.role === 'supervisor' ? <Briefcase className="w-3" /> : <User className="w-3" />}
+                              <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg flex items-center justify-center border-2 border-card shadow-sm text-white" style={{ backgroundColor: cardColor }}>
+                                <TypeIcon className="w-3" />
                               </div>
-                              {/* Online/Offline status dot */}
                               <div className={`absolute -top-1 -left-1 w-3.5 h-3.5 rounded-full border-2 border-card shadow-sm ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40'}`} title={isOnline ? 'Online' : 'Offline'} />
                             </div>
                             <div className="space-y-0.5 w-full">
                               <h3 className="font-bold text-sm truncate" title={u.full_name || u.fullName || u.username}>{u.full_name || u.fullName || u.username}</h3>
                               <p className="text-[10px] text-muted-foreground truncate">{u.username}</p>
-                              {!isOnline && lastActive && (
-                                <p className="text-[9px] text-muted-foreground/60 italic mt-0.5">Visto em {lastActive.toLocaleDateString('pt-BR')} às {lastActive.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
-                              )}
+                              
+                              <div className="flex flex-col gap-0.5 mt-1">
+                                {u.created_at || u.createdAt ? (
+                                  <p className="text-[9px] text-muted-foreground/60 flex items-center justify-center gap-1">
+                                    <Calendar className="w-2.5 h-2.5" />
+                                    Criado em: {new Date(u.created_at || u.createdAt || 0).toLocaleDateString('pt-BR')}
+                                  </p>
+                                ) : null}
+
+                                {!isOnline && lastActive && (
+                                  <p className="text-[9px] text-muted-foreground/60 italic">Visto em {lastActive.toLocaleDateString('pt-BR')} às {lastActive.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                                )}
+                              </div>
                             </div>
                             <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
-                              <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${u.role === 'admin' ? 'bg-amber-500/15 text-amber-500' : u.role === 'supervisor' ? 'bg-emerald-500/15 text-emerald-500' : 'bg-blue-500/15 text-blue-500'}`}>{u.role}</span>
+                              <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase" style={{ backgroundColor: `${cardColor}20`, color: cardColor }}>{userType?.name || u.role}</span>
                               {u.repCode && <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase bg-secondary text-muted-foreground">Rep: {u.repCode}</span>}
                             </div>
                           </div>
@@ -1752,7 +2094,8 @@ export default function Admin() {
                                 birthDate: u.birth_date || u.birthDate || '',
                                 cargo: u.cargo || '',
                                 companyName: u.company_name || u.companyName || '',
-                                groupId: String(u.groupId || '')
+                                groupId: String(u.groupId || ''),
+                                userTypeId: String(u.userTypeId || '')
                               });
                               setIsUserModalOpen(true);
                             }}><Pencil className="w-4 h-4" /></Button>
@@ -1768,131 +2111,231 @@ export default function Admin() {
                 </div>
               )}
 
-              <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
-                <DialogContent className={editingUserId ? "max-w-6xl p-0 border-none bg-transparent shadow-none" : "max-w-4xl"}>
-                  {editingUserId ? (
-                    <>
-                      <DialogHeader className="sr-only">
-                        <DialogTitle>Gerenciador de Perfil - {users.find(u => u.id === editingUserId)?.full_name || 'Usuário'}</DialogTitle>
-                        <DialogDescription>Configurações de perfil, permissões e histórico do usuário.</DialogDescription>
-                      </DialogHeader>
-                      <UserProfileManager
-                        user={users.find(u => u.id === editingUserId)!}
-                        reps={reps}
-                        onUpdate={fetchAll}
-                        onClose={() => setIsUserModalOpen(false)}
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <DialogHeader className="pb-3 border-b border-border/40">
-                        <DialogTitle className="flex items-center gap-2 text-xl"><UserPlus className="w-5 h-5 text-primary" /> Novo Usuário</DialogTitle>
-                      </DialogHeader>
-                      <form onSubmit={(e) => { handleCreateUser(e); setIsUserModalOpen(false); }} className="pt-2">
-                        <div className="flex flex-col md:flex-row gap-6">
-                          
-                          {/* Coluna da Foto (menor) */}
-                          <div className="flex flex-col items-center gap-2 w-32 shrink-0 pt-2">
-                            <label className="cursor-pointer w-24 h-24 rounded-full bg-secondary border-2 border-dashed border-border/60 flex items-center justify-center overflow-hidden hover:border-primary/50 transition-all select-none group relative">
-                              {newUser.photo ? (
+            </div>
+          )}
+
+          {/* ━━ SISTEMA (Personalização e Tipos de Usuário) ━━ */}
+          {activeTab === 'system' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              {/* Seção de Personalização */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-border/40 pb-2">
+                  <Palette className="w-5 h-5 text-primary" />
+                  <h2 className="text-lg font-bold">Personalização do Sistema</h2>
+                </div>
+                
+                <div className="max-w-3xl">
+                  <Card className="border-border/40">
+                    <CardHeader className="pb-4">
+                      <CardTitle className="text-sm">Identidade Visual</CardTitle>
+                      <CardDescription className="text-xs">Configure a logo e o nome da sua empresa no sistema.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Logo Upload */}
+                        <div className="space-y-3">
+                          <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Logo da Empresa</Label>
+                          <div className="flex items-center gap-4">
+                            <div className="w-20 h-20 rounded-xl border-2 border-dashed border-border flex items-center justify-center bg-secondary/30 relative overflow-hidden group">
+                              {brandLogo ? (
                                 <>
-                                  <img src={newUser.photo} alt="Avatar" className="w-full h-full object-cover" />
-                                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Camera className="w-5 h-5 text-white" />
+                                  <img src={brandLogo} alt="Logo" className="w-full h-full object-contain p-2" />
+                                  <div className="absolute inset-0 bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <Button variant="destructive" size="icon" className="w-7 h-7 rounded-full" onClick={handleRemoveLogo}>
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
                                   </div>
                                 </>
                               ) : (
-                                <Camera className="w-8 h-8 text-muted-foreground opacity-40 group-hover:scale-110 transition-transform" />
+                                <ImageOff className="w-6 h-6 text-muted-foreground opacity-20" />
                               )}
-                              <input type="file" accept="image/*" className="hidden" onChange={e => handleUserPhotoUpload(e, false)} />
-                            </label>
-                            <div className="text-center">
-                              <p className="text-[10px] font-bold text-foreground mt-1">FOTO DE PERFIL</p>
-                              <p className="text-[9px] text-muted-foreground">Max 2MB</p>
+                            </div>
+                            <div className="flex-1 space-y-1.5">
+                              <input type="file" id="logo-upload-sys" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                              <Button variant="outline" size="sm" className="gap-2" onClick={() => document.getElementById('logo-upload-sys')?.click()}>
+                                <Upload className="w-3.5 h-3.5" /> Enviar Logo
+                              </Button>
+                              <p className="text-[10px] text-muted-foreground">Máximo 2MB. Recomendado PNG transparente.</p>
                             </div>
                           </div>
+                        </div>
 
-                          {/* Resto do Formulário em Grid */}
-                          <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-x-5 gap-y-4">
-                            
-                            {/* Linha 1 */}
-                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Código *</Label><Input value={newUser.code} onChange={e => setNewUser({ ...newUser, code: e.target.value.replace(/[^a-zA-Z0-9.-]/g, '') })} required className="h-9 text-xs" /></div>
-                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Nome Completo</Label><Input value={newUser.fullName} onChange={e => setNewUser({ ...newUser, fullName: e.target.value })} className="h-9 text-xs" /></div>
-                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">E-mail</Label><Input type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} className="h-9 text-xs" /></div>
-                            
-                            {/* Linha 2 */}
-                            <div className="space-y-1.5">
-                              <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Tipo de Cadastro</Label>
-                              <CustomSelect options={[ { value: 'normal', label: 'Normal' }, { value: 'representante', label: 'Representante' }, { value: 'promotor', label: 'Promotor' }, { value: 'supervisor', label: 'Supervisor' } ]} value={newUser.tipo} onChange={v => setNewUser({ ...newUser, tipo: v as typeof newUser.tipo, repCode: '', colorIndex: 0 })} placeholder="Selecione..." className="h-9" />
-                            </div>
-                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Cargo</Label><Input value={newUser.cargo} onChange={e => setNewUser({ ...newUser, cargo: e.target.value })} placeholder="Ex: Gerente" className="h-9 text-xs" /></div>
-                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Nome da Empresa</Label><Input value={newUser.companyName} onChange={e => setNewUser({ ...newUser, companyName: e.target.value })} placeholder="Ex: Tech Soluções" className="h-9 text-xs" /></div>
+                        {/* Nome da Empresa */}
+                        <div className="space-y-3">
+                          <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Nome da Empresa</Label>
+                          <div className="flex flex-col gap-2">
+                            <Input value={brandNameDraft} onChange={e => setBrandNameDraft(e.target.value)} placeholder="Ex: Mapa Território" />
+                            <Button onClick={handleSaveBrandName} size="sm" className="gap-2 self-start"><Save className="w-3.5 h-3.5" /> Salvar Nome</Button>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
 
-                            {/* Linha 3 */}
-                            <div className="space-y-1.5">
-                              <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Grupo</Label>
-                              <CustomSelect options={[ { value: '', label: '— Nenhum —' }, ...groupsData.map(g => ({ value: String(g.id), label: g.name })) ]} value={String(newUser.groupId)} onChange={v => setNewUser({ ...newUser, groupId: v })} placeholder="Selecione..." className="h-9" />
-                            </div>
-                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Telefone</Label><Input value={newUser.telefone} onChange={e => setNewUser({ ...newUser, telefone: e.target.value })} placeholder="(00) 00000-0000" className="h-9 text-xs" /></div>
-                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Data de Nasc.</Label><Input type="date" value={newUser.birthDate} onChange={e => setNewUser({ ...newUser, birthDate: e.target.value })} className="h-9 text-xs" /></div>
+              {/* Seção de Tipos de Usuário */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-primary" />
+                    <h2 className="text-lg font-bold">Tipos de Usuário</h2>
+                  </div>
+                  <Button size="sm" className="gap-2" onClick={() => {
+                    setEditingUserTypeId(null);
+                    setUserTypeForm({ name: '', color: '#3b82f6', icon: 'User', showInMenu: false, active: true, isAdmin: false });
+                    setIsUserTypeModalOpen(true);
+                  }}>
+                    <Plus className="w-3.5 h-3.5" /> Novo Tipo
+                  </Button>
+                </div>
 
-                            {/* Linha 4 */}
-                            <div className="space-y-1.5">
-                              <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Tipo Doc</Label>
-                              <div className="flex gap-1 h-9">
-                                {(['cpf', 'cnpj'] as const).map(t => (
-                                  <button key={t} type="button" onClick={() => setNewUser({ ...newUser, documentType: t, document: '' })} className={`flex-1 rounded-md text-[10px] font-bold border transition-colors ${newUser.documentType === t ? 'bg-primary border-primary text-white' : 'border-border text-muted-foreground hover:bg-secondary'}`}>
-                                    {t.toUpperCase()}
-                                  </button>
-                                ))}
+                {userTypes.length === 0 ? (
+                  <div className="py-12 flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed border-border/40 rounded-xl">
+                    <ShieldCheck className="w-10 h-10 opacity-10 mb-2" />
+                    <p className="text-sm font-medium">Nenhum tipo cadastrado</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {userTypes.map(type => {
+                      const TypeIcon = ICON_LIST[type.icon as keyof typeof ICON_LIST] || User;
+                      const isAdminType = type.isAdmin || type.name.toLowerCase() === 'admin';
+                      const isDefaultUser = !isAdminType && type.name.toLowerCase() === 'usuário';
+                      const cardColor = isAdminType ? '#fbbf24' : (isDefaultUser ? '#3b82f6' : type.color);
+
+                      return (
+                        <Card key={type.id} className={`group relative overflow-hidden border-border/40 hover:border-primary/50 transition-all duration-300 ${!type.active ? 'opacity-60 grayscale-[0.5]' : ''}`}>
+                          <div className="h-1 w-full absolute top-0 left-0" style={{ backgroundColor: cardColor }} />
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white shadow-sm" style={{ backgroundColor: cardColor }}>
+                                <TypeIcon className="w-4 h-4" />
+                              </div>
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                                  setEditingUserTypeId(type.id);
+                                  setUserTypeForm({ name: type.name, color: type.color, icon: type.icon || 'User', showInMenu: type.showInMenu, active: type.active, isAdmin: type.isAdmin });
+                                  setIsUserTypeModalOpen(true);
+                                }}><Pencil className="w-3.5 h-3.5" /></Button>
+                                {!type.isSystemDefault && (
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteUserType(type.id, type.name)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                                )}
                               </div>
                             </div>
-                            <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{newUser.documentType.toUpperCase()}</Label><Input value={newUser.document} onChange={e => setNewUser({ ...newUser, document: maskDoc(e.target.value, newUser.documentType) })} className="h-9 text-xs" /></div>
-
-                            {/* Linhas de Senha (movidas para baixo) */}
-                            <div className="space-y-1.5 md:col-start-1">
-                              <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Senha *</Label>
-                              <div className="relative">
-                                <Input type={showNewPwd ? 'text' : 'password'} value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} required className="h-9 text-xs pr-9" />
-                                <button type="button" className="absolute right-2.5 top-1/2 -translate-y-1/2" onClick={() => setShowNewPwd(!showNewPwd)}>{showNewPwd ? <EyeOff className="w-3.5 h-3.5 hover:text-primary transition-colors" /> : <Eye className="w-3.5 h-3.5 hover:text-primary transition-colors" />}</button>
-                              </div>
+                            <h3 className="font-bold text-sm mb-1 flex items-center gap-2">
+                              {type.name}
+                              {isAdminType && <ShieldCheck className="w-3 h-3 text-amber-500" />}
+                            </h3>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground font-bold uppercase">
+                                {users.filter(u => u.userTypeId === type.id).length} Usuários
+                              </span>
+                              {type.showInMenu && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-bold uppercase flex items-center gap-1">
+                                  <Eye className="w-2.5 h-2.5" /> Sidebar
+                                </span>
+                              )}
+                              {!type.active && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive font-bold uppercase">Inativo</span>
+                              )}
                             </div>
-                            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Confirmar Senha *</Label><Input type={showNewPwd ? 'text' : 'password'} value={newUser.confirmPassword} onChange={e => setNewUser({ ...newUser, confirmPassword: e.target.value })} required className="h-9 text-xs" /></div>
-                          </div>
-                        </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
-                        <div className="mt-6 pt-4 border-t border-border/40 grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <h4 className="col-span-full text-xs font-bold text-primary mb-1">ENDEREÇO</h4>
-                          <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">CEP</Label><Input value={newUser.cep} onChange={e => setNewUser({ ...newUser, cep: e.target.value.replace(/\D/g, '') })} onBlur={() => fetchCepAdmin(newUser.cep)} maxLength={8} className="h-9 text-xs" /></div>
-                          <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Logradouro / Rua</Label><Input value={newUser.logradouro} onChange={e => setNewUser({ ...newUser, logradouro: e.target.value })} className="h-9 text-xs" /></div>
-                          <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Número</Label><Input value={newUser.numero} onChange={e => setNewUser({ ...newUser, numero: e.target.value })} className="h-9 text-xs" /></div>
-                          <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Complemento</Label><Input value={newUser.complemento} onChange={e => setNewUser({ ...newUser, complemento: e.target.value })} className="h-9 text-xs" /></div>
-                          <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bairro</Label><Input value={newUser.bairro_end} onChange={e => setNewUser({ ...newUser, bairro_end: e.target.value })} className="h-9 text-xs" /></div>
-                          <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Cidade</Label><Input value={newUser.cidade} onChange={e => setNewUser({ ...newUser, cidade: e.target.value })} className="h-9 text-xs" /></div>
-                          <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">UF</Label><Input value={newUser.estado_end} onChange={e => setNewUser({ ...newUser, estado_end: e.target.value })} maxLength={2} className="h-9 text-xs uppercase" /></div>
-                        </div>
-
-                        {newUser.tipo === 'supervisor' && (
-                          <div className="mt-6 pt-4 border-t border-border/40 grid grid-cols-1 md:grid-cols-2 gap-4 bg-primary/5 p-4 rounded-lg">
-                            <h4 className="col-span-full text-xs font-bold text-primary mb-1">DADOS DO SUPERVISOR</h4>
-                            <div className="space-y-1.5">
-                              <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Base Logística</Label>
-                              <Input value={newUser.base_logistica} onChange={e => setNewUser({ ...newUser, base_logistica: e.target.value })} placeholder="Ex: Fábrica Compactor" className="h-9 text-xs bg-background" />
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Área de Atuação</Label>
-                              <Input value={newUser.area_atuacao} onChange={e => setNewUser({ ...newUser, area_atuacao: e.target.value })} placeholder="Ex: RJ Capital e Baixada" className="h-9 text-xs bg-background" />
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="flex gap-3 pt-6 mt-4 border-t border-border/10 justify-end">
-                          <Button variant="ghost" type="button" onClick={() => setIsUserModalOpen(false)} className="w-32">Cancelar</Button>
-                          <Button type="submit" className="w-48 gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"><Save className="w-4 h-4" /> Cadastrar Usuário</Button>
-                        </div>
-                      </form>
-                    </>
-                  )}
+              {/* Modal Novo/Editar Tipo */}
+              <Dialog open={isUserTypeModalOpen} onOpenChange={setIsUserTypeModalOpen}>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>{editingUserTypeId ? 'Editar Tipo' : 'Novo Tipo de Usuário'}</DialogTitle>
+                    <DialogDescription className="text-xs">Defina as configurações de categorização para este tipo.</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleSaveUserType} className="space-y-4 pt-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Nome do Tipo</Label>
+                      <Input 
+                        placeholder="Ex: Gerente, Vendedor..." 
+                        value={userTypeForm.name}
+                        onChange={e => setUserTypeForm({ ...userTypeForm, name: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Cor de Identificação</Label>
+                      <div className="flex gap-2 items-center">
+                        <Input 
+                          type="color" 
+                          className="w-10 h-9 p-1 cursor-pointer" 
+                          value={userTypeForm.color}
+                          onChange={e => setUserTypeForm({ ...userTypeForm, color: e.target.value })}
+                        />
+                        <Input 
+                          placeholder="#000000" 
+                          className="text-xs"
+                          value={userTypeForm.color}
+                          onChange={e => setUserTypeForm({ ...userTypeForm, color: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Ícone Representativo</Label>
+                      <div className="grid grid-cols-5 gap-2 p-2 bg-secondary/20 rounded-lg border border-border/40 max-h-40 overflow-y-auto">
+                        {Object.entries(ICON_LIST).map(([name, Icon]) => (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => setUserTypeForm({ ...userTypeForm, icon: name })}
+                            className={`flex flex-col items-center justify-center p-2 rounded-md transition-all hover:bg-primary/10 ${userTypeForm.icon === name ? 'bg-primary/20 ring-1 ring-primary' : ''}`}
+                          >
+                            <Icon className="w-5 h-5 mb-1" />
+                            <span className="text-[8px] truncate w-full text-center opacity-60">{name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 pt-2">
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          id="showInMenu"
+                          className="rounded border-border text-primary focus:ring-primary"
+                          checked={userTypeForm.showInMenu}
+                          onChange={e => setUserTypeForm({ ...userTypeForm, showInMenu: e.target.checked })}
+                        />
+                        <Label htmlFor="showInMenu" className="text-xs cursor-pointer">Exibir na sidebar?</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          id="active"
+                          className="rounded border-border text-primary focus:ring-primary"
+                          checked={userTypeForm.active}
+                          onChange={e => setUserTypeForm({ ...userTypeForm, active: e.target.checked })}
+                        />
+                        <Label htmlFor="active" className="text-xs cursor-pointer">Ativo?</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          id="isAdmin"
+                          className="rounded border-border text-primary focus:ring-primary"
+                          checked={userTypeForm.isAdmin}
+                          onChange={e => setUserTypeForm({ ...userTypeForm, isAdmin: e.target.checked })}
+                        />
+                        <Label htmlFor="isAdmin" className="text-xs cursor-pointer">Administrador?</Label>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-border/40 mt-4">
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setIsUserTypeModalOpen(false)}>Cancelar</Button>
+                      <Button type="submit" size="sm" className="gap-2">
+                        <Save className="w-3.5 h-3.5" /> {editingUserTypeId ? 'Salvar' : 'Criar'}
+                      </Button>
+                    </div>
+                  </form>
                 </DialogContent>
               </Dialog>
             </div>
@@ -2711,6 +3154,137 @@ export default function Admin() {
               {activeTab === 'resumo_roteiro' && <ResumoRoteiroPanel />}
             </RotasProvider>
           )}
+
+          <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
+                <DialogContent className={editingUserId ? "max-w-6xl p-0 border-none bg-transparent shadow-none" : "max-w-4xl"}>
+                  {editingUserId ? (() => {
+                    const editingUser = users.find(u => u.id === editingUserId);
+                    if (!editingUser) {
+                      return (
+                        <div className="p-20 flex flex-col items-center justify-center bg-card rounded-xl border border-border">
+                          <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+                          <p className="text-sm text-muted-foreground">Carregando dados do perfil...</p>
+                        </div>
+                      );
+                    }
+                    return (
+                      <>
+                        <DialogHeader className="sr-only">
+                          <DialogTitle>Gerenciador de Perfil - {editingUser.full_name || editingUser.fullName || 'Usuário'}</DialogTitle>
+                          <DialogDescription>Configurações de perfil, permissões e histórico do usuário.</DialogDescription>
+                        </DialogHeader>
+                        <UserProfileManager
+                          user={editingUser}
+                          reps={reps}
+                          userTypes={userTypes}
+                          onUpdate={fetchAll}
+                          onClose={() => setIsUserModalOpen(false)}
+                        />
+                      </>
+                    );
+                  })() : (
+                <>
+                  <DialogHeader className="pb-3 border-b border-border/40">
+                    <DialogTitle className="flex items-center gap-2 text-xl"><UserPlus className="w-5 h-5 text-primary" /> Novo Usuário</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={(e) => { handleCreateUser(e); setIsUserModalOpen(false); }} className="pt-2">
+                    <div className="flex flex-col md:flex-row gap-6">
+                      
+                      {/* Coluna da Foto (menor) */}
+                      <div className="flex flex-col items-center gap-2 w-32 shrink-0 pt-2">
+                        <label className="cursor-pointer w-24 h-24 rounded-full bg-secondary border-2 border-dashed border-border/60 flex items-center justify-center overflow-hidden hover:border-primary/50 transition-all select-none group relative">
+                          {newUser.photo ? (
+                            <>
+                              <img src={newUser.photo} alt="Avatar" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Camera className="w-5 h-5 text-white" />
+                              </div>
+                            </>
+                          ) : (
+                            <Camera className="w-8 h-8 text-muted-foreground opacity-40 group-hover:scale-110 transition-transform" />
+                          )}
+                          <input type="file" accept="image/*" className="hidden" onChange={e => handleUserPhotoUpload(e, false)} />
+                        </label>
+                        <div className="text-center">
+                          <p className="text-[10px] font-bold text-foreground mt-1">FOTO DE PERFIL</p>
+                          <p className="text-[9px] text-muted-foreground">Max 2MB</p>
+                        </div>
+                      </div>
+
+                      {/* Resto do Formulário em Grid */}
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-x-5 gap-y-4">
+                        
+                        {/* Linha 1 */}
+                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Código *</Label><Input value={newUser.code} onChange={e => setNewUser({ ...newUser, code: e.target.value.replace(/[^a-zA-Z0-9.-]/g, '') })} required className="h-9 text-xs" /></div>
+                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Nome Completo</Label><Input value={newUser.fullName} onChange={e => setNewUser({ ...newUser, fullName: e.target.value })} className="h-9 text-xs" /></div>
+                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">E-mail</Label><Input type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} className="h-9 text-xs" /></div>
+                        
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Tipo de Usuário</Label>
+                          <CustomSelect 
+                            options={[ { value: '', label: '— Selecionar —' }, ...userTypes.map(t => ({ value: String(t.id), label: t.name })) ]} 
+                            value={String(newUser.userTypeId)} 
+                            onChange={v => setNewUser({ ...newUser, userTypeId: v })} 
+                            placeholder="Selecione..." 
+                            className="h-9" 
+                          />
+                        </div>
+                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Cargo</Label><Input value={newUser.cargo} onChange={e => setNewUser({ ...newUser, cargo: e.target.value })} placeholder="Ex: Gerente" className="h-9 text-xs" /></div>
+
+                        {/* Linha 3 */}
+                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Nome da Empresa</Label><Input value={newUser.companyName} onChange={e => setNewUser({ ...newUser, companyName: e.target.value })} placeholder="Ex: Tech Soluções" className="h-9 text-xs" /></div>
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Grupo</Label>
+                          <CustomSelect options={[ { value: '', label: '— Nenhum —' }, ...groupsData.map(g => ({ value: String(g.id), label: g.name })) ]} value={String(newUser.groupId)} onChange={v => setNewUser({ ...newUser, groupId: v })} placeholder="Selecione..." className="h-9" />
+                        </div>
+                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Telefone</Label><Input value={newUser.telefone} onChange={e => setNewUser({ ...newUser, telefone: e.target.value })} placeholder="(00) 00000-0000" className="h-9 text-xs" /></div>
+
+                        {/* Linha 4 */}
+                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Data de Nasc.</Label><Input type="date" value={newUser.birthDate} onChange={e => setNewUser({ ...newUser, birthDate: e.target.value })} className="h-9 text-xs" /></div>
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Tipo Doc</Label>
+                          <div className="flex gap-1 h-9">
+                            {(['cpf', 'cnpj'] as const).map(t => (
+                              <button key={t} type="button" onClick={() => setNewUser({ ...newUser, documentType: t, document: '' })} className={`flex-1 rounded-md text-[10px] font-bold border transition-colors ${newUser.documentType === t ? 'bg-primary border-primary text-white' : 'border-border text-muted-foreground hover:bg-secondary'}`}>
+                                {t.toUpperCase()}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{newUser.documentType.toUpperCase()}</Label><Input value={newUser.document} onChange={e => setNewUser({ ...newUser, document: maskDoc(e.target.value, newUser.documentType) })} className="h-9 text-xs" /></div>
+
+                        {/* Linhas de Senha (movidas para baixo) */}
+                        <div className="space-y-1.5 md:col-start-1">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Senha *</Label>
+                          <div className="relative">
+                            <Input type={showNewPwd ? 'text' : 'password'} value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} required className="h-9 text-xs pr-9" />
+                            <button type="button" className="absolute right-2.5 top-1/2 -translate-y-1/2" onClick={() => setShowNewPwd(!showNewPwd)}>{showNewPwd ? <EyeOff className="w-3.5 h-3.5 hover:text-primary transition-colors" /> : <Eye className="w-3.5 h-3.5 hover:text-primary transition-colors" />}</button>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Confirmar Senha *</Label><Input type={showNewPwd ? 'text' : 'password'} value={newUser.confirmPassword} onChange={e => setNewUser({ ...newUser, confirmPassword: e.target.value })} required className="h-9 text-xs" /></div>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t border-border/40 grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <h4 className="col-span-full text-xs font-bold text-primary mb-1">ENDEREÇO</h4>
+                      <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">CEP</Label><Input value={newUser.cep} onChange={e => setNewUser({ ...newUser, cep: e.target.value.replace(/\D/g, '') })} onBlur={() => fetchCepAdmin(newUser.cep)} maxLength={8} className="h-9 text-xs" /></div>
+                      <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Logradouro / Rua</Label><Input value={newUser.logradouro} onChange={e => setNewUser({ ...newUser, logradouro: e.target.value })} className="h-9 text-xs" /></div>
+                      <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Número</Label><Input value={newUser.numero} onChange={e => setNewUser({ ...newUser, numero: e.target.value })} className="h-9 text-xs" /></div>
+                      <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Complemento</Label><Input value={newUser.complemento} onChange={e => setNewUser({ ...newUser, complemento: e.target.value })} className="h-9 text-xs" /></div>
+                      <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bairro</Label><Input value={newUser.bairro_end} onChange={e => setNewUser({ ...newUser, bairro_end: e.target.value })} className="h-9 text-xs" /></div>
+                      <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Cidade</Label><Input value={newUser.cidade} onChange={e => setNewUser({ ...newUser, cidade: e.target.value })} className="h-9 text-xs" /></div>
+                      <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">UF</Label><Input value={newUser.estado_end} onChange={e => setNewUser({ ...newUser, estado_end: e.target.value })} maxLength={2} className="h-9 text-xs uppercase" /></div>
+                    </div>
+
+                    <div className="flex gap-3 pt-6 mt-4 border-t border-border/10 justify-end">
+                      <Button variant="ghost" type="button" onClick={() => setIsUserModalOpen(false)} className="w-32">Cancelar</Button>
+                      <Button type="submit" className="w-48 gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"><Save className="w-4 h-4" /> Cadastrar Usuário</Button>
+                    </div>
+                  </form>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
 
         </main>
       </div>

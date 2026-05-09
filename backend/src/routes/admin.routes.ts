@@ -1,31 +1,125 @@
 import { Router } from 'express';
 import { prisma } from '../prisma';
-import { authenticate, requirePermission } from '../middlewares/auth';
+import { authenticate, requirePermission, requireAdmin } from '../middlewares/auth';
 import { logUserActivity } from '../utils/logger';
 import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router();
 router.use(authenticate);
 
-// Middleware to require admin for write operations
-const requireAdminMiddleware = (req: any, res: any, next: any) => {
-  if (req.user?.role !== 'admin') {
-    return res.status(403).json({ message: 'Acesso restrito a administradores' });
+// ── USER TYPES ──────────────────────────────────────────────────────────────
+
+// Get all user types
+router.get('/user-types', authenticate, async (req, res) => {
+  try {
+    // @ts-ignore
+    const types = await prisma.userType.findMany({
+      orderBy: { name: 'asc' }
+    });
+    res.json(types);
+  } catch (error) {
+    console.error('Error fetching user types:', error);
+    res.status(500).json({ message: 'Erro ao buscar tipos de usuário' });
   }
-  next();
-};
+});
+
+// Create new user type
+router.post('/user-types', authenticate, requirePermission('settings', 'edit'), async (req: any, res) => {
+  const { name, color, icon, showInMenu, active, isAdmin } = req.body;
+  if (!name) return res.status(400).json({ message: 'Nome é obrigatório' });
+
+  try {
+    // @ts-ignore
+    const type = await prisma.userType.create({
+      data: {
+        name,
+        color: color || '#3b82f6',
+        icon: icon || 'User',
+        showInMenu: !!showInMenu,
+        active: active !== undefined ? !!active : true,
+        isAdmin: !!isAdmin,
+        isSystemDefault: false
+      }
+    });
+    
+    await logUserActivity(req.user.id, 'create_user_type', `Criou tipo de usuário: ${name}`, req, 'UserType', String(type.id));
+    res.status(201).json(type);
+  } catch (error) {
+    console.error('Error creating user type:', error);
+    res.status(500).json({ message: 'Erro ao criar tipo de usuário' });
+  }
+});
+
+// Update user type
+router.put('/user-types/:id', authenticate, requirePermission('settings', 'edit'), async (req: any, res) => {
+  const id = Number(req.params.id);
+  const { name, color, icon, showInMenu, active, isAdmin } = req.body;
+
+  try {
+    // @ts-ignore
+    const type = await prisma.userType.update({
+      where: { id },
+      data: {
+        name,
+        color,
+        icon,
+        showInMenu: showInMenu !== undefined ? !!showInMenu : undefined,
+        active: active !== undefined ? !!active : undefined,
+        isAdmin: isAdmin !== undefined ? !!isAdmin : undefined
+      }
+    });
+
+    await logUserActivity(req.user.id, 'update_user_type', `Atualizou tipo de usuário: ${name || id}`, req, 'UserType', String(id));
+    res.json(type);
+  } catch (error) {
+    console.error('Error updating user type:', error);
+    res.status(500).json({ message: 'Erro ao atualizar tipo de usuário' });
+  }
+});
+
+// Delete user type
+router.delete('/user-types/:id', authenticate, requirePermission('settings', 'edit'), async (req: any, res) => {
+  const id = Number(req.params.id);
+  try {
+    // @ts-ignore
+    const type = await prisma.userType.findUnique({ where: { id } });
+    if (type?.isSystemDefault) {
+      return res.status(403).json({ message: 'Tipos padrão do sistema não podem ser removidos' });
+    }
+
+    // Primeiro limpa as referências nos usuários
+    await prisma.user.updateMany({
+      // @ts-ignore
+      where: { userTypeId: id },
+      // @ts-ignore
+      data: { userTypeId: null }
+    });
+    
+    // @ts-ignore
+    await prisma.userType.delete({
+      where: { id }
+    });
+
+    await logUserActivity(req.user.id, 'delete_user_type', `Removeu tipo de usuário ID: ${id}`, req, 'UserType', String(id));
+    res.json({ message: 'Tipo removido com sucesso' });
+  } catch (error) {
+    console.error('Error deleting user type:', error);
+    res.status(500).json({ message: 'Erro ao remover tipo' });
+  }
+});
 
 const PUBLIC_USER_FIELDS = { 
-  id: true, username: true, role: true, repCode: true, code: true, tipo: true, 
+  id: true, username: true, role: true, repCode: true, code: true, tipo: true, userTypeId: true,
   full_name: true, cpf_cnpj: true, telefone: true, cargo: true, company_name: true, groupId: true,
   photo: true, birth_date: true, colorIndex: true, comissao: true, isVago: true,
+  email: true, // Incluído o campo email no SELECT
   cep: true, logradouro: true, numero: true, complemento: true,
   bairro_end: true, cidade: true, estado_end: true, area_atuacao: true, base_logistica: true,
   created_at: true, last_active: true, token_version: true
 };
 
 // --- KICK USER ---
-router.post('/users/:id/kick', requireAdminMiddleware, async (req: any, res) => {
+router.post('/users/:id/kick', requireAdmin, async (req: any, res) => {
   const id = Number(req.params.id);
   try {
     const user = await prisma.user.findUnique({ where: { id } });
@@ -86,9 +180,10 @@ router.get('/users', requirePermission('users', 'view'), async (req, res) => {
 
 router.post('/users', requirePermission('users', 'edit'), async (req: any, res) => {
   const { 
-    password, role, tipo, full_name, repCode, code, photo, colorIndex, comissao, isVago, 
+    password, role, tipo, userTypeId, full_name, repCode, code, photo, colorIndex, comissao, isVago, 
     telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
-    cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica 
+    cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
+    email
   } = req.body;
   
   if (!code) return res.status(400).json({ message: 'Código é obrigatório' });
@@ -115,8 +210,7 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
         return res.status(500).json({ message: `Erro no Supabase Auth: ${authError.message}` });
     }
 
-    // Step 2: Create in our Prisma DB
-    const user = await prisma.user.create({ 
+    const user: any = await prisma.user.create({ 
       data: { 
         username: code, 
         password: 'SUPABASE_AUTH_ACTIVE', // We don't store plain passwords anymore
@@ -130,6 +224,7 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
         cpf_cnpj,
         cargo,
         company_name,
+        email: email || `${code}@mapaterritorio.com`, // Email obrigatório para sync
         cep,
         logradouro,
         numero,
@@ -144,10 +239,30 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
         colorIndex: colorIndex !== undefined ? Number(colorIndex) : 0,
         comissao: (comissao !== undefined && comissao !== '' && comissao !== null) ? parseFloat(comissao) : null,
         isVago: isVago ? 1 : 0,
+        // @ts-ignore
+        userTypeId: userTypeId ? Number(userTypeId) : null,
         last_active: new Date(0), // Epoch = never logged in (sentinela)
       }, 
       select: PUBLIC_USER_FIELDS 
     });
+
+    // Salva o supabase_id usando Raw SQL para evitar erro de tipo/cliente preso
+    await prisma.$executeRawUnsafe('UPDATE "users" SET "supabase_id" = $1 WHERE "id" = $2', authUser.user.id, user.id);
+
+    // Step 3: Initialize default permissions for all modules
+    try {
+      const modules: any[] = await prisma.$queryRawUnsafe('SELECT "id" FROM "modules"');
+      if (modules.length > 0) {
+        for (const m of modules) {
+           await prisma.$executeRawUnsafe(
+             'INSERT INTO "user_permissions" ("userId", "moduleId", "canView", "canEdit") VALUES ($1, $2, $3, $4)',
+             user.id, m.id, role === 'admin' || role === 'supervisor', role === 'admin' || role === 'supervisor'
+           );
+        }
+      }
+    } catch (permError) {
+      console.error('Error initializing default permissions:', permError);
+    }
 
     await logUserActivity(req.user.id, 'create_user', `Criou novo usuário ${code}`, req, 'User', String(user.id));
     res.status(201).json(user);
@@ -160,28 +275,88 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
 router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, res) => {
   const id = Number(req.params.id);
   const { 
-    password, role, repCode, tipo, full_name, photo, colorIndex, comissao, isVago, 
+    password, role, repCode, tipo, userTypeId, full_name, photo, colorIndex, comissao, isVago, 
     telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
-    cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica 
+    cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
+    email 
   } = req.body;
+
+  // Validação de e-mail no backend
+  if (!email) {
+    return res.status(400).json({ message: 'O e-mail é obrigatório.' });
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ message: 'O formato do e-mail é inválido.' });
+  }
   
   const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ message: 'Usuário não encontrado' });
   
   try {
-    // 1. Optional password sync to Supabase (if provided)
-    if (password && existing.code) {
+    // 1. Password sync to Supabase
+    if (password) {
       try {
-        const authEmail = `${existing.code}@mapaterritorio.com`;
-        const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
-        const sbUser = users.find(u => u.email === authEmail);
+        console.log(`[AUTH] Iniciando troca de senha para usuário ID local: ${id}`);
         
-        if (sbUser) {
-          const { error: updErr } = await supabaseAdmin.auth.admin.updateUserById(sbUser.id, { password });
-          if (updErr) console.error('[AUTH] Error syncing password to Supabase:', updErr);
+        // Busca o supabase_id via SQL puro para evitar erro de tipo no cliente
+        const userDb: any[] = await prisma.$queryRawUnsafe('SELECT "supabase_id", "username", "code", "email" FROM "users" WHERE "id" = $1', id);
+        const userData = userDb[0];
+        
+        if (!userData) throw new Error('Usuário não encontrado no banco de dados local.');
+
+        let sbUserId = userData.supabase_id;
+        console.log(`[AUTH] Supabase ID atual no banco: ${sbUserId || 'Nulo'}`);
+
+        // Se não temos o supabase_id salvo, tentamos buscar no Supabase
+        if (!sbUserId) {
+          const email1 = `${userData.code || userData.username}@mapaterritorio.com`.toLowerCase();
+          const email2 = userData.email?.toLowerCase();
+          
+          console.log(`[AUTH] Buscando ID no Supabase por e-mails: ${email1} ${email2 ? 'ou ' + email2 : ''}`);
+          
+          const { data: { users: sbUsers }, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
+            perPage: 1000 // Aumenta o limite para encontrar usuários antigos
+          });
+          
+          if (listErr) {
+            console.error('[AUTH] Erro ao listar usuários no Supabase:', listErr);
+            throw listErr;
+          }
+
+          const sbUser = sbUsers.find(u => 
+            u.email?.toLowerCase() === email1 || (email2 && u.email?.toLowerCase() === email2)
+          );
+          
+          if (sbUser) {
+            sbUserId = sbUser.id;
+            console.log(`[AUTH] Usuário localizado via busca: ${sbUserId}. Sincronizando ID...`);
+            await prisma.$executeRawUnsafe('UPDATE "users" SET "supabase_id" = $1 WHERE "id" = $2', sbUserId, id);
+          }
         }
-      } catch (authSyncError) {
-        console.error('[AUTH] Supabase sync failed, continuing with local update:', authSyncError);
+
+        if (sbUserId) {
+          console.log(`[AUTH] Chamando updateUserById para ID: ${sbUserId}`);
+          const { data: updData, error: updErr } = await supabaseAdmin.auth.admin.updateUserById(sbUserId, { password });
+          
+          if (updErr) {
+            console.error('[AUTH] Erro retornado pelo Supabase Auth:', updErr);
+            // Erros comuns: senha curta, email não confirmado (se configurado), etc.
+            throw new Error(`Erro Supabase: ${updErr.message}`);
+          }
+          
+          console.log('[AUTH] Senha atualizada com sucesso para:', updData.user?.email);
+        } else {
+          console.error('[AUTH] Usuário não encontrado no Supabase Auth.');
+          throw new Error('O cadastro deste usuário não existe no servidor de autenticação.');
+        }
+      } catch (authSyncError: any) {
+        console.error('[AUTH] Falha na sincronização de senha:', authSyncError.message);
+        return res.status(500).json({ 
+          message: 'Não foi possível alterar a senha no servidor de autenticação.', 
+          details: authSyncError.message 
+        });
       }
     }
 
@@ -190,11 +365,14 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
         role, 
         repCode: (repCode === '' || repCode === null) ? null : repCode, 
         tipo, 
+        // @ts-ignore
+        userTypeId: (userTypeId !== undefined && userTypeId !== '' && userTypeId !== null) ? Number(userTypeId) : (userTypeId === '' || userTypeId === null ? null : undefined),
         full_name, 
         telefone, 
         cpf_cnpj, 
         cargo, 
         company_name,
+        email, // Salvando o email no banco de dados
         cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
         // Ensure groupId is not 0 if empty string is passed
         groupId: (groupId !== undefined && groupId !== '' && groupId !== null) ? Number(groupId) : (groupId === '' || groupId === null ? null : undefined),
@@ -222,6 +400,8 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
       select: PUBLIC_USER_FIELDS 
     });
 
+    console.log(`[ADMIN] Usuário ${user.username} (ID: ${id}) atualizado com sucesso no Prisma.`);
+
     await logUserActivity(req.user.id, 'update_user', `Atualizou usuário ${user.username}`, req, 'User', String(id));
     res.json(user);
   } catch (error: any) {
@@ -243,7 +423,7 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
   }
 });
 
-router.delete('/users/:id', requireAdminMiddleware, async (req: any, res) => {
+router.delete('/users/:id', requireAdmin, async (req: any, res) => {
   const id = Number(req.params.id);
   const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ message: 'Usuário não encontrado' });
@@ -344,7 +524,7 @@ router.get('/reps', requirePermission('reps', 'view'), async (req, res) => {
   }
 });
 
-router.post('/reps', requireAdminMiddleware, async (req: any, res) => {
+router.post('/reps', requireAdmin, async (req: any, res) => {
   const { userId, code, colorIndex } = req.body;
   if (!userId || !code) return res.status(400).json({ message: 'UserId e código são obrigatórios' });
 
@@ -369,7 +549,7 @@ router.post('/reps', requireAdminMiddleware, async (req: any, res) => {
   }
 });
 
-router.put('/reps/:code', requireAdminMiddleware, async (req: any, res) => {
+router.put('/reps/:code', requireAdmin, async (req: any, res) => {
   const code = req.params.code;
   const { name, colorIndex, isVago, comissao } = req.body;
   
@@ -391,7 +571,7 @@ router.put('/reps/:code', requireAdminMiddleware, async (req: any, res) => {
   }
 });
 
-router.delete('/reps/:code', requireAdminMiddleware, async (req: any, res) => {
+router.delete('/reps/:code', requireAdmin, async (req: any, res) => {
   const code = req.params.code;
   
   try {
@@ -419,8 +599,10 @@ router.delete('/reps/:code', requireAdminMiddleware, async (req: any, res) => {
 router.get('/territories', requirePermission('territories', 'view'), async (req, res) => {
   const user = (req as any).user;
   const where: any = {};
-  if (user && user.role === 'representante' && user.repCode) {
-    where.repCode = user.repCode;
+  
+  // If not admin, restrict to only their own territories
+  if (user && user.role !== 'admin') {
+    where.userId = user.id;
   }
 
   try {
@@ -434,8 +616,8 @@ router.get('/territories', requirePermission('territories', 'view'), async (req,
         .order('uf', { ascending: true })
         .order('municipio', { ascending: true });
     
-    if (user && user.role === 'representante' && user.repCode) {
-        query = query.eq('repCode', user.repCode);
+    if (user && user.role !== 'admin') {
+        query = query.eq('userId', user.id);
     }
 
     const { data, error: httpError } = await query;
@@ -444,23 +626,23 @@ router.get('/territories', requirePermission('territories', 'view'), async (req,
   }
 });
 
-router.post('/territories/import', requireAdminMiddleware, async (req, res) => {
+router.post('/territories/import', requireAdmin, async (req, res) => {
   const { mappings } = req.body;
   if (!Array.isArray(mappings)) return res.status(400).json({ message: 'Formato inválido' });
   
   await prisma.$transaction(
-    mappings.map((m: any) => prisma.territory.create({ data: { municipio: m.municipio, uf: m.uf, repCode: m.repCode, modo: m.modo || 'planejamento' } }))
+    mappings.map((m: any) => prisma.territory.create({ data: { municipio: m.municipio, uf: m.uf, userId: m.userId ? Number(m.userId) : null, modo: m.modo || 'planejamento' } }))
   );
   
   res.json({ message: `${mappings.length} territórios importados.` });
 });
 
-router.post('/bairros/import', requireAdminMiddleware, async (req, res) => {
+router.post('/bairros/import', requireAdmin, async (req, res) => {
   const { mappings } = req.body;
   if (!Array.isArray(mappings)) return res.status(400).json({ message: 'Formato inválido' });
   
   await prisma.$transaction(
-    mappings.map((m: any) => prisma.bairro.create({ data: { bairro: m.bairro, regiao: m.regiao, municipio: m.municipio, uf: m.uf, repCode: m.repCode, modo: m.modo || 'atendimento' } }))
+    mappings.map((m: any) => prisma.bairro.create({ data: { bairro: m.bairro, regiao: m.regiao, municipio: m.municipio, uf: m.uf, userId: m.userId ? Number(m.userId) : null, modo: m.modo || 'atendimento' } }))
   );
   
   res.json({ message: `${mappings.length} bairros importados.` });
@@ -497,28 +679,64 @@ router.get('/users/:id/permissions', async (req, res) => {
   res.json(permissions);
 });
 
-router.post('/users/:id/permissions', requireAdminMiddleware, async (req, res) => {
+// Save user permissions and handle auto-promotion
+router.post('/users/:id/permissions', authenticate, requirePermission('users', 'edit'), async (req: any, res) => {
   const userId = Number(req.params.id);
-  const { permissions } = req.body; // Array of { moduleId, canView, canEdit }
-
-  if (!Array.isArray(permissions)) return res.status(400).json({ message: 'Formato inválido' });
+  const { permissions } = req.body;
 
   try {
-    await prisma.$transaction([
-      (prisma as any).userPermission.deleteMany({ where: { userId } }),
-      (prisma as any).userPermission.createMany({
-        data: permissions.map((p: any) => ({
-          userId,
-          moduleId: p.moduleId,
-          canView: !!p.canView,
-          canEdit: !!p.canEdit
-        }))
-      })
-    ]);
-    res.json({ message: 'Permissões atualizadas com sucesso' });
+    // 1. Save permissions using Raw Queries to ensure persistence
+    await prisma.$executeRawUnsafe('DELETE FROM "user_permissions" WHERE "userId" = $1', userId);
+    
+    if (Array.isArray(permissions) && permissions.length > 0) {
+      for (const p of permissions) {
+        await prisma.$executeRawUnsafe(
+          'INSERT INTO "user_permissions" ("userId", "moduleId", "canView", "canEdit") VALUES ($1, $2, $3, $4)',
+          userId, p.moduleId, !!p.canView, !!p.canEdit
+        );
+      }
+    }
+
+    // 2. Check for auto-promotion to admin
+    // Se marcou 'canEdit' nos módulos principais, promove a admin
+    const coreModules = ['users', 'clientes', 'territories', 'notifications'];
+    const hasCoreEdit = coreModules.every(slug => 
+      permissions.find((p: any) => p.moduleId === slug)?.canEdit === true
+    );
+
+    let roleUpdated = false;
+    if (hasCoreEdit) {
+      await prisma.$executeRawUnsafe('UPDATE "users" SET "role" = \'admin\' WHERE "id" = $1', userId);
+      
+      // Sincroniza com Supabase Auth Metadata para o próximo login
+      try {
+        const { data: { users: sbUsers } } = await supabaseAdmin.auth.admin.listUsers();
+        const targetUser = await prisma.user.findUnique({ where: { id: userId } });
+        const authEmail = `${targetUser?.code || targetUser?.username}@mapaterritorio.com`;
+        const sbUser = sbUsers.find(u => u.email === authEmail);
+        
+        if (sbUser) {
+          await supabaseAdmin.auth.admin.updateUserById(sbUser.id, {
+            user_metadata: { ...sbUser.user_metadata, role: 'admin' }
+          });
+        }
+      } catch (authErr) {
+        console.error('[AUTH] Erro ao sincronizar role no Supabase:', authErr);
+      }
+
+      roleUpdated = true;
+      console.log(`[ADMIN] Usuário ID ${userId} promovido a ADMIN automaticamente.`);
+    }
+
+    await logUserActivity(req.user.id, 'update_permissions', `Atualizou permissões do usuário ${userId}${roleUpdated ? ' (Promovido a ADMIN)' : ''}`, req);
+    
+    res.json({ 
+      message: 'Permissões salvas com sucesso', 
+      promoted: roleUpdated 
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao atualizar permissões' });
+    console.error('Error saving permissions:', error);
+    res.status(500).json({ message: 'Erro ao salvar permissões' });
   }
 });
 

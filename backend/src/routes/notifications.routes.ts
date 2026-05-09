@@ -6,12 +6,17 @@ import { logUserActivity } from '../utils/logger';
 const router = Router();
 
 // Get notification history
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, requirePermission('notifications', 'view'), async (req, res) => {
   try {
-    const allNotifications = await prisma.notification.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 80
-    });
+    console.log(`[NOTIF] User ${req.user.id} requesting notifications history`);
+    // Usando queryRaw para evitar problemas com o Prisma Client desatualizado no node_modules
+    const allNotifications: any[] = await prisma.$queryRawUnsafe(`
+      SELECT "id", "title", "message", "targetAll", "targetUserIds", "senderName", "createdAt"
+      FROM "notifications"
+      ORDER BY "createdAt" DESC
+      LIMIT 80
+    `);
+    
     const currentUserId = Number((req as any).user?.id || 0);
     const isAdminLike = (req as any).user?.role === 'admin' || (req as any).user?.role === 'supervisor';
 
@@ -20,8 +25,11 @@ router.get('/', authenticate, async (req, res) => {
       : allNotifications.filter((n) => {
           if (n.targetAll) return true;
           const raw = n.targetUserIds;
-          if (!Array.isArray(raw) || !currentUserId) return false;
-          return raw.map((id) => Number(id)).includes(currentUserId);
+          if (!raw || !currentUserId) return false;
+          
+          // Trata JSONB do Postgres
+          const targetIds = Array.isArray(raw) ? raw : [];
+          return targetIds.map((id: any) => Number(id)).includes(currentUserId);
         });
 
     res.json(notifications.slice(0, 50));
@@ -34,6 +42,9 @@ router.get('/', authenticate, async (req, res) => {
 // Send new notification (Admin only)
 router.post('/', authenticate, requirePermission('notifications', 'edit'), async (req: any, res) => {
   const { title, message, targetAll = true, targetUserIds = [] } = req.body;
+  const senderName = req.user?.full_name || req.user?.fullName || req.user?.username || 'Administrador';
+
+  console.log('[NOTIFICATIONS] Received POST request:', { title, targetAll, targetUserIds, senderName });
 
   if (!title || !message) {
     return res.status(400).json({ message: 'Título e mensagem são obrigatórios' });
@@ -48,32 +59,41 @@ router.post('/', authenticate, requirePermission('notifications', 'edit'), async
           .map((id) => Number(id))
           .filter((id) => Number.isInteger(id) && id > 0)
       : [];
+    
     if (!targetAll && normalizedTargetUserIds.length === 0) {
       return res.status(400).json({ message: 'Selecione ao menos um usuário destinatário válido' });
     }
 
-    const notification = await prisma.notification.create({
-      data: {
-        title,
-        message,
-        targetAll: !!targetAll,
-        targetUserIds: targetAll ? [] : normalizedTargetUserIds,
-      }
-    });
+    const targetUserIdsJson = JSON.stringify(targetAll ? [] : normalizedTargetUserIds);
 
-    await logUserActivity(req.user.id, 'send_notification', `Enviou alerta: ${title}`, req, 'Notification', String(notification.id));
+    console.log('[NOTIFICATIONS] Executing Raw SQL insert...');
     
-    res.status(201).json(notification);
-  } catch (error) {
+    // Usando executeRawUnsafe para ter controle total sobre o casting e nomes de colunas
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "notifications" ("title", "message", "targetAll", "targetUserIds", "senderName", "createdAt")
+       VALUES ($1, $2, $3, $4::jsonb, $5, NOW())`,
+      title, message, !!targetAll, targetUserIdsJson, senderName
+    );
+
+    console.log('[NOTIFICATIONS] Insert successful');
+
+    await logUserActivity(req.user.id, 'send_notification', `Enviou alerta: ${title}`, req, 'Notification');
+    
+    res.status(201).json({ message: 'Notificação enviada com sucesso' });
+  } catch (error: any) {
     console.error('Error creating notification:', error);
-    res.status(500).json({ message: 'Erro ao enviar notificação' });
+    res.status(500).json({ 
+      message: 'Erro ao enviar notificação', 
+      details: error.message,
+      code: error.code
+    });
   }
 });
 
 // Clear history (Admin only)
 router.delete('/clear', authenticate, requirePermission('notifications', 'edit'), async (req: any, res) => {
   try {
-    await prisma.notification.deleteMany({});
+    await prisma.$executeRawUnsafe('DELETE FROM "notifications"');
     await logUserActivity(req.user.id, 'clear_notifications', 'Limpou o histórico de notificações', req);
     res.json({ message: 'Histórico removido com sucesso' });
   } catch (error) {

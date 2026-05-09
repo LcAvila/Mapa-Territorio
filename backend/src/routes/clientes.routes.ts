@@ -25,21 +25,29 @@ router.use(authenticate);
 // ---------------------------------------------------------
 router.get('/', requirePermission('clients', 'view'), async (req, res) => {
   try {
-    const { repCode, supervisorName } = req.query;
+    const { userId } = req.query;
     const where: any = {};
     
-    // Cada um no seu quadrado: Representante só vê os dele.
+    // Cada um no seu quadrado: Usuários comuns só vêem os seus.
     const user = (req as any).user;
-    if (user && user.role === 'representante') {
-      where.repCode = user.repCode;
+    if (user && user.role !== 'admin') {
+      where.userId = user.id;
     } else {
-      if (repCode) where.repCode = repCode.toString();
-      if (supervisorName) where.supervisorName = supervisorName.toString();
+      if (userId) where.userId = Number(userId);
     }
 
     const clientes = await prisma.cliente.findMany({
       where,
       orderBy: { nome_cliente: 'asc' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            full_name: true,
+            username: true
+          }
+        }
+      }
     });
 
     // Anotando no caderninho quem andou bisbilhotando os clientes
@@ -118,9 +126,7 @@ router.post('/', requirePermission('clients', 'edit'), async (req, res) => {
         numero: numero ? numero.toString() : null,
         latitude: latitude ? parseFloat(latitude.toString()) : null,
         longitude: longitude ? parseFloat(longitude.toString()) : null,
-        repCode: req.body.repCode || null,
-        supervisorName: req.body.supervisorName || null,
-        classificacao: req.body.classificacao || null,
+        userId: req.body.userId ? Number(req.body.userId) : null,
         semana: req.body.semana || null,
         prioridade: req.body.prioridade || null,
         status_ativo: true
@@ -142,8 +148,8 @@ router.put('/:id', requirePermission('clients', 'edit'), async (req, res) => {
     const id = parseInt(req.params.id as string);
     let { 
       codigo_cliente, nome_cliente, nome_abreviado, cnpj, regiao, uf, cidade, bairro, cep, 
-      endereco_completo, numero, latitude, longitude, repCode, supervisorName, 
-      classificacao, semana, prioridade, status_ativo 
+      endereco_completo, numero, latitude, longitude, userId, 
+      semana, prioridade, status_ativo 
     } = req.body;
 
     // Se mudar o endereço, a gente recalcula o lugar pra não ficar com o pino no lugar errado.
@@ -161,13 +167,23 @@ router.put('/:id', requirePermission('clients', 'edit'), async (req, res) => {
     const clienteAtualizado = await prisma.cliente.update({
       where: { id_cliente: id },
       data: {
-        codigo_cliente, nome_cliente, nome_abreviado, cnpj, regiao, uf, cidade, bairro, cep,
+        codigo_cliente,
+        nome_cliente,
+        nome_abreviado,
+        cnpj,
+        regiao,
+        uf,
+        cidade,
+        bairro,
+        cep,
         endereco_completo,
-        numero: numero ? numero.toString() : null,
-        latitude: latitude ? parseFloat(latitude.toString()) : null,
-        longitude: longitude ? parseFloat(longitude.toString()) : null,
-        repCode, supervisorName, classificacao, semana, prioridade,
-        status_ativo: status_ativo !== undefined ? status_ativo : true
+        numero: numero ? numero.toString() : undefined,
+        latitude: latitude ? parseFloat(latitude.toString()) : undefined,
+        longitude: longitude ? parseFloat(longitude.toString()) : undefined,
+        userId: userId ? Number(userId) : undefined,
+        semana,
+        prioridade,
+        status_ativo: status_ativo !== undefined ? !!status_ativo : undefined
       }
     });
 

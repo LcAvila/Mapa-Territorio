@@ -11,13 +11,15 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Bell, X } from 'lucide-react';
+import { Bell, X, User, Clock } from 'lucide-react';
 import DOMPurify from 'dompurify';
+import { toast } from 'sonner';
 
 interface Notification {
   id: number;
   title: string;
   message: string;
+  senderName?: string;
   targetAll?: boolean;
   targetUserIds?: number[] | null;
   createdAt: string;
@@ -31,10 +33,29 @@ export default function NotificationSystem() {
   const seenKey = currentUserId ? `seen_notifications_user_${currentUserId}` : 'seen_notifications_guest';
 
   const isNotificationForCurrentUser = (notif: Notification): boolean => {
-    const targetIds = Array.isArray(notif.targetUserIds)
-      ? notif.targetUserIds.map((id) => Number(id))
-      : [];
-    return !!notif.targetAll || (!!currentUserId && targetIds.includes(currentUserId));
+    if (!notif) return false;
+    if (notif.targetAll) return true;
+    
+    // Se não for para todos, precisamos do ID do usuário logado
+    if (!currentUserId) return false;
+
+    // Trata o campo targetUserIds que pode vir do Supabase Realtime como JSON string ou Array
+    let targetIds: number[] = [];
+    try {
+      const raw = notif.targetUserIds;
+      if (Array.isArray(raw)) {
+        targetIds = raw.map(id => Number(id));
+      } else if (typeof raw === 'string') {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          targetIds = parsed.map(id => Number(id));
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao processar targetUserIds:', e);
+    }
+
+    return targetIds.includes(currentUserId);
   };
 
   const wasSeen = (id: number): boolean => {
@@ -58,9 +79,23 @@ export default function NotificationSystem() {
   };
 
   const openModalForNotification = (notif: Notification) => {
+    // Evita abrir a mesma notificação múltiplas vezes
+    if (currentNotification?.id === notif.id && isOpen) return;
+    
     setCurrentNotification(notif);
     setIsOpen(true);
     markSeen(notif.id);
+    
+    // Alerta sonoro visual via Toast além do Modal
+    toast.info(`Novo Alerta: ${notif.title}`, {
+      description: 'Clique para ler os detalhes',
+      action: {
+        label: 'Ver Agora',
+        onClick: () => setIsOpen(true)
+      },
+      duration: 10000,
+      icon: <Bell className="w-4 h-4 text-primary" />
+    });
   };
 
   const fetchLatestNotification = async () => {
@@ -86,9 +121,13 @@ export default function NotificationSystem() {
   };
 
   useEffect(() => {
+    if (!currentUserId) return;
+
+    console.log('[REALTIME] Iniciando escuta para usuário:', currentUserId);
+
     // Listen for new notifications in real-time
     const channel = supabase
-      .channel('public:notifications')
+      .channel(`user-notifications-${currentUserId}`)
       .on(
         'postgres_changes',
         {
@@ -97,16 +136,25 @@ export default function NotificationSystem() {
           table: 'notifications',
         },
         (payload) => {
-          console.log('[REALTIME] Nova notificação recebida:', payload);
+          console.log('[REALTIME] Nova linha inserida na tabela:', payload);
           const newNotif = payload.new as Notification;
-          if (!isNotificationForCurrentUser(newNotif)) return;
-          if (wasSeen(newNotif.id)) return;
-          openModalForNotification(newNotif);
+          
+          if (isNotificationForCurrentUser(newNotif)) {
+            console.log('[REALTIME] Notificação válida para este usuário, abrindo modal...');
+            if (!wasSeen(newNotif.id)) {
+              openModalForNotification(newNotif);
+            }
+          } else {
+            console.log('[REALTIME] Notificação ignorada (não é para este usuário)');
+          }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[REALTIME] Status da subscrição:', status);
+      });
 
     return () => {
+      console.log('[REALTIME] Removendo canal de escuta');
       supabase.removeChannel(channel);
     };
   }, [currentUserId, seenKey]);
@@ -117,15 +165,11 @@ export default function NotificationSystem() {
     // First sync as soon as auth/session is ready
     fetchLatestNotification();
 
-    // Hard fallback for near-real-time delivery if websocket event fails
-    const intervalId = window.setInterval(fetchLatestNotification, 2000);
-
-    // When tab gains focus, sync immediately
+    // Hard fallback para sincronização apenas ao focar na aba
     const onFocus = () => { fetchLatestNotification(); };
     window.addEventListener('focus', onFocus);
 
     return () => {
-      window.clearInterval(intervalId);
       window.removeEventListener('focus', onFocus);
     };
   }, [token, tokenVersion, currentUserId, seenKey]);
@@ -153,9 +197,16 @@ export default function NotificationSystem() {
           <DialogTitle className="text-2xl font-extrabold text-foreground">
             {currentNotification.title}
           </DialogTitle>
-          <DialogDescription className="text-xs opacity-60">
-            Enviado em {new Date(currentNotification.createdAt).toLocaleString('pt-BR')}
-          </DialogDescription>
+          <div className="flex flex-col gap-1 mt-1">
+            <DialogDescription className="text-xs font-semibold text-primary/80 flex items-center gap-1">
+              <User className="w-3 h-3" />
+              Remetente: {currentNotification.senderName || 'Sistema'}
+            </DialogDescription>
+            <DialogDescription className="text-[10px] opacity-60 flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              Enviado em {new Date(currentNotification.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+            </DialogDescription>
+          </div>
         </DialogHeader>
 
         <div className="my-6 prose prose-sm dark:prose-invert max-w-none">
