@@ -5,6 +5,7 @@ import { Session } from '@supabase/supabase-js';
 import { API_BASE_URL } from '@/lib/api-base';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+    const [isLoading, setIsLoading] = useState(true);
     const [session, setSession] = useState<Session | null>(null);
     const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
     const [role, setRole] = useState<string | null>(localStorage.getItem('role'));
@@ -21,6 +22,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const stored = localStorage.getItem('inactivityLimit');
         return stored ? Number(stored) : null;
     });
+
+    const clearLocalAuth = () => {
+        ['token', 'role', 'userId', 'userName', 'repCode', 'tipo', 'estado_end', 'defaultWorkspace', 'inactivityLimit', 'tokenVersion', 'lastActivityTime'].forEach(k => localStorage.removeItem(k));
+        setToken(null); setRole(null); setUserId(null); setUserName(null); setRepCode(null); setTipo(null); setEstadoEnd(null);
+        setDefaultWorkspace(null); setInactivityLimit(null); setTokenVersion(null);
+    };
+
+    const logout = async () => {
+        // Clear local state first before signOut to avoid infinite loop in onAuthStateChange
+        clearLocalAuth();
+        // signOut last — this triggers onAuthStateChange but we no longer call logout() there
+        await supabase.auth.signOut();
+    };
 
     useEffect(() => {
         // Initial session check
@@ -42,9 +56,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                             login(existingToken, userData.id, userData.role, userData.fullName, userData.tipo, userData.repCode, userData.estadoEnd, userData.defaultWorkspace, userData.inactivityLimit, userData.token_version);
                         }
                     })
-                    .catch(e => console.error('Error restoring session metadata:', e));
+                    .catch(e => console.error('Error restoring session metadata:', e))
+                    .finally(() => setIsLoading(false));
+                } else {
+                    setIsLoading(false);
                 }
-            }
+            } else {
+                 // If Supabase says no session, we should clear our local state
+                 clearLocalAuth();
+                 setIsLoading(false);
+             }
         });
 
         // Listen for auth changes
@@ -95,15 +116,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setEstadoEnd(newEstadoEnd || null);
         setDefaultWorkspace(newWorkspace || null);
         setInactivityLimit(newLimit || null);
-    };
-
-    const logout = async () => {
-        // Clear local state first before signOut to avoid infinite loop in onAuthStateChange
-        ['token', 'role', 'userId', 'userName', 'repCode', 'tipo', 'estado_end', 'defaultWorkspace', 'inactivityLimit', 'tokenVersion', 'lastActivityTime'].forEach(k => localStorage.removeItem(k));
-        setToken(null); setRole(null); setUserId(null); setUserName(null); setRepCode(null); setTipo(null); setEstadoEnd(null);
-        setDefaultWorkspace(null); setInactivityLimit(null); setTokenVersion(null);
-        // signOut last — this triggers onAuthStateChange but we no longer call logout() there
-        await supabase.auth.signOut();
     };
 
     // Inactivity Tracker
@@ -168,7 +180,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             tokenVersion,
             login,
             logout,
-            isAuthenticated: !!token
+            isAuthenticated: !!token,
+            loading: isLoading
         }}>
             {children}
         </AuthContext.Provider>

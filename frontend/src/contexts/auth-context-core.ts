@@ -14,6 +14,7 @@ export interface AuthContextType {
     login: (token: string, userId: number, role: string, userName?: string, tipo?: string, repCode?: string, estado_end?: string, defaultWorkspace?: string, inactivityLimit?: number, tokenVersion?: number) => void;
     logout: () => void;
     isAuthenticated: boolean;
+    loading: boolean;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);

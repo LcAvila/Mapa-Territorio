@@ -7,8 +7,12 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
-    const { isAuthenticated, role } = useAuth();
+    const { isAuthenticated, role, loading } = useAuth();
     useInactivityLogout();
+
+    if (loading) {
+        return null; // Or a loading spinner
+    }
 
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;
