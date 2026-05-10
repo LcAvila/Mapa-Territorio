@@ -42,6 +42,10 @@ model User {
   isVago       Int       @default(0)
   created_at   DateTime  @default(now())
 
+  // Hierarquia de Gerenciamento (Muitos-para-Muitos auto-relacionada)
+  managedUsers User[]    @relation("UserManagement")
+  managedBy    User[]    @relation("UserManagement")
+
   // Configurações e Notificações
   default_workspace String?  @default("admin")
   inactivity_limit  Int?     @default(30) // minutos

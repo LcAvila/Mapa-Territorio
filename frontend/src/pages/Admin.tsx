@@ -55,7 +55,8 @@ import {
   TrendingUp, AlertCircle, BadgeCheck, Palette, Upload, ImageOff, Download, Truck, Settings,
   Database, Layers, Grid3X3, Calendar, FileSpreadsheet, Camera, Percent, Mail, Phone, MapPinned,
   Route, BarChart2, ShieldAlert, UserCog, Contact, GraduationCap, Microscope, Stethoscope, 
-  Headset, Construction, ShoppingBag, ChefHat, Coffee, Plane, HeartPulse, Hammer, Wrench, LucideIcon
+  Headset, Construction, ShoppingBag, ChefHat, Coffee, Plane, HeartPulse, Hammer, Wrench, LucideIcon,
+  Users2
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -382,14 +383,24 @@ export default function Admin() {
     endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: ''
   });
 
-  const [newUser, setNewUser] = useState({
+  const [newUser, setNewUser] = useState<{
+    fullName: string; email: string; password: string; confirmPassword: string;
+    role: 'user' | 'supervisor' | 'admin';
+    code: string; documentType: 'cpf' | 'cnpj';
+    document: string; companyName: string; birthDate: string; telefone: string; photo: string;
+    cargo: string; groupId: string; tipo: 'normal' | 'representante' | 'promotor' | 'supervisor'; colorIndex: number;
+    cep: string; logradouro: string; numero: string; complemento: string; bairro_end: string; cidade: string; estado_end: string; area_atuacao: string; base_logistica: string;
+    userTypeId: string;
+    managedUserIds: number[];
+  }>({
     fullName: '', email: '', password: '', confirmPassword: '',
-    role: 'user' as 'user' | 'supervisor' | 'admin',
-    code: '', documentType: 'cpf' as 'cpf' | 'cnpj',
+    role: 'user',
+    code: '', documentType: 'cpf',
     document: '', companyName: '', birthDate: '', telefone: '', photo: '',
-    cargo: '', groupId: '', tipo: 'normal' as 'normal' | 'representante' | 'promotor' | 'supervisor', colorIndex: 0,
+    cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
     cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
-    userTypeId: '' // Added
+    userTypeId: '',
+    managedUserIds: []
   });
 
   // ── UserTypes form ────────────────────────────────────────────────────────
@@ -464,12 +475,20 @@ export default function Admin() {
   const [groupsData, setGroupsData] = useState<{ id: number, name: string }[]>([]);
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
-  const [editUserForm, setEditUserForm] = useState({
+  const [editUserForm, setEditUserForm] = useState<{
+    username: string; fullName: string; document: string; password: string; confirmPassword: string;
+    role: 'user' | 'supervisor' | 'admin';
+    code: string; photo: string; telefone: string; birthDate: string;
+    cargo: string; companyName: string; groupId: string;
+    userTypeId: string;
+    managedUserIds: number[];
+  }>({
     username: '', fullName: '', document: '', password: '', confirmPassword: '',
-    role: 'user' as 'user' | 'supervisor' | 'admin',
+    role: 'user',
     code: '', photo: '', telefone: '', birthDate: '',
     cargo: '', companyName: '', groupId: '',
-    userTypeId: '' // Added
+    userTypeId: '',
+    managedUserIds: []
   });
   const [showEditPwd, setShowEditPwd] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -657,7 +676,7 @@ export default function Admin() {
     try {
       setIsGeneratingPlan(true);
       toast.info('Gerando planilha lógistica. Isso pode demorar alguns segundos...');
-      const res = await fetch(`${API}/api/generate-plan`, { headers: authHeaders });
+      const res = await fetch(`${API}/api/planilha/generate-plan`, { headers: authHeaders });
       if (!res.ok) throw new Error('Falha ao gerar o arquivo');
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -877,7 +896,8 @@ export default function Admin() {
       estado_end: newUser.estado_end,
       area_atuacao: newUser.area_atuacao,
       base_logistica: newUser.base_logistica,
-      userTypeId: newUser.userTypeId ? Number(newUser.userTypeId) : null
+      userTypeId: newUser.userTypeId ? Number(newUser.userTypeId) : null,
+      managedUserIds: newUser.managedUserIds
     };
 
     try {
@@ -891,7 +911,8 @@ export default function Admin() {
           document: '', companyName: '', birthDate: '', telefone: '', photo: '',
           cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
           cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
-          userTypeId: ''
+          userTypeId: '',
+          managedUserIds: []
         });
         setIsUserModalOpen(false);
         fetchAll();
@@ -927,7 +948,8 @@ export default function Admin() {
       cargo: editUserForm.cargo,
       company_name: editUserForm.companyName,
       groupId: editUserForm.groupId ? Number(editUserForm.groupId) : null,
-      userTypeId: editUserForm.userTypeId ? Number(editUserForm.userTypeId) : null
+      userTypeId: editUserForm.userTypeId ? Number(editUserForm.userTypeId) : null,
+      managedUserIds: editUserForm.managedUserIds
     };
 
     if (editUserForm.password.trim()) body.password = editUserForm.password;
@@ -1145,8 +1167,8 @@ export default function Admin() {
         { id: 'groups' as const, label: 'Grupos', icon: UsersRound, count: groups.length },
       ]
     },
-    { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin'] },
-    { id: 'territories' as const, label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin'] },
+    { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor', 'user'] },
+    { id: 'territories' as const, label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin', 'supervisor'] },
     {
       id: 'rotas_menu' as const, label: 'Planejamento de Áreas', icon: Truck, restrict: ['admin'], subItems: [
         { id: 'leituraplanilha' as const, label: 'Leitura Excel', icon: FileSpreadsheet },
@@ -1788,46 +1810,48 @@ export default function Admin() {
                       </div>
                     </div>
 
-                    {/* User legend */}
-                    <div className="admin-card" style={{ padding: 0, overflow: 'hidden', flex: 1 }}>
-                      <div style={{ padding: '12px 16px', borderBottom: '1px solid hsl(var(--admin-card-border))', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <UsersRound style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
-                        <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>Usuários Ativos</span>
+                    {/* User legend - Admin only */}
+                    {role === 'admin' && (
+                      <div className="admin-card" style={{ padding: 0, overflow: 'hidden', flex: 1 }}>
+                        <div style={{ padding: '12px 16px', borderBottom: '1px solid hsl(var(--admin-card-border))', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <UsersRound style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
+                          <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>Usuários Ativos</span>
+                        </div>
+                        <div style={{ padding: '8px 0', maxHeight: 200, overflowY: 'auto' }}>
+                          {users.filter(u => !u.isVago).length === 0 ? (
+                            <p style={{ padding: '12px 16px', fontSize: '0.78rem', color: 'hsl(var(--muted-foreground))' }}>
+                              Nenhum usuário cadastrado
+                            </p>
+                          ) : users.filter(u => !u.isVago).map(user => {
+                            const color = REP_COLOR_PALETTE[user.colorIndex || 0] || 'hsl(220 15% 40%)';
+                            const count = clientes.filter(c => c.userId === user.id).length;
+                            const isActive = dashFilterUser === String(user.id);
+                            return (
+                              <button
+                                key={user.id}
+                                onClick={() => setDashFilterUser(prev => prev === String(user.id) ? '' : String(user.id))}
+                                style={{
+                                  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                                  padding: '7px 16px', border: 'none', cursor: 'pointer', textAlign: 'left',
+                                  background: isActive ? `${color}18` : 'transparent',
+                                  transition: 'background 0.15s',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0, border: isActive ? `2px solid ${color}` : 'none' }} />
+                                <span style={{ flex: 1, fontSize: '0.78rem', fontWeight: isActive ? 700 : 500 }}>{user.full_name || user.fullName || user.username}</span>
+                                <span style={{
+                                  fontSize: '0.68rem', fontWeight: 700, padding: '1px 8px', borderRadius: 10,
+                                  background: `${color}22`, color,
+                                }}>
+                                  {count}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                      <div style={{ padding: '8px 0', maxHeight: 200, overflowY: 'auto' }}>
-                        {users.filter(u => !u.isVago).length === 0 ? (
-                          <p style={{ padding: '12px 16px', fontSize: '0.78rem', color: 'hsl(var(--muted-foreground))' }}>
-                            Nenhum usuário cadastrado
-                          </p>
-                        ) : users.filter(u => !u.isVago).map(user => {
-                          const color = REP_COLOR_PALETTE[user.colorIndex || 0] || 'hsl(220 15% 40%)';
-                          const count = clientes.filter(c => c.userId === user.id).length;
-                          const isActive = dashFilterUser === String(user.id);
-                          return (
-                            <button
-                              key={user.id}
-                              onClick={() => setDashFilterUser(prev => prev === String(user.id) ? '' : String(user.id))}
-                              style={{
-                                width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                                padding: '7px 16px', border: 'none', cursor: 'pointer', textAlign: 'left',
-                                background: isActive ? `${color}18` : 'transparent',
-                                transition: 'background 0.15s',
-                                flexShrink: 0,
-                              }}
-                            >
-                              <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0, border: isActive ? `2px solid ${color}` : 'none' }} />
-                              <span style={{ flex: 1, fontSize: '0.78rem', fontWeight: isActive ? 700 : 500 }}>{user.full_name || user.fullName || user.username}</span>
-                              <span style={{
-                                fontSize: '0.68rem', fontWeight: 700, padding: '1px 8px', borderRadius: 10,
-                                background: `${color}22`, color,
-                              }}>
-                                {count}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    )}
 
                     {/* Quick stats & Reports */}
                     <div className="admin-card" style={{ padding: '12px 16px' }}>
@@ -1946,7 +1970,8 @@ export default function Admin() {
                       document: '', companyName: '', birthDate: '', telefone: '', photo: '',
                       cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
                       cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
-                      userTypeId: ''
+                      userTypeId: '',
+                      managedUserIds: []
                     });
                     setIsUserModalOpen(true);
                   }}>
@@ -2033,7 +2058,8 @@ export default function Admin() {
                                 cargo: u.cargo || '',
                                 companyName: u.company_name || u.companyName || '',
                                 groupId: String(u.groupId || ''),
-                                userTypeId: String(u.userTypeId || '')
+                                userTypeId: String(u.userTypeId || ''),
+                                managedUserIds: (u as any).managedUsers?.map((m: any) => m.id) || []
                               });
                               setIsUserModalOpen(true);
                             }}><Pencil className="w-4 h-4" /></Button>
@@ -2767,7 +2793,12 @@ export default function Admin() {
           )}
 
           {/* ━━ BASE CLIENTE (Standalone) ━━ */}
-          {activeTab === 'baserotas' && <BaseClientePanel onSwitchToReps={() => setActiveTab('reps')} />}
+          {activeTab === 'baserotas' && (
+            <BaseClientePanel 
+              onSwitchToReps={() => setActiveTab('reps')} 
+              canCreate={role === 'admin' || (myPermissions.find(p => p.moduleId === 'baserotas')?.canEdit || false)}
+            />
+          )}
 
           {/* ━━ PLANEJAMENTO DE ÁREAS (com contexto) ━━ */}
           {['clusters', 'blocos', 'roteiros', 'agenda', 'densidade', 'leituraplanilha', 'roteiro_seq', 'resumo_roteiro'].includes(activeTab) && (
@@ -2804,6 +2835,7 @@ export default function Admin() {
                         <UserProfileManager
                           user={editingUser}
                           userTypes={userTypes}
+                          allUsers={users}
                           onUpdate={fetchAll}
                           onClose={() => setIsUserModalOpen(false)}
                         />
@@ -2857,6 +2889,141 @@ export default function Admin() {
                           />
                         </div>
                         <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Cargo</Label><Input value={newUser.cargo} onChange={e => setNewUser({ ...newUser, cargo: e.target.value })} placeholder="Ex: Gerente" className="h-9 text-xs" /></div>
+
+                        {/* Hierarquia de Gerenciamento (Multi-Select) */}
+                        <div className="space-y-1.5 md:col-span-3">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Gerenciamento</Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button 
+                                variant="outline" 
+                                className="w-full justify-between h-9 text-xs bg-background/50 border-border hover:bg-background/80 transition-all"
+                              >
+                                <div className="flex items-center gap-2 truncate">
+                                  <Users2 className="w-3.5 h-3.5 text-primary" />
+                                  <span className="truncate">
+                                    {newUser.managedUserIds.length === 0 
+                                      ? "Nenhum usuário selecionado" 
+                                      : `${newUser.managedUserIds.length} usuário(s) selecionado(s)`}
+                                  </span>
+                                </div>
+                                <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent 
+                              className="w-[320px] p-0 bg-card border-border shadow-2xl z-[3000] overflow-hidden rounded-xl" 
+                              align="start"
+                              onWheel={(e) => e.stopPropagation()} // Fix for some scroll issues in popovers
+                            >
+                              <div className="p-3 border-b border-border/50 bg-secondary/20">
+                                <div className="relative">
+                                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                  <input
+                                    type="text"
+                                    placeholder="Buscar por nome ou código..."
+                                    className="w-full bg-background text-xs pl-9 pr-8 py-2 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all"
+                                    onChange={(e) => {
+                                      const q = e.target.value.toLowerCase();
+                                      const items = document.querySelectorAll('.managed-user-item');
+                                      items.forEach((item: any) => {
+                                        const text = item.getAttribute('data-search').toLowerCase();
+                                        item.style.display = text.includes(q) ? 'flex' : 'none';
+                                      });
+                                    }}
+                                  />
+                                </div>
+                                <div className="flex items-center justify-between mt-2 px-1">
+                                  <span className="text-[10px] text-muted-foreground font-medium">
+                                    {newUser.managedUserIds.length} selecionados
+                                  </span>
+                                  <div className="flex gap-2">
+                                    <button 
+                                      type="button"
+                                      onClick={() => setNewUser({ ...newUser, managedUserIds: users.filter(u => u.id !== 0).map(u => u.id) })}
+                                      className="text-[10px] font-bold text-primary hover:underline"
+                                    >
+                                      Todos
+                                    </button>
+                                    <button 
+                                      type="button"
+                                      onClick={() => setNewUser({ ...newUser, managedUserIds: [] })}
+                                      className="text-[10px] font-bold text-destructive hover:underline"
+                                    >
+                                      Limpar
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div 
+                                className="max-h-[280px] overflow-y-auto overflow-x-hidden py-1 custom-scrollbar select-none"
+                                style={{ WebkitOverflowScrolling: 'touch' }}
+                              >
+                                {users.filter(u => u.id !== 0).map(u => {
+                                  const isSelected = newUser.managedUserIds.includes(u.id);
+                                  const displayName = u.full_name || u.fullName || u.username;
+                                  return (
+                                    <button
+                                      key={u.id}
+                                      type="button"
+                                      data-search={`${u.code} ${displayName}`}
+                                      className={`managed-user-item w-full flex items-center gap-3 px-3 py-2 text-xs transition-all hover:bg-secondary group ${isSelected ? 'bg-primary/5' : ''}`}
+                                      onClick={() => {
+                                        const ids = [...newUser.managedUserIds];
+                                        if (isSelected) {
+                                          setNewUser({ ...newUser, managedUserIds: ids.filter(id => id !== u.id) });
+                                        } else {
+                                          setNewUser({ ...newUser, managedUserIds: [...ids, u.id] });
+                                        }
+                                      }}
+                                    >
+                                      <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${isSelected ? 'bg-primary border-primary text-white' : 'border-border group-hover:border-primary/50'}`}>
+                                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                      </div>
+                                      <div className="flex flex-col items-start truncate">
+                                        <span className={`font-semibold truncate ${isSelected ? 'text-primary' : 'text-foreground/90'}`}>
+                                          {displayName}
+                                        </span>
+                                        {u.code && (
+                                          <span className="text-[10px] text-muted-foreground font-mono">
+                                            {u.code}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                          <p className="text-[10px] text-muted-foreground italic mt-1">Este usuário poderá visualizar todos os clientes dos usuários selecionados acima.</p>
+                          
+                          {/* Visualização dos selecionados */}
+                          {newUser.managedUserIds.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-3">
+                              {newUser.managedUserIds.map(id => {
+                                const u = users.find(user => user.id === id);
+                                if (!u) return null;
+                                return (
+                                  <div 
+                                    key={id} 
+                                    className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 border border-primary/20 text-[10px] text-primary font-medium animate-in fade-in zoom-in duration-200"
+                                  >
+                                    <span className="opacity-70 font-mono">{u.code}</span>
+                                    <span>{u.full_name || u.username}</span>
+                                    <button 
+                                      type="button"
+                                      onClick={() => setNewUser({ ...newUser, managedUserIds: newUser.managedUserIds.filter(mid => mid !== id) })}
+                                      className="hover:text-destructive transition-colors ml-0.5"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
 
                         {/* Linha 3 */}
                         <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Nome da Empresa</Label><Input value={newUser.companyName} onChange={e => setNewUser({ ...newUser, companyName: e.target.value })} placeholder="Ex: Tech Soluções" className="h-9 text-xs" /></div>

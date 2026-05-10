@@ -4,11 +4,12 @@ import {
   User, Briefcase, ShieldCheck, Bell, Settings, History, 
   Save, X, Camera, Check, Lock, Eye, EyeOff, Building2,
   Users, BadgeCheck, Mail, Phone, MapPin, Globe, Fingerprint,
-  Users2, Palette
+  Users2, Palette, ChevronDown, Search
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '@/lib/api-base';
 import { useAuth } from '@/contexts/auth-context-core';
@@ -41,9 +42,10 @@ interface UserProfileManagerProps {
   onClose: () => void;
   onUpdate: () => void;
   userTypes?: { id: number; name: string; color: string }[];
+  allUsers?: SystemUser[];
 }
 
-const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, onUpdate, userTypes = [] }) => {
+const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, onUpdate, userTypes = [], allUsers = [] }) => {
   const [activeTab, setActiveTab] = useState<'profile' | 'org' | 'perms' | 'notif' | 'settings' | 'history' | 'clients'>('profile');
   const [loading, setLoading] = useState(false);
   const { role: currentUserRole } = useAuth();
@@ -76,7 +78,8 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
     estado_end: user.estado_end || '',
     area_atuacao: user.area_atuacao || '',
     base_logistica: user.base_logistica || '',
-    userTypeId: user.userTypeId || ''
+    userTypeId: user.userTypeId || '',
+    managedUserIds: (user as any).managedUsers?.map((u: any) => u.id) || []
   });
 
   const [permissions, setPermissions] = useState<UserPermission[]>([]);
@@ -132,7 +135,8 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
       estado_end: user.estado_end || '',
       area_atuacao: user.area_atuacao || '',
       base_logistica: user.base_logistica || '',
-      userTypeId: user.userTypeId || ''
+      userTypeId: user.userTypeId || '',
+      managedUserIds: (user as any).managedUsers?.map((u: any) => u.id) || []
     });
     
     setConfig({
@@ -248,7 +252,8 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
           estado_end: formData.estado_end,
           area_atuacao: formData.area_atuacao,
           base_logistica: formData.base_logistica,
-          userTypeId: formData.userTypeId ? Number(formData.userTypeId) : null
+          userTypeId: formData.userTypeId ? Number(formData.userTypeId) : null,
+          managedUserIds: formData.managedUserIds
         })
       });
 
@@ -551,6 +556,145 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
                   {userTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
                 <p className="text-[10px] text-muted-foreground mt-1">Categoria personalizada definida nas configurações de sistema. O nível de acesso é definido pelo tipo selecionado.</p>
+              </div>
+
+              <div className="field col-span-2">
+                <Label>Gerenciamento</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      className="w-full justify-between h-10 bg-background border rounded-md text-sm hover:bg-secondary/50 transition-all"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <Users2 className="w-4 h-4 text-primary" />
+                        <span className="truncate">
+                          {formData.managedUserIds.length === 0 
+                            ? "Nenhum usuário selecionado" 
+                            : `${formData.managedUserIds.length} usuário(s) selecionado(s)`}
+                        </span>
+                      </div>
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent 
+                    className="w-[350px] p-0 bg-card border-border shadow-2xl z-[3000] overflow-hidden rounded-xl" 
+                    align="start"
+                    onWheel={(e) => e.stopPropagation()}
+                  >
+                    <div className="p-3 border-b border-border/50 bg-secondary/20">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <input
+                          type="text"
+                          placeholder="Pesquisar por nome ou código..."
+                          className="w-full bg-background text-xs pl-10 pr-8 py-2.5 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all"
+                          onChange={(e) => {
+                            const q = e.target.value.toLowerCase();
+                            const items = document.querySelectorAll('.managed-user-item-edit');
+                            items.forEach((item: any) => {
+                              const text = item.getAttribute('data-search').toLowerCase();
+                              item.style.display = text.includes(q) ? 'flex' : 'none';
+                            });
+                          }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between mt-2.5 px-1">
+                        <span className="text-[10px] text-muted-foreground font-medium">
+                          {formData.managedUserIds.length} selecionados
+                        </span>
+                        <div className="flex gap-3">
+                          <button 
+                            type="button"
+                            onClick={() => setFormData({ ...formData, managedUserIds: allUsers.filter(u => u.id !== user.id).map(u => u.id) })}
+                            className="text-[10px] font-bold text-primary hover:underline"
+                          >
+                            Todos
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => setFormData({ ...formData, managedUserIds: [] })}
+                            className="text-[10px] font-bold text-destructive hover:underline"
+                          >
+                            Limpar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div 
+                      className="max-h-[300px] overflow-y-auto overflow-x-hidden py-1 custom-scrollbar select-none"
+                      style={{ WebkitOverflowScrolling: 'touch' }}
+                    >
+                      {allUsers.filter(u => u.id !== user.id).map(u => {
+                        const isSelected = formData.managedUserIds.includes(u.id);
+                        const displayName = u.full_name || u.fullName || u.username;
+                        return (
+                          <button
+                            key={u.id}
+                            type="button"
+                            data-search={`${u.code} ${displayName}`}
+                            className={`managed-user-item-edit w-full flex items-center gap-3 px-4 py-2.5 text-xs transition-all hover:bg-secondary group ${isSelected ? 'bg-primary/5' : ''}`}
+                            onClick={() => {
+                              const ids = [...formData.managedUserIds];
+                              if (isSelected) {
+                                setFormData({ ...formData, managedUserIds: ids.filter(id => id !== u.id) });
+                              } else {
+                                setFormData({ ...formData, managedUserIds: [...ids, u.id] });
+                              }
+                            }}
+                          >
+                            <div className={`w-4.5 h-4.5 rounded border flex items-center justify-center transition-all ${isSelected ? 'bg-primary border-primary text-white' : 'border-border group-hover:border-primary/50'}`}>
+                              {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            </div>
+                            <div className="flex flex-col items-start truncate">
+                              <span className={`font-semibold truncate ${isSelected ? 'text-primary' : 'text-foreground/90'}`}>
+                                {displayName}
+                              </span>
+                              {u.code && (
+                                <span className="text-[10px] text-muted-foreground font-mono">
+                                  {u.code}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                      {allUsers.length === 0 && (
+                        <p className="text-[10px] text-muted-foreground p-4 text-center italic">
+                          Nenhum usuário disponível para seleção.
+                        </p>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <p className="text-[10px] text-muted-foreground mt-1">Este usuário poderá visualizar todos os clientes dos usuários selecionados.</p>
+                
+                {/* Visualização dos selecionados (UserProfileManager) */}
+                {formData.managedUserIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {formData.managedUserIds.map(id => {
+                      const u = allUsers.find(user => user.id === id);
+                      if (!u) return null;
+                      return (
+                        <div 
+                          key={id} 
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-[10px] text-primary font-medium animate-in fade-in zoom-in duration-200"
+                        >
+                          <span className="opacity-70 font-mono">{u.code}</span>
+                          <span>{u.full_name || u.username}</span>
+                          <button 
+                            type="button"
+                            onClick={() => setFormData({ ...formData, managedUserIds: formData.managedUserIds.filter(mid => mid !== id) })}
+                            className="hover:text-destructive transition-colors ml-1"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </FormGrid>
           )}

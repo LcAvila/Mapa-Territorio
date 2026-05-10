@@ -22,6 +22,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { toast } from 'sonner';
 import { AddressMapPicker } from './AddressMapPicker';
 import { API_BASE_URL } from '@/lib/api-base';
+import { useAuth } from '@/contexts/auth-context-core';
 
 interface Cliente {
   id_cliente: number;
@@ -49,7 +50,8 @@ interface Cliente {
   status_ativo: boolean;
 }
 
-export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => void }) {
+export function BaseClientePanel({ onSwitchToReps, canCreate = false }: { onSwitchToReps?: () => void, canCreate?: boolean }) {
+  const { role: currentUserRole, userId: currentUserId } = useAuth();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -247,17 +249,19 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
       setSubmitting(true);
       const token = localStorage.getItem('token');
       const tokenVersion = localStorage.getItem('tokenVersion') || '0';
-      const method = editingClientId ? 'PUT' : 'POST';
       const url = editingClientId ? `${API_URL}/${editingClientId}` : API_URL;
 
       const res = await fetch(url, {
-        method,
+        method: editingClientId ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
           'x-user-token-version': tokenVersion
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ...formData,
+          userId: currentUserRole === 'admin' ? (formData.userId || null) : currentUserId
+        })
       });
 
       if (!res.ok) {
@@ -355,146 +359,150 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
           <p className="text-sm text-muted-foreground">Gerencie sua carteira de clientes, pesquise pela base e cadastre manualmente.</p>
         </div>
         <div className="flex gap-2">
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
-                <Plus className="w-4 h-4" /> Cadastrar Cliente
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-xl">
-                  {editingClientId ? <Pencil className="w-5 h-5 text-primary" /> : <Database className="w-5 h-5 text-primary" />}
-                  {editingClientId ? 'Editar Cliente' : 'Cadastrar Novo Cliente'}
-                </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">
-                  {editingClientId ? `Atualizando informações do cliente.` : 'Preencha os dados para registrar um novo cliente na base.'}
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleSaveClient} className="space-y-4 mt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="codigo_cliente">Código do Cliente (Matriz)</Label>
-                    <Input id="codigo_cliente" name="codigo_cliente" value={formData.codigo_cliente} onChange={handleInputChange} placeholder="Ex: CLI-1020" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="nome_cliente">Nome do Cliente (Razão Social) *</Label>
-                    <Input id="nome_cliente" name="nome_cliente" value={formData.nome_cliente} onChange={handleInputChange} placeholder="Nome completo" required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="nome_abreviado">Nome Abreviado (Fantasia)</Label>
-                    <Input id="nome_abreviado" name="nome_abreviado" value={formData.nome_abreviado} onChange={handleInputChange} placeholder="Nome fantasia" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cnpj">CNPJ</Label>
-                    <Input id="cnpj" name="cnpj" value={formData.cnpj} onChange={handleInputChange} placeholder="00.000.000/0000-00" />
-                  </div>
-                  <div className="col-span-2 mt-2 border-t pt-4">
-                    <div className="flex items-center gap-2 mb-4 text-sm font-medium text-muted-foreground">
-                      <MapPin className="w-4 h-4" /> Dados de Localização e Endereço
+          {canCreate && (
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+                  <Plus className="w-4 h-4" /> Cadastrar Cliente
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-xl">
+                    {editingClientId ? <Pencil className="w-5 h-5 text-primary" /> : <Database className="w-5 h-5 text-primary" />}
+                    {editingClientId ? 'Editar Cliente' : 'Cadastrar Novo Cliente'}
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-muted-foreground">
+                    {editingClientId ? `Atualizando informações do cliente.` : 'Preencha os dados para registrar um novo cliente na base.'}
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSaveClient} className="space-y-4 mt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="codigo_cliente">Código do Cliente (Matriz)</Label>
+                      <Input id="codigo_cliente" name="codigo_cliente" value={formData.codigo_cliente} onChange={handleInputChange} placeholder="Ex: CLI-1020" />
                     </div>
-                  </div>
-                  <div className="space-y-2 relative">
-                    <Label htmlFor="cep">CEP</Label>
-                    <div className="relative">
-                      <Input id="cep" name="cep" value={formData.cep} onChange={handleInputChange} onBlur={() => fetchCepData(formData.cep)} placeholder="00000-000" />
-                      {fetchingCep && <Loader2 className="absolute right-3 top-2.5 w-4 h-4 animate-spin text-muted-foreground" />}
+                    <div className="space-y-2">
+                      <Label htmlFor="nome_cliente">Nome do Cliente (Razão Social) *</Label>
+                      <Input id="nome_cliente" name="nome_cliente" value={formData.nome_cliente} onChange={handleInputChange} placeholder="Nome completo" required />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="endereco_completo">Logradouro (Rua/Av)</Label>
-                    <Input id="endereco_completo" name="endereco_completo" value={formData.endereco_completo} onChange={handleInputChange} placeholder="Ex: Rua das Flores" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="numero">Número</Label>
-                    <Input id="numero" name="numero" value={formData.numero} onChange={handleInputChange} placeholder="Ex: 123 ou S/N" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="bairro">Bairro</Label>
-                    <Input 
-                      id="bairro" 
-                      name="bairro" 
-                      value={formData.bairro} 
-                      onChange={handleInputChange} 
-                      placeholder="Nome do Bairro" 
-                      list="bairros-list"
-                    />
-                    <datalist id="bairros-list">
-                      {bairrosLocais.map(b => (
-                        <option key={b} value={b} />
-                      ))}
-                    </datalist>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cidade">Cidade</Label>
-                    <Input id="cidade" name="cidade" value={formData.cidade} onChange={handleInputChange} placeholder="Nome da Cidade" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="uf">UF</Label>
-                    <Input id="uf" name="uf" value={formData.uf} onChange={handleInputChange} placeholder="Ex: SP" maxLength={2} />
-                  </div>
-                   <div className="space-y-2">
-                    <Label htmlFor="regiao">Região</Label>
-                    <Input id="regiao" name="regiao" value={formData.regiao} onChange={handleInputChange} placeholder="Ex: SUL, NORTE" />
-                  </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="nome_abreviado">Nome Abreviado (Fantasia)</Label>
+                      <Input id="nome_abreviado" name="nome_abreviado" value={formData.nome_abreviado} onChange={handleInputChange} placeholder="Nome fantasia" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cnpj">CNPJ</Label>
+                      <Input id="cnpj" name="cnpj" value={formData.cnpj} onChange={handleInputChange} placeholder="00.000.000/0000-00" />
+                    </div>
+                    <div className="col-span-2 mt-2 border-t pt-4">
+                      <div className="flex items-center gap-2 mb-4 text-sm font-medium text-muted-foreground">
+                        <MapPin className="w-4 h-4" /> Dados de Localização e Endereço
+                      </div>
+                    </div>
+                    <div className="space-y-2 relative">
+                      <Label htmlFor="cep">CEP</Label>
+                      <div className="relative">
+                        <Input id="cep" name="cep" value={formData.cep} onChange={handleInputChange} onBlur={() => fetchCepData(formData.cep)} placeholder="00000-000" />
+                        {fetchingCep && <Loader2 className="absolute right-3 top-2.5 w-4 h-4 animate-spin text-muted-foreground" />}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="endereco_completo">Logradouro (Rua/Av)</Label>
+                      <Input id="endereco_completo" name="endereco_completo" value={formData.endereco_completo} onChange={handleInputChange} placeholder="Ex: Rua das Flores" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="numero">Número</Label>
+                      <Input id="numero" name="numero" value={formData.numero} onChange={handleInputChange} placeholder="Ex: 123 ou S/N" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="bairro">Bairro</Label>
+                      <Input 
+                        id="bairro" 
+                        name="bairro" 
+                        value={formData.bairro} 
+                        onChange={handleInputChange} 
+                        placeholder="Nome do Bairro" 
+                        list="bairros-list"
+                      />
+                      <datalist id="bairros-list">
+                        {bairrosLocais.map(b => (
+                          <option key={b} value={b} />
+                        ))}
+                      </datalist>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cidade">Cidade</Label>
+                      <Input id="cidade" name="cidade" value={formData.cidade} onChange={handleInputChange} placeholder="Nome da Cidade" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="uf">UF</Label>
+                      <Input id="uf" name="uf" value={formData.uf} onChange={handleInputChange} placeholder="Ex: SP" maxLength={2} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="regiao">Região</Label>
+                      <Input id="regiao" name="regiao" value={formData.regiao} onChange={handleInputChange} placeholder="Ex: SUL, NORTE" />
+                    </div>
 
-                  <div className="col-span-2 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-semibold flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-primary" /> Visualização no Mapa (Mó Precisão)
-                      </Label>
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={handleGeocode}
-                        className="h-8 text-[10px] gap-2 font-bold"
-                        disabled={fetchingCep}
-                      >
-                        {fetchingCep ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
-                        BUSCAR NO MAPA
+                    <div className="col-span-2 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-semibold flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-primary" /> Visualização no Mapa (Mó Precisão)
+                        </Label>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={handleGeocode}
+                          className="h-8 text-[10px] gap-2 font-bold"
+                          disabled={fetchingCep}
+                        >
+                          {fetchingCep ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                          BUSCAR NO MAPA
+                        </Button>
+                      </div>
+                      
+                      <AddressMapPicker 
+                        lat={formData.latitude} 
+                        lng={formData.longitude} 
+                        onChange={(lat, lng) => setFormData(p => ({ ...p, latitude: lat, longitude: lng }))}
+                      />
+                      <p className="text-[10px] text-muted-foreground italic">
+                        * Se o pino tiver no lugar errado, é só tocar no mapa pra ajustar.
+                      </p>
+                    </div>
+
+                    <div className="col-span-2 mt-2 border-t pt-4">
+                      <div className="flex items-center gap-2 mb-4 text-sm font-medium text-muted-foreground">
+                        <Briefcase className="w-4 h-4" /> Vínculo
+                      </div>
+                    </div>
+
+                    {currentUserRole === 'admin' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="userId">Usuário Responsável</Label>
+                        <div className="flex gap-2">
+                          <select id="userId" name="userId" value={formData.userId} onChange={handleSelectChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                            <option value="">— Selecione —</option>
+                            {systemUsers.map(u => <option key={u.id} value={u.id}>{u.full_name || u.username}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+
+                  </div>
+                  <div className="flex justify-end pt-4 mt-6 border-t">
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+                      <Button type="submit" disabled={submitting}>
+                        {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : 'Salvar Cadastro'}
                       </Button>
                     </div>
-                    
-                    <AddressMapPicker 
-                      lat={formData.latitude} 
-                      lng={formData.longitude} 
-                      onChange={(lat, lng) => setFormData(p => ({ ...p, latitude: lat, longitude: lng }))}
-                    />
-                    <p className="text-[10px] text-muted-foreground italic">
-                      * Se o pino tiver no lugar errado, é só tocar no mapa pra ajustar.
-                    </p>
                   </div>
-
-                  <div className="col-span-2 mt-2 border-t pt-4">
-                    <div className="flex items-center gap-2 mb-4 text-sm font-medium text-muted-foreground">
-                      <Briefcase className="w-4 h-4" /> Vínculo
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="userId">Usuário Responsável</Label>
-                    <div className="flex gap-2">
-                      <select id="userId" name="userId" value={formData.userId} onChange={handleSelectChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                        <option value="">— Selecione —</option>
-                        {systemUsers.map(u => <option key={u.id} value={u.id}>{u.full_name || u.username}</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-
-                </div>
-                <div className="flex justify-end pt-4 mt-6 border-t">
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                    <Button type="submit" disabled={submitting}>
-                      {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : 'Salvar Cadastro'}
-                    </Button>
-                  </div>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
       
@@ -536,16 +544,18 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
                   <option key={uf} value={uf!}>{uf}</option>
                 ))}
               </select>
-              <select
-                value={filterUser}
-                onChange={e => setFilterUser(e.target.value)}
-                className="h-9 px-3 rounded-md text-xs border border-input bg-background/50 text-foreground max-w-[150px]"
-              >
-                <option value="">Todos Usuários</option>
-                {systemUsers.map(u => (
-                  <option key={u.id} value={u.id.toString()}>{u.full_name || u.username}</option>
-                ))}
-              </select>
+              {currentUserRole === 'admin' && (
+                <select
+                  value={filterUser}
+                  onChange={e => setFilterUser(e.target.value)}
+                  className="h-9 px-3 rounded-md text-xs border border-input bg-background/50 text-foreground max-w-[150px]"
+                >
+                  <option value="">Todos Usuários</option>
+                  {systemUsers.map(u => (
+                    <option key={u.id} value={u.id.toString()}>{u.full_name || u.username}</option>
+                  ))}
+                </select>
+              )}
               {(searchTerm || filterStatus !== 'Todos' || filterUF || filterUser) && (
                 <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => { setSearchTerm(''); setFilterStatus('Todos'); setFilterUF(''); setFilterUser(''); }}>
                   <X className="w-4 h-4" />
@@ -575,7 +585,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
                     <TableHead className="whitespace-nowrap h-10 min-w-[250px]">Razão Social / Fantasia</TableHead>
                     <TableHead className="whitespace-nowrap h-10">CNPJ</TableHead>
                     <TableHead className="whitespace-nowrap h-10">Cidade / UF</TableHead>
-                    <TableHead className="whitespace-nowrap h-10">Usuário Responsável</TableHead>
+                    {currentUserRole === 'admin' && <TableHead className="whitespace-nowrap h-10">Usuário Responsável</TableHead>}
                     <TableHead className="whitespace-nowrap h-10 text-center">Status</TableHead>
                     <TableHead className="whitespace-nowrap h-10 text-right pr-4">Ações</TableHead>
                   </TableRow>
@@ -597,9 +607,11 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
                              <span className="text-muted-foreground">{row.uf}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-xs py-2">
-                          <span className="font-semibold">{row.user?.full_name || row.user?.username || 'Não vinculado'}</span>
-                        </TableCell>
+                        {currentUserRole === 'admin' && (
+                          <TableCell className="text-xs py-2">
+                            <span className="font-semibold">{row.user?.full_name || row.user?.username || 'Não vinculado'}</span>
+                          </TableCell>
+                        )}
                         <TableCell className="text-xs py-2 text-center">
                            {row.status_ativo ? (
                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">

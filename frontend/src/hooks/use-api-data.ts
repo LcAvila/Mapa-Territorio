@@ -23,11 +23,13 @@ export interface Cliente {
 }
 
 export function useApiUsers(enabled: boolean) {
-  const { token, tokenVersion } = useAuth();
+  const { token, tokenVersion, role } = useAuth();
+  const isAdminLike = role === 'admin' || role === 'supervisor';
+
   return useQuery<SystemUser[]>({
     queryKey: ["api", "users", !!token],
     queryFn: async () => {
-      if (!token) return [];
+      if (!token || !isAdminLike) return [];
       const res = await fetch(`${API_BASE}/api/admin/users`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -37,8 +39,8 @@ export function useApiUsers(enabled: boolean) {
       return res.ok ? res.json() : [];
     },
     staleTime: 5_000,
-    refetchInterval: token ? 10_000 : false,
-    enabled: true
+    refetchInterval: (token && isAdminLike) ? 10_000 : false,
+    enabled: enabled && !!token && isAdminLike
   });
 }
 

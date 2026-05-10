@@ -237,16 +237,20 @@ export default function MapHeader({
                       )}
                     </div>
 
-                    {/* User Filter (Multi-select) */}
-                    {role === 'admin' && (
+                    {/* User Multi-Select Filter (Admin/Supervisor Only) */}
+                    {(role === 'admin' || role === 'supervisor') && (
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Usuários</label>
+                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Filtrar Usuários</label>
                         <Popover>
                           <PopoverTrigger asChild>
-                            <Button variant="outline" size="sm" className="w-full h-9 justify-between bg-secondary text-foreground text-xs font-normal border-border hover:bg-secondary/80 px-3">
-                              <span className="truncate">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="w-full justify-between h-9 text-xs bg-secondary/50 border-border hover:bg-secondary"
+                            >
+                              <span className="truncate max-w-[120px]">
                                 {!filtroUsuario ? "Todos Usuários" : 
-                                  filtroUsuario.split(',').length === 1 ? 
+                                  !filtroUsuario.includes(',') ? 
                                     (users.find(u => String(u.id) === filtroUsuario)?.username || "1 Usuário") :
                                     `${filtroUsuario.split(',').length} Selecionados`}
                               </span>

@@ -23,16 +23,27 @@ router.use(authenticate);
 // ---------------------------------------------------------
 // GET /api/clientes - Traz a lista da rapaziada (clientes)
 // ---------------------------------------------------------
-router.get('/', requirePermission('clients', 'view'), async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { userId } = req.query;
     const where: any = {};
     
-    // Cada um no seu quadrado: Usuários comuns só vêem os seus.
+    // Cada um no seu quadrado: 
+    // - Admin vê tudo.
+    // - Supervisor vê tudo (ou podemos restringir ao grupo dele se houver essa lógica).
+    // - Usuários comuns (Representantes) só vêem os seus próprios clientes e os de seus subordinados.
     const user = (req as any).user;
-    if (user && user.role !== 'admin') {
-      where.userId = user.id;
-    } else {
+    if (user && user.role === 'user') {
+      const subordinateIds = user.subordinateIds || [];
+      if (subordinateIds.length > 0) {
+        where.userId = { in: [user.id, ...subordinateIds] };
+      } else {
+        where.userId = user.id;
+      }
+    } else if (user && user.role === 'supervisor') {
+      // Por enquanto supervisor vê tudo, mas se quiser restringir:
+      // where.userId = user.id; // Descomente para restringir supervisor também
+    } else if (user && user.role === 'admin') {
       if (userId) {
         const ids = String(userId).split(',').map(id => Number(id.trim())).filter(id => !isNaN(id));
         if (ids.length > 1) {
@@ -70,7 +81,7 @@ router.get('/', requirePermission('clients', 'view'), async (req, res) => {
 // ---------------------------------------------------------
 // POST /api/clientes - Bota mais um cliente no jogo
 // ---------------------------------------------------------
-router.post('/', requirePermission('clients', 'edit'), async (req, res) => {
+router.post('/', requirePermission('baserotas', 'edit'), async (req, res) => {
   try {
     let { 
       codigo_cliente, 
@@ -150,7 +161,7 @@ router.post('/', requirePermission('clients', 'edit'), async (req, res) => {
 // ---------------------------------------------------------
 // PUT /api/clientes/:id - Atualiza os dados do cliente
 // ---------------------------------------------------------
-router.put('/:id', requirePermission('clients', 'edit'), async (req, res) => {
+router.put('/:id', requirePermission('baserotas', 'edit'), async (req, res) => {
   try {
     const id = parseInt(req.params.id as string);
     let { 
@@ -204,7 +215,7 @@ router.put('/:id', requirePermission('clients', 'edit'), async (req, res) => {
 // ---------------------------------------------------------
 // DELETE /api/clientes/:id - Manda o cliente pra conta do Papa
 // ---------------------------------------------------------
-router.delete('/:id', requirePermission('clients', 'edit'), async (req, res) => {
+router.delete('/:id', requirePermission('baserotas', 'edit'), async (req, res) => {
   try {
     const id = parseInt(req.params.id as string);
     await prisma.cliente.delete({ where: { id_cliente: id } });

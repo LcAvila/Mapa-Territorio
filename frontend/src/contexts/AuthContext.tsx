@@ -44,22 +44,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setToken(existingToken);
                 localStorage.setItem('token', existingToken);
 
-                // If we have a token but missing core metadata (common after refresh), restore it
-                if (!localStorage.getItem('role') || !localStorage.getItem('userId')) {
-                    fetch(`${API_BASE_URL}/api/auth/me`, {
-                        headers: { 'Authorization': `Bearer ${existingToken}` }
-                    })
-                    .then(r => r.json())
-                    .then(userData => {
-                        if (userData.id) {
-                            login(existingToken, userData.id, userData.role, userData.fullName, userData.tipo, userData.estadoEnd, userData.defaultWorkspace, userData.inactivityLimit, userData.token_version);
-                        }
-                    })
-                    .catch(e => console.error('Error restoring session metadata:', e))
-                    .finally(() => setIsLoading(false));
-                } else {
-                    setIsLoading(false);
-                }
+                // ALWAYS validate session metadata with backend on startup to ensure token is still valid
+                fetch(`${API_BASE_URL}/api/auth/me`, {
+                    headers: { 'Authorization': `Bearer ${existingToken}` }
+                })
+                .then(async r => {
+                    if (r.ok) {
+                        const userData = await r.json();
+                        login(existingToken, userData.id, userData.role, userData.full_name, userData.tipo, userData.estado_end, userData.default_workspace, userData.inactivity_limit, userData.token_version);
+                    } else if (r.status === 401) {
+                        // Token invalid on backend (e.g. email changed or kicked)
+                        clearLocalAuth();
+                        await supabase.auth.signOut();
+                    }
+                })
+                .catch(e => {
+                    console.error('Error validating session:', e);
+                    // If it's a connection error, we might want to keep the local session as fallback
+                    // but for 401 we definitely want to clear.
+                })
+                .finally(() => setIsLoading(false));
             } else {
                  // If Supabase says no session, we should clear our local state
                  clearLocalAuth();

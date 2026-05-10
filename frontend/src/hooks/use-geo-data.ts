@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { API_BASE_URL } from "@/lib/api-base";
+import { useAuth } from "@/contexts/auth-context-core";
 
 const API_BASE = `${API_BASE_URL}/api/location`;
 const IBGE_MALHAS = "https://servicodados.ibge.gov.br/api/v3/malhas";
@@ -8,27 +9,46 @@ const IBGE_LOC = "https://servicodados.ibge.gov.br/api/v1/localidades";
 // ── Metadata Hooks (Brasil Aberto via Backend) ────────────────────────────────
 
 export function useStatesMetadata() {
+  const { token, tokenVersion } = useAuth();
   return useQuery({
     queryKey: ["location", "states"],
-    queryFn: () => fetch(`${API_BASE}/states`).then(r => r.json()),
+    queryFn: () => fetch(`${API_BASE}/states`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'x-user-token-version': String(tokenVersion || 0)
+      }
+    }).then(r => r.json()),
     staleTime: Infinity,
+    enabled: !!token
   });
 }
 
 export function useCitiesMetadata(ufSigla: string | null) {
+  const { token, tokenVersion } = useAuth();
   return useQuery({
     queryKey: ["location", "cities", ufSigla],
-    queryFn: () => fetch(`${API_BASE}/cities/${ufSigla}`).then(r => r.json()),
-    enabled: !!ufSigla,
+    queryFn: () => fetch(`${API_BASE}/cities/${ufSigla}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'x-user-token-version': String(tokenVersion || 0)
+      }
+    }).then(r => r.json()),
+    enabled: !!ufSigla && !!token,
     staleTime: Infinity,
   });
 }
 
 export function useDistrictsMetadata(ibgeCode: number | null) {
+  const { token, tokenVersion } = useAuth();
   return useQuery({
     queryKey: ["location", "districts", ibgeCode],
-    queryFn: () => fetch(`${API_BASE}/districts/${ibgeCode}`).then(r => r.json()),
-    enabled: !!ibgeCode,
+    queryFn: () => fetch(`${API_BASE}/districts/${ibgeCode}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'x-user-token-version': String(tokenVersion || 0)
+      }
+    }).then(r => r.json()),
+    enabled: !!ibgeCode && !!token,
     staleTime: Infinity,
   });
 }

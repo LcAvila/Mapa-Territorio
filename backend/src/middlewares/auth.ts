@@ -28,27 +28,55 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
     let user: any = null;
 
     try {
-      console.log(`[AUTH] Attempting to match user in Prisma. Email: ${sbUser.email}, extracted code: ${accessCode}`);
-      user = await prisma.user.findFirst({
+      console.log(`[AUTH] Attempting to match user in Prisma. ID: ${sbUser.id}, Email: ${sbUser.email}`);
+      
+      const queryOptions: any = {
         where: {
           OR: [
-            { code: accessCode },
-            { username: accessCode }
-          ]
+            { supabase_id: sbUser.id },
+            sbUser.email ? { email: { equals: sbUser.email, mode: 'insensitive' } } : null,
+            accessCode ? { code: accessCode } : null,
+            accessCode ? { username: accessCode } : null,
+            // Fallback for admin specifically if email matches but username/code is different
+            sbUser.email === 'avila.estudohtml@gmail.com' ? { username: 'admin' } : null
+          ].filter(Boolean) as any
         },
         include: {
           permissions: {
             include: { module: true }
           }
         }
-      });
+      };
+
+      // Try to include managedUsers only if it exists in the schema (avoid crash during sync)
+      try {
+        user = await (prisma.user as any).findFirst({
+          ...queryOptions,
+          include: {
+            ...queryOptions.include,
+            managedUsers: { select: { id: true } }
+          }
+        });
+      } catch (e) {
+        console.warn('[AUTH] managedUsers relation not found in Prisma yet, falling back...');
+        user = await (prisma.user as any).findFirst(queryOptions);
+      }
+
+      // Se encontramos por código/username mas o supabase_id estava errado ou nulo, sincronizamos agora
+      if (user && user.supabase_id !== sbUser.id) {
+        console.log(`[AUTH] Syncing supabase_id for user ${user.username} (ID: ${user.id}) -> ${sbUser.id}`);
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { supabase_id: sbUser.id }
+        }).catch(e => console.error('[AUTH] Failed to auto-sync supabase_id:', e));
+      }
     } catch (prismaError) {
       console.warn(`[AUTH] Prisma connection failed. Attempting HTTP Fallback via Supabase API (Port 443)...`);
       
       const { data: httpUser, error: httpError } = await supabase
         .from('users')
         .select('*, permissions:user_permissions(*, module:modules(*))')
-        .or(`code.eq.${accessCode},username.eq.${accessCode}`)
+        .or(`supabase_id.eq.${sbUser.id},email.eq.${sbUser.email},code.eq.${accessCode},username.eq.${accessCode}`)
         .single();
 
       if (httpError || !httpUser) {
@@ -57,13 +85,16 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
       }
 
       console.log(`[AUTH] Perfil recuperado com sucesso via HTTP Fallback!`);
-      user = httpUser;
+      user = {
+        ...httpUser,
+        managedUsers: httpUser.managedUsers?.map((m: any) => ({ id: m.managed_user_id })) || []
+      };
       req.isHttpFallback = true;
     }
  
     if (!user) {
-      console.error(`[AUTH] User profile not found for accessCode: ${accessCode}`);
-      return res.status(401).json({ message: 'Perfil não encontrado' });
+      console.error(`[AUTH] User not found in database for email: ${sbUser.email}`);
+      return res.status(401).json({ message: 'Perfil não sincronizado. Entre em contato com o administrador.' });
     }
 
     // Step 3: Real-time 'Kick' validation
@@ -80,7 +111,8 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
       ...user,
       id: user.id,
       role: user.role,
-      tipo: user.tipo
+      tipo: user.tipo,
+      subordinateIds: user.managedUsers?.map((s: any) => s.id) || []
     };
 
     // Update last_active in background (if possible)
@@ -115,11 +147,28 @@ export const requirePermission = (moduleId: string, level: 'view' | 'edit' = 'vi
     console.log(`[PERMS] Checking ${level} for module ${moduleId} (User: ${req.user.id}, Role: ${req.user.role})`);
 
     // Standard users have default view access to certain modules
-    const DEFAULT_VIEW_MODULES = ['clients', 'reps', 'territories', 'interests', 'groups', 'notifications', 'baserotas', 'clientes'];
-    const isStandardUser = req.user.role === 'user';
+    // Using a more inclusive list and ensuring role check is robust
+    const DEFAULT_VIEW_MODULES = ['clients', 'reps', 'territories', 'interests', 'groups', 'notifications', 'baserotas', 'clientes', 'routes', 'users'];
+    const userRole = String(req.user.role || '').toLowerCase();
+    const isStandardUser = userRole === 'user' || userRole === 'representante';
 
-    if (isStandardUser && level === 'view' && DEFAULT_VIEW_MODULES.includes(moduleId)) {
-      return next();
+    console.log(`[PERMS] Checking module: ${moduleId}, level: ${level}, role: ${userRole}`);
+
+    if (level === 'view') {
+      if (DEFAULT_VIEW_MODULES.includes(moduleId) || moduleId === 'baserotas' || moduleId === 'clientes') {
+        if (isStandardUser || userRole === 'supervisor' || userRole === 'admin') {
+          console.log(`[PERMS] Auto-granting view access to ${moduleId} for role ${userRole}`);
+          return next();
+        }
+      }
+    }
+
+    // Standard users can also edit their own profile/notifications if needed
+    if (level === 'edit' && (moduleId === 'notifications' || moduleId === 'users')) {
+      if (isStandardUser || userRole === 'supervisor') {
+        console.log(`[PERMS] Auto-granting edit access to ${moduleId} for role ${userRole}`);
+        return next();
+      }
     }
 
     try {

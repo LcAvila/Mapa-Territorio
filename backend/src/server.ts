@@ -85,8 +85,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/geocode', geocodeRoutes); 
 app.use('/api/interest', interestRoutes);
-app.use('/api/location', locationRoutes); // Must be BEFORE /api planilhaRoutes (which has global auth middleware)
-app.use('/api', planilhaRoutes);
+app.use('/api/location', locationRoutes); 
+app.use('/api/planilha', planilhaRoutes); // Mounted specifically at /api/planilha
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/feed', feedRoutes);
 app.use('/api/birthdays', birthdaysRoutes);

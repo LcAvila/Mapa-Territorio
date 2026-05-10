@@ -101,14 +101,28 @@ router.delete('/user-types/:id', authenticate, requirePermission('settings', 'ed
   }
 });
 
-const PUBLIC_USER_FIELDS = { 
-  id: true, username: true, role: true, code: true, tipo: true, userTypeId: true,
-  full_name: true, cpf_cnpj: true, telefone: true, cargo: true, company_name: true, groupId: true,
-  photo: true, birth_date: true, colorIndex: true, comissao: true, isVago: true,
-  email: true, // Incluído o campo email no SELECT
-  cep: true, logradouro: true, numero: true, complemento: true,
-  bairro_end: true, cidade: true, estado_end: true, area_atuacao: true, base_logistica: true,
-  created_at: true, last_active: true, token_version: true
+const PUBLIC_USER_FIELDS = {
+  id: true,
+  username: true,
+  full_name: true,
+  email: true,
+  role: true,
+  tipo: true,
+  userTypeId: true,
+  managedUsers: {
+    select: {
+      id: true,
+      username: true,
+      full_name: true,
+      code: true
+    }
+  },
+  photo: true,
+  colorIndex: true,
+  cargo: true,
+  last_active: true,
+  isVago: true,
+  token_version: true
 };
 
 // --- KICK USER ---
@@ -173,11 +187,11 @@ router.get('/users', requirePermission('users', 'view'), async (req, res) => {
 
 router.post('/users', requirePermission('users', 'edit'), async (req: any, res) => {
   const { 
-    password, role, tipo, userTypeId, full_name, code, photo, colorIndex, comissao, isVago, 
-    telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
-    cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
-    email
-  } = req.body;
+      password, role, tipo, userTypeId, managedUserIds, full_name, photo, colorIndex, comissao, isVago, 
+      telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
+      cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
+      email // Recebendo o email do frontend
+    } = req.body;
   
   if (!code) return res.status(400).json({ message: 'Código é obrigatório' });
 
@@ -227,6 +241,9 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
         area_atuacao,
         base_logistica,
         groupId: groupId ? Number(groupId) : null,
+        managedUsers: managedUserIds ? {
+          connect: managedUserIds.map((id: number) => ({ id }))
+        } : undefined,
         birth_date: birth_date ? new Date(birth_date) : null,
         colorIndex: colorIndex !== undefined ? Number(colorIndex) : 0,
         comissao: (comissao !== undefined && comissao !== '' && comissao !== null) ? parseFloat(comissao) : null,
@@ -267,7 +284,7 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
 router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, res) => {
   const id = Number(req.params.id);
   const { 
-    password, role, tipo, userTypeId, full_name, photo, colorIndex, comissao, isVago, 
+    password, role, tipo, userTypeId, managedUserIds, full_name, photo, colorIndex, comissao, isVago, 
     telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
     cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
     email 
@@ -367,6 +384,9 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
         cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
         // Ensure groupId is not 0 if empty string is passed
         groupId: (groupId !== undefined && groupId !== '' && groupId !== null) ? Number(groupId) : (groupId === '' || groupId === null ? null : undefined),
+        managedUsers: managedUserIds ? {
+          set: managedUserIds.map((id: number) => ({ id }))
+        } : undefined,
         birth_date: birth_date ? new Date(birth_date) : undefined,
         colorIndex: colorIndex !== undefined ? Number(colorIndex) : undefined,
         isVago: isVago !== undefined ? (isVago ? 1 : 0) : undefined

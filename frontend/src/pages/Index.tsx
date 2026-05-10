@@ -16,11 +16,17 @@ import { useApiUsers, useApiClientes, useApiTerritories, Cliente, SearchSuggesti
 import { RouteWaypoint } from "@/hooks/use-routing";
 
 const Index = () => {
-  const { isAuthenticated, role, logout } = useAuth();
+  const { isAuthenticated, role, userId, logout } = useAuth();
   const navigate = useNavigate();
 
   const [selectedUF, setSelectedUF] = useState<string | null>(null);
-  const [filtroUsuario, setFiltroUsuario] = useState<string | null>(null);
+  const [filtroUsuario, setFiltroUsuario] = useState<string | null>(() => {
+    // If not admin/supervisor, auto-filter to current user
+    if (role && role !== 'admin' && role !== 'supervisor') {
+      return String(userId);
+    }
+    return null;
+  });
   const [modo, setModo] = useState<"planejamento" | "atendimento">("atendimento");
   const [mostrarVagos, setMostrarVagos] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
