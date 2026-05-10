@@ -1,10 +1,10 @@
 import { X, Map as MapIcon, Loader2, RotateCcw } from "lucide-react";
-import { getRepColor, getRepByCode } from "@/data/representatives";
+import { getUserColor, getUserById } from "@/data/representatives";
 import { getMunicipioResponsaveis } from "@/data/territories";
 import { useMunicipioInfo } from "@/hooks/use-geo-data";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context-core";
-import type { Representative } from "@/data/representatives";
+import type { SystemUser } from "@/data/representatives";
 import type { TerritoryAssignment } from "@/data/territories";
 
 interface DetailPanelProps {
@@ -21,7 +21,7 @@ interface DetailPanelProps {
   onToggleClientes: () => void;
 }
 
-import { useApiRepresentatives, useApiTerritories } from "@/hooks/use-api-data";
+import { useApiUsers, useApiTerritories } from "@/hooks/use-api-data";
 
 export default function DetailPanel({ 
   municipio, uf, municipioId, modo, onClose, onViewBairros, ufCode, 
@@ -30,10 +30,10 @@ export default function DetailPanel({
   const { role, estado_end } = useAuth();
   const { token } = useAuth();
   const { data: municipiosInfo, isLoading: loadingInfo } = useMunicipioInfo(ufCode || null);
-  const { data: apiReps = [] } = useApiRepresentatives(!!token);
+  const { data: apiUsers = [] } = useApiUsers(!!token);
   const { data: apiTerritories = [] } = useApiTerritories(!!token);
 
-  const repCodes = getMunicipioResponsaveis(municipio, uf, modo, apiTerritories);
+  const userIds = getMunicipioResponsaveis(municipio, uf, modo, apiTerritories);
 
   const normalizeCityName = (value: string) =>
     value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -42,16 +42,21 @@ export default function DetailPanel({
     if (!onViewBairros) return;
     if (isBairrosActive) { onViewBairros(null); return; }
 
-    // Prefer already selected municipality IBGE code (most reliable path).
+    // Strict requirement: must have a municipality ID to load neighborhoods
     if (municipioId) {
       onViewBairros(municipioId);
       return;
     }
 
+    // Attempt to find it via API if missing (as fallback)
     if (!municipiosInfo) return;
     const targetName = normalizeCityName(municipio);
     const mun = municipiosInfo.find((m: { nome: string; id: number }) => normalizeCityName(m.nome) === targetName);
-    if (mun) onViewBairros(mun.id);
+    if (mun) {
+      onViewBairros(mun.id);
+    } else {
+      toast.error("Não foi possível identificar o código deste município para carregar bairros.");
+    }
   };
 
   return (
@@ -80,11 +85,11 @@ export default function DetailPanel({
           {modo === "planejamento" ? "Responsável Principal" : "Responsáveis"}
         </h3>
 
-        {repCodes.length === 0 ? (
+        {userIds.length === 0 ? (
           <p className="text-sm text-muted-foreground italic">Sem responsável atribuído</p>
         ) : (role === "user" && estado_end && uf !== estado_end) ? (
           <div className="space-y-2">
-            {repCodes.some(code => getRepByCode(code, apiReps)?.isVago) ? (
+            {userIds.some(id => getUserById(id, apiUsers)?.isVago) ? (
               <div className="flex items-center gap-3 p-2 rounded-md bg-secondary/50 border border-destructive/20">
                 <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ border: "2px dashed hsl(0, 70%, 50%)" }} />
                 <div><p className="text-sm font-medium text-destructive">Território Vago</p></div>
@@ -98,24 +103,24 @@ export default function DetailPanel({
           </div>
         ) : (
           <div className="space-y-2">
-            {repCodes.map((code, i) => {
-              const rep = getRepByCode(code, apiReps);
-              if (!rep) return (
-                <div key={`${code}-${i}`} className="flex items-center gap-3 p-2 rounded-md bg-secondary/50">
+            {userIds.map((id, i) => {
+              const user = getUserById(id, apiUsers);
+              if (!user) return (
+                <div key={`${id}-${i}`} className="flex items-center gap-3 p-2 rounded-md bg-secondary/50">
                   <span className="w-3 h-3 rounded-sm flex-shrink-0 bg-muted" />
-                  <p className="text-sm font-medium text-foreground">{code}</p>
+                  <p className="text-sm font-medium text-foreground">{id}</p>
                 </div>
               );
               return (
-                <div key={`${code}-${i}`} className="flex items-center gap-3 p-2 rounded-md bg-secondary/50">
+                <div key={`${id}-${i}`} className="flex items-center gap-3 p-2 rounded-md bg-secondary/50">
                   <span
                     className="w-3 h-3 rounded-sm flex-shrink-0"
-                    style={{ backgroundColor: getRepColor(rep), border: rep.isVago ? "2px dashed hsl(0, 70%, 50%)" : "none" }}
+                    style={{ backgroundColor: getUserColor(user), border: user.isVago ? "2px dashed hsl(0, 70%, 50%)" : "none" }}
                   />
                   <div>
-                    <p className="text-sm font-medium text-foreground">{rep.code} - {rep.name}</p>
-                    {rep.isVago && <span className="text-[10px] text-destructive font-medium uppercase">VAGO</span>}
-                    {i === 0 && modo === "atendimento" && repCodes.length > 1 && (
+                    <p className="text-sm font-medium text-foreground">{user.username} - {user.full_name || user.fullName}</p>
+                    {user.isVago && <span className="text-[10px] text-destructive font-medium uppercase">VAGO</span>}
+                    {i === 0 && modo === "atendimento" && userIds.length > 1 && (
                       <span className="text-[10px] text-primary font-medium ml-2">PRINCIPAL</span>
                     )}
                   </div>

@@ -2,8 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { REP_COLOR_PALETTE } from '@/data/representatives';
 import { GeoJSONFeature, GeoJSONFeatureCollection } from '@/hooks/use-api-data';
 
-interface Territory { id: number; municipio: string; uf: string; repCode: string; modo: string; }
-interface Representative { code: string; name: string; fullName?: string; isVago: boolean | number; colorIndex: number; }
+interface Territory { id: number; municipio: string; uf: string; userId?: number; modo: string; }
 
 interface IBGEState {
   id: number;
@@ -13,7 +12,6 @@ interface IBGEState {
 
 interface MiniMapBrasilProps {
   territories: Territory[];
-  reps: Representative[];
   filterUF?: string;
   filterRep?: string;
   onClickUF?: (uf: string) => void;
@@ -56,7 +54,7 @@ function getUfFromFeature(feature: GeoJSONFeature, ufMap: Record<number, string>
   return code ? (ufMap[Number(code)] || '') : '';
 }
 
-export default function MiniMapBrasil({ territories, reps, filterUF, filterRep, onClickUF }: MiniMapBrasilProps) {
+export default function MiniMapBrasil({ territories, filterUF, onClickUF }: MiniMapBrasilProps) {
   const [geoData, setGeoData] = useState<GeoJSONFeatureCollection | null>(null);
   const [ufMap, setUfMap] = useState<Record<number, string>>({}); // {codigo: sigla}
   const [hoveredUF, setHoveredUF] = useState<string | null>(null);
@@ -86,39 +84,22 @@ export default function MiniMapBrasil({ territories, reps, filterUF, filterRep, 
       .catch(() => {});
   }, []);
 
-  // Build UF → dominant rep mapping from territories
-  const ufRepMap = useMemo(() => {
-    const map: Record<string, { repCode: string; count: number }[]> = {};
+  // Build UF coverage set
+  const coveredUFs = useMemo(() => {
+    const set = new Set<string>();
     for (const t of territories) {
-      if (!t.uf) continue;
-      if (!map[t.uf]) map[t.uf] = [];
-      const existing = map[t.uf].find(e => e.repCode === t.repCode);
-      if (existing) existing.count++;
-      else map[t.uf].push({ repCode: t.repCode, count: 1 });
+      if (t.uf) set.add(t.uf);
     }
-    // Sort by count descending → pick dominant
-    const result: Record<string, string> = {};
-    for (const [uf, entries] of Object.entries(map)) {
-      entries.sort((a, b) => b.count - a.count);
-      result[uf] = entries[0].repCode;
-    }
-    return result;
+    return set;
   }, [territories]);
 
   const getStateColor = (uf: string): string => {
     const isSelected = filterUF === uf;
-    const repCode = ufRepMap[uf];
+    const isCovered = coveredUFs.has(uf);
     
     // Se não tiver cobertura, sempre cinza escuro
-    if (!repCode) return 'hsl(220 15% 20%)';
+    if (!isCovered) return 'hsl(220 15% 20%)';
     
-    // Se houver filtro de representante, prioriza a cor dele
-    if (filterRep) {
-      if (ufRepMap[uf] !== filterRep) return 'hsl(220 15% 20%)';
-      const rep = reps.find(r => r.code === filterRep);
-      return rep ? REP_COLOR_PALETTE[rep.colorIndex] : '#888';
-    }
-
     // Se o estado estiver selecionado (clicado), destaca com a cor de sotaque
     if (isSelected) return 'hsl(var(--admin-sidebar-accent))';
 
@@ -173,11 +154,6 @@ export default function MiniMapBrasil({ territories, reps, filterUF, filterRep, 
           border: '1px solid hsl(var(--admin-sidebar-accent) / 0.4)',
         }}>
           {hoveredUF}
-          {filterRep && ufRepMap[hoveredUF] && (
-            <span style={{ opacity: 0.7, fontWeight: 400, marginLeft: 6 }}>
-              {reps.find(r => r.code === ufRepMap[hoveredUF])?.name || ufRepMap[hoveredUF]}
-            </span>
-          )}
         </div>
       )}
     </div>

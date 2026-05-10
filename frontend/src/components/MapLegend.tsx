@@ -1,5 +1,5 @@
-import { useApiRepresentatives, useApiTerritories, Cliente } from "@/hooks/use-api-data";
-import { getRepColor } from "@/data/representatives";
+import { useApiUsers, useApiTerritories, Cliente, SystemUser } from "@/hooks/use-api-data";
+import { getUserColor } from "@/data/representatives";
 import { useAuth } from "@/contexts/auth-context-core";
 import { Users, FilterX, MapPin } from "lucide-react";
 import { useMemo } from "react";
@@ -7,8 +7,8 @@ import { useMemo } from "react";
 interface MapLegendProps {
   selectedUF: string | null;
   modo: "planejamento" | "atendimento";
-  filtroRepresentante: string | null;
-  onFilterRep: (code: string | null) => void;
+  filtroUsuario: string | null;
+  onFilterUser: (id: string | null) => void;
   clients: Cliente[];
   mostrarVagos: boolean;
   onToggleVagos: () => void;
@@ -17,44 +17,44 @@ interface MapLegendProps {
 export default function MapLegend({
   selectedUF,
   modo,
-  filtroRepresentante,
-  onFilterRep,
+  filtroUsuario,
+  onFilterUser,
   mostrarVagos,
   onToggleVagos,
   clients,
 }: MapLegendProps) {
-  const { token, role, repCode } = useAuth();
-  const { data: representatives = [] } = useApiRepresentatives(!!token);
+  const { token, role, userId: loggedUserId } = useAuth();
+  const { data: users = [] } = useApiUsers(!!token);
   const { data: apiTerritories = [] } = useApiTerritories(!!token);
 
-  // Get the set of repCodes that have clients OR territories in the selected UF
-  const repCodesInUF = useMemo(() => {
+  // Get the set of userIds that have clients OR territories in the selected UF
+  const userIdsInUF = useMemo(() => {
     if (!selectedUF) return null;
-    const codes = new Set<string>();
+    const ids = new Set<number>();
     
-    // Add reps with clients in UF
+    // Add users with clients in UF
     clients.forEach(c => {
-      if (c.uf === selectedUF && c.repCode) codes.add(c.repCode);
+      if (c.uf === selectedUF && c.userId) ids.add(c.userId);
     });
     
-    // Add reps with territories in UF
+    // Add users with territories in UF
     apiTerritories.forEach(t => {
-      if (t.uf === selectedUF && t.repCode) codes.add(t.repCode);
+      if (t.uf === selectedUF && t.userId) ids.add(t.userId);
     });
     
-    return codes;
+    return ids;
   }, [selectedUF, clients, apiTerritories]);
 
-  // Filter reps: if a UF is selected, show only those who have clients/territories there
-  // Also, if not an admin, restrict the list ENTIRELY to the user's repCode.
-  const relevantReps = representatives.filter(rep => {
-    if (role !== 'admin' && rep.code !== repCode) return false;
-    if (!repCodesInUF) return true;
-    return repCodesInUF.has(rep.code);
+  // Filter users: if a UF is selected, show only those who have clients/territories there
+  // Also, if not an admin, restrict the list ENTIRELY to the user's id.
+  const relevantUsers = users.filter(user => {
+    if (role !== 'admin' && user.id !== loggedUserId) return false;
+    if (!userIdsInUF) return true;
+    return userIdsInUF.has(user.id);
   });
 
-  const activeReps = relevantReps.filter(r => !r.isVago);
-  const vagoReps = relevantReps.filter(r => r.isVago);
+  const activeUsers = relevantUsers.filter(r => !r.isVago);
+  const vagoUsers = relevantUsers.filter(r => r.isVago);
 
   return (
     <div className="bg-card/90 backdrop-blur-md border border-border/50 rounded-xl p-4 space-y-4 w-[280px] shadow-2xl ring-1 ring-white/10">
@@ -65,7 +65,7 @@ export default function MapLegend({
           </div>
           <div>
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-foreground/80">
-              {selectedUF ? `Equipe ${selectedUF}` : "Representantes"}
+              {selectedUF ? `Equipe ${selectedUF}` : "Usuários Responsáveis"}
             </h3>
           </div>
         </div>
@@ -78,7 +78,7 @@ export default function MapLegend({
       </div>
 
       <div className="max-h-[320px] overflow-y-auto pr-1 custom-scrollbar space-y-1.5">
-        {activeReps.length === 0 ? (
+        {activeUsers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 px-4 text-center space-y-2 opacity-60">
              <FilterX className="w-8 h-8 text-muted-foreground/30" />
              <p className="text-[11px] text-muted-foreground italic">
@@ -86,28 +86,28 @@ export default function MapLegend({
              </p>
           </div>
         ) : (
-          activeReps.map((rep) => (
+          activeUsers.map((user) => (
             <button
-              key={rep.code}
-              onClick={() => role === 'admin' ? onFilterRep(filtroRepresentante === rep.code ? null : rep.code) : undefined}
+              key={user.id}
+              onClick={() => role === 'admin' ? onFilterUser(filtroUsuario === String(user.id) ? null : String(user.id)) : undefined}
               className={`w-full group flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-all duration-300 relative overflow-hidden ${
-                filtroRepresentante === rep.code
+                filtroUsuario === String(user.id)
                   ? "bg-primary/20 border-primary/40 shadow-inner"
-                  : filtroRepresentante && filtroRepresentante !== rep.code
+                  : filtroUsuario && filtroUsuario !== String(user.id)
                     ? "opacity-30 grayscale hover:opacity-100 hover:grayscale-0"
                     : "hover:bg-secondary/50 border-transparent"
               } border`}
             >
               <div 
-                className={`w-2 h-7 rounded-sm transition-transform duration-500 group-hover:scale-y-110 ${filtroRepresentante === rep.code ? 'scale-y-110' : ''}`}
-                style={{ backgroundColor: getRepColor(rep) }}
+                className={`w-2 h-7 rounded-sm transition-transform duration-500 group-hover:scale-y-110 ${filtroUsuario === String(user.id) ? 'scale-y-110' : ''}`}
+                style={{ backgroundColor: getUserColor(user) }}
               />
               <div className="flex flex-col items-start min-w-0">
-                <span className="font-mono text-[9px] text-muted-foreground/70 leading-none mb-1">COD: {rep.code}</span>
-                <span className="text-foreground font-semibold truncate w-full">{rep.name}</span>
+                <span className="font-mono text-[9px] text-muted-foreground/70 leading-none mb-1">ID: {user.id}</span>
+                <span className="text-foreground font-semibold truncate w-full">{user.full_name || user.fullName || user.username}</span>
               </div>
               
-              {filtroRepresentante === rep.code && (
+              {filtroUsuario === String(user.id) && (
                 <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_8px_var(--primary)]" />
               )}
             </button>
@@ -116,7 +116,7 @@ export default function MapLegend({
       </div>
 
       <div className="pt-3 border-t border-border/30 space-y-3">
-        {vagoReps.length > 0 && (
+        {vagoUsers.length > 0 && (
           <button
             onClick={onToggleVagos}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[11px] font-medium transition-all duration-300 ${
@@ -133,14 +133,14 @@ export default function MapLegend({
             </div>
             <span className="flex-1 text-left">Mostrar Territórios Vagos</span>
             <span className={`px-2 py-0.5 rounded-full text-[9px] ${mostrarVagos ? 'bg-destructive/20' : 'bg-muted'}`}>
-              {vagoReps.length}
+              {vagoUsers.length}
             </span>
           </button>
         )}
 
-        {filtroRepresentante && role === 'admin' && (
+        {filtroUsuario && role === 'admin' && (
           <button
-            onClick={() => onFilterRep(null)}
+            onClick={() => onFilterUser(null)}
             className="w-full h-8 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-lg transition-all border border-transparent hover:border-primary/20"
           >
             Limpar Filtro de Seleção

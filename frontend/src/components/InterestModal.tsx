@@ -18,7 +18,7 @@ export default function InterestModal({ municipio, uf, onClose }: InterestModalP
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
 
-    const { userId, repCode, userName, token } = useAuth();
+    const { userId, userName, token } = useAuth();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -34,7 +34,6 @@ export default function InterestModal({ municipio, uf, onClose }: InterestModalP
                 body: JSON.stringify({ 
                     nome: userName || '-', // required by backend schema
                     userId,
-                    repCode,
                     municipio, 
                     uf, 
                     observacoes: motivo,

@@ -3,13 +3,18 @@ import styled from 'styled-components';
 import { 
   User, Briefcase, ShieldCheck, Bell, Settings, History, 
   Save, X, Camera, Check, Lock, Eye, EyeOff, Building2,
-  Users, BadgeCheck, Mail, Phone, MapPin, Globe, Fingerprint
+  Users, BadgeCheck, Mail, Phone, MapPin, Globe, Fingerprint,
+  Users2, Palette
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '@/lib/api-base';
+import { useAuth } from '@/contexts/auth-context-core';
+import type { SystemUser } from '@/data/representatives';
+import { REP_COLOR_PALETTE } from '@/data/representatives';
+import { useApiClientes } from '@/hooks/use-api-data';
 
 interface Module {
   id: string;
@@ -21,41 +26,6 @@ interface UserPermission {
   canView: boolean;
   canEdit: boolean;
   module?: Module;
-}
-
-interface SystemUser {
-  id: number;
-  username: string;
-  role: string;
-  full_name?: string;
-  fullName?: string;
-  photo?: string;
-  birth_date?: string;
-  telefone?: string;
-  code?: string;
-  cpf_cnpj?: string;
-  default_workspace?: string;
-  inactivity_limit?: number;
-  notif_email?: boolean;
-  notif_sms?: boolean;
-  notif_push?: boolean;
-  colorIndex?: number;
-  comissao?: number;
-  isVago?: number;
-  email?: string;
-  cargo?: string;
-  company_name?: string;
-  groupId?: number;
-  cep?: string;
-  logradouro?: string;
-  numero?: string;
-  complemento?: string;
-  bairro_end?: string;
-  cidade?: string;
-  estado_end?: string;
-  area_atuacao?: string;
-  base_logistica?: string;
-  userTypeId?: number;
 }
 
 interface UserActivity {
@@ -74,8 +44,12 @@ interface UserProfileManagerProps {
 }
 
 const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, onUpdate, userTypes = [] }) => {
-  const [activeTab, setActiveTab] = useState<'profile' | 'org' | 'perms' | 'notif' | 'settings' | 'history'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'org' | 'perms' | 'notif' | 'settings' | 'history' | 'clients'>('profile');
   const [loading, setLoading] = useState(false);
+  const { role: currentUserRole } = useAuth();
+  
+  // Clients hook
+  const { data: userClients = [], isLoading: loadingClients } = useApiClientes(user.id);
   
   // Forms State
   const [formData, setFormData] = useState({
@@ -257,7 +231,6 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
           full_name: formData.fullName,
           email: formData.email, // Incluindo o email no corpo da requisição
           role: formData.role,
-          repCode: formData.repCode,
           photo: formData.photo,
           colorIndex: formData.colorIndex,
           comissao: formData.comissao,
@@ -430,6 +403,9 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
           <NavItem $active={activeTab === 'settings'} onClick={() => setActiveTab('settings')}>
             <Settings size={18} /> CONFIGURAÇÕES
           </NavItem>
+          <NavItem $active={activeTab === 'clients'} onClick={() => setActiveTab('clients')}>
+            <Users2 size={18} /> CLIENTES
+          </NavItem>
           <NavItem $active={activeTab === 'history'} onClick={() => setActiveTab('history')}>
             <History size={18} /> HISTÓRICO
           </NavItem>
@@ -576,51 +552,6 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
                 </select>
                 <p className="text-[10px] text-muted-foreground mt-1">Categoria personalizada definida nas configurações de sistema. O nível de acesso é definido pelo tipo selecionado.</p>
               </div>
-              <div className="field">
-                <Label>Representante Vinculado</Label>
-                <select 
-                  className="w-full h-10 px-3 bg-background border rounded-md text-sm"
-                  value={formData.repCode} 
-                  onChange={e => setFormData({...formData, repCode: e.target.value})}
-                >
-                  <option value="">Nenhum</option>
-                  {reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
-                </select>
-              </div>
-
-              {formData.repCode && (
-                <>
-                  <div className="section-title mt-6">Dados do Representante</div>
-                  <div className="field">
-                    <Label>Comissão (%)</Label>
-                    <Input 
-                      type="number" 
-                      value={formData.comissao} 
-                      onChange={e => setFormData({...formData, comissao: parseFloat(e.target.value)})} 
-                      step="0.01"
-                    />
-                  </div>
-                  <div className="field">
-                    <Label>Status de Vago</Label>
-                    <select 
-                      className="w-full h-10 px-3 bg-background border rounded-md text-sm"
-                      value={formData.isVago} 
-                      onChange={e => setFormData({...formData, isVago: parseInt(e.target.value)})}
-                    >
-                      <option value={0}>Ativo</option>
-                      <option value={1}>Vago / Inativo</option>
-                    </select>
-                  </div>
-                  <div className="field">
-                    <Label>Base Logística</Label>
-                    <Input value={formData.base_logistica} onChange={e => setFormData({...formData, base_logistica: e.target.value})} placeholder="Ex: Fábrica Compactor" />
-                  </div>
-                  <div className="field">
-                    <Label>Área de Atuação</Label>
-                    <Input value={formData.area_atuacao} onChange={e => setFormData({...formData, area_atuacao: e.target.value})} placeholder="Ex: RJ Capital e Baixada" />
-                  </div>
-                </>
-              )}
             </FormGrid>
           )}
 
@@ -747,6 +678,80 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
             </FormGrid>
           )}
 
+          {activeTab === 'clients' && (
+            <div className="space-y-6">
+              <div className="section-title">Clientes Vinculados</div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Este usuário é o responsável direto pelos seguintes clientes na base de dados.
+              </p>
+
+              {currentUserRole === 'admin' && (
+                <div className="bg-secondary/20 p-4 rounded-lg border border-border/50 mb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Palette size={16} className="text-primary" />
+                    <span className="text-sm font-bold">Cor de Atuação no Mapa</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mb-4">
+                    Selecione a cor que representará este usuário e seus territórios no mapa principal.
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    {Object.entries(REP_COLOR_PALETTE).map(([index, color]) => (
+                      <button
+                        key={index}
+                        onClick={() => setFormData({ ...formData, colorIndex: Number(index) })}
+                        style={{ 
+                          width: 32, 
+                          height: 32, 
+                          borderRadius: '50%', 
+                          background: color,
+                          border: formData.colorIndex === Number(index) ? '3px solid #fff' : '1px solid rgba(0,0,0,0.1)',
+                          boxShadow: formData.colorIndex === Number(index) ? '0 0 0 2px hsl(var(--primary))' : 'none',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                        title={`Cor ${index}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {loadingClients ? (
+                  <div className="text-center py-10">
+                    <div className="animate-spin inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
+                    <p className="text-xs text-muted-foreground mt-2">Carregando clientes...</p>
+                  </div>
+                ) : userClients.length === 0 ? (
+                  <div className="text-center py-10 bg-secondary/10 rounded-lg border border-dashed border-border">
+                    <Users size={24} className="mx-auto opacity-20 mb-2" />
+                    <p className="text-sm text-muted-foreground">Nenhum cliente vinculado a este usuário.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {userClients.map(cliente => (
+                      <div key={cliente.id_cliente} className="flex items-center gap-3 p-3 bg-card border rounded-lg hover:border-primary/50 transition-colors">
+                        <div 
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs"
+                          style={{ background: REP_COLOR_PALETTE[formData.colorIndex] || 'hsl(var(--primary))' }}
+                        >
+                          {cliente.nome_cliente.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold truncate">{cliente.nome_cliente}</p>
+                          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                            <span className="bg-secondary px-1 rounded">#{cliente.codigo_cliente}</span>
+                            <span className="flex items-center gap-0.5"><MapPin size={10} /> {cliente.cidade} - {cliente.uf}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'history' && (
             <div className="space-y-4">
                <div className="section-title">Histórico de Atividade</div>
@@ -788,6 +793,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
                 activeTab === 'perms'     ? handleSavePermissions :
                 activeTab === 'notif'     ? handleSaveNotifPrefs :
                 activeTab === 'settings'  ? handleSaveConfig :
+                activeTab === 'clients'   ? handleSaveProfile :
                 handleSaveProfile
               }
               disabled={loading}
@@ -802,6 +808,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
                 {activeTab === 'perms'    && 'Salvar Permissões'}
                 {activeTab === 'notif'    && 'Salvar Preferências'}
                 {activeTab === 'settings' && 'Salvar Configurações'}
+                {activeTab === 'clients'  && 'Salvar Cor e Vínculos'}
                 </>
               )}
             </Button>

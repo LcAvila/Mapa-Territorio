@@ -33,7 +33,6 @@ model User {
   photo        String?
   area_atuacao String?
   base_logistica String?
-  repCode      String?   @unique
   code         String?   @unique
   birth_date   DateTime?
   groupId      Int?
@@ -54,7 +53,6 @@ model User {
 
   // Relations
   permissions       UserPermission[]
-  alocacoes         AlocacaoSupervisor[]
   visitasLogistica  DistanciasLogistica[]
   planejamentos     PlanejamentoVisitas[]
   blocosViagem      BlocosViagem[]
@@ -180,38 +178,11 @@ model Cliente {
   prioridade        String?
   userId            Int?
   user              User?                  @relation("UserClientes", fields: [userId], references: [id], onDelete: SetNull)
-  alocacoes         AlocacaoSupervisor[]
-  classificacoes    ClassificacaoCliente[]
   distancias        DistanciasLogistica[]
   historicos        HistoricoVisitas[]
   planejamentos     PlanejamentoVisitas[]
 
   @@map("clientes")
-}
-
-model AlocacaoSupervisor {
-  id_alocacao   Int       @id @default(autoincrement())
-  id_cliente    Int
-  id_supervisor Int
-  data_inicio   DateTime
-  data_fim      DateTime?
-  cliente       Cliente   @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
-  supervisor    User      @relation(fields: [id_supervisor], references: [id], onDelete: Cascade)
-
-  @@unique([id_cliente, id_supervisor, data_inicio], name: "unique_alocacao")
-  @@map("alocacao_supervisor")
-}
-
-model ClassificacaoCliente {
-  id_classificacao   Int      @id @default(autoincrement())
-  id_cliente         Int
-  classificacao      String?
-  data_classificacao DateTime
-  responsavel        String?
-  observacoes        String?
-  cliente            Cliente  @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
-
-  @@map("classificacao_cliente")
 }
 
 model PlanejamentoVisitas {

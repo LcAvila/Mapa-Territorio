@@ -38,7 +38,7 @@ export interface ClienteData {
   nome_abreviado?: string;
   uf?: string;
   cidade?: string;
-  repCode?: string;
+  userId?: number;
   [key: string]: unknown;
 }
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -64,7 +64,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import Loader from '@/components/Loader';
-import { REP_COLOR_PALETTE, getNextColorIndex, getRepColor } from '@/data/representatives';
+import { REP_COLOR_PALETTE, getNextColorIndex, getRepColor, type SystemUser } from '@/data/representatives';
 import { UF_DATA } from '@/data/uf-codes';
 
 import { BaseClientePanel } from '../components/admin/rotas/BaseClientePanel';
@@ -83,25 +83,8 @@ import SpaceButton from '../components/admin/SpaceButton';
 import { API_BASE_URL } from '@/lib/api-base';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
-interface Representative {
-  code: string;
-  name: string;
-  fullName: string;
-  isVago: boolean;
-  colorIndex: number;
-  email?: string;
-  contato?: string;
-  endereco?: string;
-  bairro?: string;
-  cidade?: string;
-  uf?: string;
-  cep?: string;
-  comissao?: number;
-  _count?: { clientes: number; territories: number; };
-}
-interface Territory { id: number; municipio: string; uf: string; repCode: string; modo: string; }
-interface SystemUser { id: number; username: string; role: string; repCode: string | null; code?: string; fullName?: string; full_name?: string; document?: string; cpf_cnpj?: string; documentType?: 'cpf' | 'cnpj'; companyName?: string; company_name?: string; birth_date?: string; birthDate?: string; telefone?: string; email?: string; photo?: string; cargo?: string; groupId?: number; last_active?: string; tipo?: string; userTypeId?: number; userType?: UserType; cep?: string; logradouro?: string; numero?: string; complemento?: string; bairro_end?: string; cidade?: string; estado_end?: string; area_atuacao?: string; base_logistica?: string; created_at?: string; createdAt?: string; }
-interface InterestRequest { id: number; nome: string; email: string | null; telefone: string | null; empresa: string | null; municipio: string; uf: string; modo: string | null; observacoes: string | null; status: 'pending' | 'accepted' | 'rejected'; created_at: string; userId?: number; repCode?: string; }
+interface Territory { id: number; municipio: string; uf: string; modo: string; userId?: number; }
+interface InterestRequest { id: number; nome: string; email: string | null; telefone: string | null; empresa: string | null; municipio: string; uf: string; modo: string | null; observacoes: string | null; status: 'pending' | 'accepted' | 'rejected'; created_at: string; userId?: number; }
 
 interface UserType {
   id: number;
@@ -115,12 +98,12 @@ interface UserType {
   createdAt: string;
 }
 
-interface Group { id: string; name: string; repCodes: string[]; createdAt: string; }
+interface Group { id: string; name: string; userIds: number[]; createdAt: string; }
 interface SystemNotification { id: number; title: string; message: string; createdAt: string; targetAll?: boolean; targetUserIds?: number[]; }
-interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; repCode?: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; }
+interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; }
 interface ModulePermission { userId: number; moduleId: string; canView: boolean; canEdit: boolean; }
 
-type TabId = 'dashboard' | 'users' | 'reps' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha' | 'roteiro_seq' | 'resumo_roteiro' | 'user_types' | 'system' | `user_type_${number}`;
+type TabId = 'dashboard' | 'users' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha' | 'roteiro_seq' | 'resumo_roteiro' | 'user_types' | 'system' | 'reps' | `user_type_${number}`;
 
 interface NavItem {
   id: TabId | 'settings' | 'rotas_menu' | 'users_menu';
@@ -250,42 +233,8 @@ function CustomSelect({ options, value, onChange, placeholder, disabled = false,
   );
 }
 
-// ─── MultiSelect for reps ─────────────────────────────────────────────────────
-function MultiRepSelect({ reps, value, onChange }: { reps: Representative[]; value: string[]; onChange: (v: string[]) => void; }) {
-  const toggle = (code: string) => onChange(value.includes(code) ? value.filter(c => c !== code) : [...value, code]);
-  return (
-    <div className="border border-border rounded-md max-h-44 overflow-y-auto">
-      {reps.map(r => (
-        <label key={r.code} className="flex items-center gap-3 px-3 py-2 hover:bg-secondary/40 cursor-pointer">
-          <input type="checkbox" className="rounded" checked={value.includes(r.code)} onChange={() => toggle(r.code)} />
-          <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: getRepColor(r) }} />
-          <span className="text-sm">{r.code} — {r.name}</span>
-        </label>
-      ))}
-    </div>
-  );
-}
-
-function ColorPicker({ value, onChange, disabled }: { value: number; onChange: (v: number) => void; disabled?: boolean }) {
-  return (
-    <div className="grid grid-cols-6 sm:grid-cols-12 gap-2 p-2 bg-secondary/10 rounded-lg border border-border/40">
-      {Object.entries(REP_COLOR_PALETTE).map(([idx, color]) => (
-        <button
-          key={idx}
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange(Number(idx))}
-          className={`w-6 h-6 rounded-full border-2 transition-all ${Number(idx) === value ? 'border-primary ring-2 ring-primary/20 scale-110 shadow-sm' : 'border-transparent hover:scale-110 opacity-60 hover:opacity-100'}`}
-          style={{ background: color }}
-          title={`Cor ${idx}`}
-        />
-      ))}
-    </div>
-  );
-}
-
 export default function Admin() {
-  const { token, logout, repCode: myRepCode, userId, tokenVersion } = useAuth();
+  const { token, logout, userId, tokenVersion } = useAuth();
   const navigate = useNavigate();
   const quillRef = React.useRef<ReactQuill | null>(null);
 
@@ -295,9 +244,9 @@ export default function Admin() {
   }, [token, navigate]);
 
   // ── Core API data ──────────────────────────────────────────────────────────
-  const [reps, setReps] = useState<Representative[]>([]);
   const [territories, setTerritories] = useState<Territory[]>([]);
   const [users, setUsers] = useState<SystemUser[]>([]);
+  const reps = useMemo(() => users.filter(u => u.role === 'user' || u.role === 'supervisor'), [users]);
   const [userTypes, setUserTypes] = useState<UserType[]>([]);
   const [interests, setInterests] = useState<InterestRequest[]>([]);
   const [clientes, setClientes] = useState<ClienteData[]>([]);
@@ -407,7 +356,7 @@ export default function Admin() {
   };
 
   // ── Dashboard filters ─────────────────────────────────────────────────────
-  const [dashFilterRep, setDashFilterRep] = useState('');
+  const [dashFilterUser, setDashFilterUser] = useState('');
   const [dashFilterUF, setDashFilterUF] = useState('');
   const [dashSearch, setDashSearch] = useState('');
 
@@ -425,18 +374,18 @@ export default function Admin() {
   // ── Reps form ──────────────────────────────────────────────────────────────
   const [editingCode, setEditingCode] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
-    name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '',
+    name: '', fullName: '', isVago: 0, colorIndex: 1, email: '', contato: '',
     endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: ''
   });
   const [newRep, setNewRep] = useState({
-    userId: '', code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '',
+    userId: '', code: '', name: '', fullName: '', isVago: 0, colorIndex: 1, email: '', contato: '',
     endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: ''
   });
 
   const [newUser, setNewUser] = useState({
     fullName: '', email: '', password: '', confirmPassword: '',
     role: 'user' as 'user' | 'supervisor' | 'admin',
-    repCode: '', code: '', documentType: 'cpf' as 'cpf' | 'cnpj',
+    code: '', documentType: 'cpf' as 'cpf' | 'cnpj',
     document: '', companyName: '', birthDate: '', telefone: '', photo: '',
     cargo: '', groupId: '', tipo: 'normal' as 'normal' | 'representante' | 'promotor' | 'supervisor', colorIndex: 0,
     cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
@@ -518,7 +467,7 @@ export default function Admin() {
   const [editUserForm, setEditUserForm] = useState({
     username: '', fullName: '', document: '', password: '', confirmPassword: '',
     role: 'user' as 'user' | 'supervisor' | 'admin',
-    repCode: '', code: '', photo: '', telefone: '', birthDate: '',
+    code: '', photo: '', telefone: '', birthDate: '',
     cargo: '', companyName: '', groupId: '',
     userTypeId: '' // Added
   });
@@ -604,20 +553,20 @@ export default function Admin() {
   const [selectedMunicipioName, setSelectedMunicipioName] = useState('');
   const [includeBairro, setIncludeBairro] = useState(false);
   const [selectedBairro, setSelectedBairro] = useState('');
-  const [selectedRep, setSelectedRep] = useState('');
+  const [selectedUserForTerritory, setSelectedUserForTerritory] = useState('');
   const [selectedModo, setSelectedModo] = useState<'planejamento' | 'atendimento'>('planejamento');
   const [municipios, setMunicipios] = useState<{ id: number; nome: string }[]>([]);
   const [subdistritos, setSubdistritos] = useState<{ id: number; nome: string }[]>([]);
   const [loadingMunicipios, setLoadingMunicipios] = useState(false);
   const [loadingSubdistritos, setLoadingSubdistritos] = useState(false);
-  const [staged, setStaged] = useState<Array<{ municipio: string; uf: string; bairro?: string; repCode: string; modo: string }>>([]);
+  const [staged, setStaged] = useState<Array<{ municipio: string; uf: string; bairro?: string; userId: number; modo: string }>>([]);
   const [filterUF, setFilterUF] = useState('');
-  const [filterRep, setFilterRep] = useState('');
+  const [filterUserForTerritory, setFilterUserForTerritory] = useState('');
 
   // ── Groups form ────────────────────────────────────────────────────────────
   const [newGroupName, setNewGroupName] = useState('');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
-  const [groupAddReps, setGroupAddReps] = useState<string[]>([]);
+  const [groupAddUsers, setGroupAddUsers] = useState<number[]>([]);
 
   // ── Notifications form ─────────────────────────────────────────────────────
   const [notifTitle, setNotifTitle] = useState('');
@@ -627,23 +576,20 @@ export default function Admin() {
   const [notifUserSearch, setNotifUserSearch] = useState('');
 
   // ── Audit filters ──────────────────────────────────────────────────────────
-  const [auditFilterRep, setAuditFilterRep] = useState('');
+  const [auditFilterUser, setAuditFilterUser] = useState('');
   const [auditFilterAction, setAuditFilterAction] = useState('');
   const [auditFilterUF, setAuditFilterUF] = useState('');
 
   const filteredAudit = useMemo(() => {
     return auditLogs.filter(log => {
-      if (auditFilterRep && (log.repCode || log.details).includes(auditFilterRep)) return false;
+      if (auditFilterUser && (log.details).includes(auditFilterUser)) return false;
       if (auditFilterUF && (log.uf || log.details).includes(auditFilterUF)) return false;
       if (auditFilterAction && log.action !== auditFilterAction) return false;
       return true;
     });
-  }, [auditLogs, auditFilterRep, auditFilterUF, auditFilterAction]);
+  }, [auditLogs, auditFilterUser, auditFilterUF, auditFilterAction]);
 
   const auditActionLabel: Record<string, string> = {
-    'create_rep': 'Novo Representante',
-    'update_rep': 'Editou Representante',
-    'delete_rep': 'Removeu Representante',
     'create_user': 'Novo Usuário',
     'update_user': 'Editou Usuário',
     'delete_user': 'Removeu Usuário',
@@ -674,8 +620,7 @@ export default function Admin() {
   const fetchAll = useCallback(async () => {
     if (!initialLoadDone) setLoading(true);
     try {
-      const [rR, tR, uR, iR, cR, utR] = await Promise.all([
-        fetch(`${API}/api/admin/reps`, { headers: authHeaders }),
+      const [tR, uR, iR, cR, utR] = await Promise.all([
         fetch(`${API}/api/admin/territories`, { headers: authHeaders }),
         fetch(`${API}/api/admin/users`, { headers: authHeaders }),
         fetch(`${API}/api/interest`, { headers: authHeaders }),
@@ -683,7 +628,7 @@ export default function Admin() {
         fetch(`${API}/api/admin/user-types`, { headers: authHeaders }),
       ]);
 
-      const responses = [rR, tR, uR, iR, cR, utR];
+      const responses = [tR, uR, iR, cR, utR];
       const unauth = responses.find(r => r.status === 401);
       if (unauth) {
         toast.error('Sessão encerrada ou inválida. Faça login novamente.');
@@ -691,8 +636,7 @@ export default function Admin() {
         return;
       }
 
-      if (rR.ok && tR.ok && uR.ok && iR.ok && cR.ok && utR.ok) {
-        setReps(await rR.json());
+      if (tR.ok && uR.ok && iR.ok && cR.ok && utR.ok) {
         setTerritories(await tR.json());
         setUsers(await uR.json());
         setInterests(await iR.json());
@@ -788,7 +732,7 @@ export default function Admin() {
   const ufOptions = UF_DATA.sort((a, b) => a.nome.localeCompare(b.nome)).map(u => ({ value: u.sigla, label: `${u.sigla} — ${u.nome}` }));
   const municipioOptions = municipios.map(m => ({ value: String(m.id), label: m.nome }));
   const bairroOptions = subdistritos.map(s => ({ value: String(s.id), label: s.nome }));
-  const repOptions = reps.map(r => ({ value: r.code, label: `${r.code} — ${r.name}` }));
+  const repOptions = reps.map(r => ({ value: r.code || '', label: `${r.code || ''} — ${r.full_name || r.fullName || r.username}` }));
 
   const handleSelectMunicipio = (id: string) => { setSelectedMunicipio(id); setSelectedMunicipioName(municipios.find(m => String(m.id) === id)?.nome || ''); };
 
@@ -808,7 +752,7 @@ export default function Admin() {
       toast.success(`Representante ${newRep.code} cadastrado!`);
       addAudit('create_rep', 'Representante', newRep.code, `Criou rep ${newRep.code} — ${newRep.name}`);
       setNewRep({
-        userId: '', code: '', name: '', fullName: '', isVago: false, colorIndex: 1, email: '', contato: '',
+        userId: '', code: '', name: '', fullName: '', isVago: 0, colorIndex: 1, email: '', contato: '',
         endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: ''
       });
       setIsRepModalOpen(false);
@@ -847,9 +791,9 @@ export default function Admin() {
 
   // ── Territory CRUD ────────────────────────────────────────────────────────
   const handleAddToStaged = () => {
-    if (!selectedUF || !selectedMunicipioName || !selectedRep) { toast.error('Selecione estado, município e representante'); return; }
-    if (staged.find(s => s.municipio === selectedMunicipioName && s.uf === selectedUF && s.repCode === selectedRep && s.modo === selectedModo)) { toast.warning('Já na lista'); return; }
-    setStaged(prev => [...prev, { municipio: selectedMunicipioName, uf: selectedUF, bairro: includeBairro && selectedBairro ? subdistritos.find(s => String(s.id) === selectedBairro)?.nome : undefined, repCode: selectedRep, modo: selectedModo }]);
+    if (!selectedUF || !selectedMunicipioName || !selectedUserForTerritory) { toast.error('Selecione estado, município e usuário'); return; }
+    if (staged.find(s => s.municipio === selectedMunicipioName && s.uf === selectedUF && String(s.userId) === selectedUserForTerritory && s.modo === selectedModo)) { toast.warning('Já na lista'); return; }
+    setStaged(prev => [...prev, { municipio: selectedMunicipioName, uf: selectedUF, bairro: includeBairro && selectedBairro ? subdistritos.find(s => String(s.id) === selectedBairro)?.nome : undefined, userId: Number(selectedUserForTerritory), modo: selectedModo }]);
     setSelectedMunicipio(''); setSelectedMunicipioName(''); setSelectedBairro('');
     toast.success('Adicionado!');
   };
@@ -858,8 +802,8 @@ export default function Admin() {
     if (!staged.length) { toast.error('Nada para confirmar'); return; }
     let ok = 0, fail = 0;
     for (const item of staged) {
-      const res = await fetch(`${API}/api/admin/territories`, { method: 'POST', headers: authHeaders, body: JSON.stringify({ municipio: item.municipio, uf: item.uf, repCode: item.repCode, modo: item.modo }) });
-      if (res.ok) { ok++; addAudit('assign_territory', 'Território', item.municipio, `Atribuiu ${item.municipio}/${item.uf} ÔåÆ ${item.repCode}`, { repCode: item.repCode, uf: item.uf, municipio: item.municipio }); }
+      const res = await fetch(`${API}/api/admin/territories`, { method: 'POST', headers: authHeaders, body: JSON.stringify({ municipio: item.municipio, uf: item.uf, userId: item.userId, modo: item.modo }) });
+      if (res.ok) { ok++; addAudit('assign_territory', 'Território', item.municipio, `Atribuiu ${item.municipio}/${item.uf} → ${item.userId}`, { uf: item.uf, municipio: item.municipio }); }
       else fail++;
     }
     if (ok) toast.success(`${ok} território(s) atribuído(s)!`);
@@ -867,15 +811,15 @@ export default function Admin() {
     setStaged([]); fetchAll();
   };
 
-  const handleDeleteTerritory = async (id: number, municipio: string, repCode: string, uf: string) => {
+  const handleDeleteTerritory = async (id: number, municipio: string, userId: number, uf: string) => {
     const res = await fetch(`${API}/api/admin/territories/${id}`, { method: 'DELETE', headers: authHeaders });
-    if (res.ok) { toast.success(`${municipio} removido!`); addAudit('delete_territory', 'Território', String(id), `Removeu ${municipio}/${uf}`, { repCode, uf, municipio }); fetchAll(); }
+    if (res.ok) { toast.success(`${municipio} removido!`); addAudit('delete_territory', 'Território', String(id), `Removeu ${municipio}/${uf}`, { uf, municipio }); fetchAll(); }
     else toast.error('Erro');
   };
 
   const filteredTerritories = territories.filter(t => {
     if (filterUF && !t.uf.toLowerCase().includes(filterUF.toLowerCase())) return false;
-    if (filterRep && t.repCode !== filterRep) return false;
+    if (filterUserForTerritory && String(t.userId) !== filterUserForTerritory) return false;
     return true;
   });
 
@@ -917,7 +861,6 @@ export default function Admin() {
       password: newUser.password,
       role: selectedType?.isAdmin ? 'admin' : 'user',
       tipo: newUser.tipo || 'normal',
-      repCode: newUser.repCode || null,
       telefone: newUser.telefone,
       cpf_cnpj: newUser.document,
       birth_date: newUser.birthDate || null,
@@ -944,7 +887,7 @@ export default function Admin() {
         addAudit('create_user', 'Usuário', newUser.code, `Criou usuário ${newUser.fullName} (${newUser.code})`);
         setNewUser({
           fullName: '', email: '', password: '', confirmPassword: '',
-          role: 'user', repCode: '', code: '', documentType: 'cpf',
+          role: 'user', code: '', documentType: 'cpf',
           document: '', companyName: '', birthDate: '', telefone: '', photo: '',
           cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
           cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
@@ -977,7 +920,6 @@ export default function Admin() {
     const body: Record<string, any> = { 
       username: editUserForm.username, 
       role: selectedType?.isAdmin ? 'admin' : 'user', 
-      repCode: editUserForm.repCode || null, 
       full_name: editUserForm.fullName,
       telefone: editUserForm.telefone,
       cpf_cnpj: editUserForm.document,
@@ -1029,7 +971,7 @@ export default function Admin() {
   const handleCreateGroup = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGroupName.trim()) { toast.error('Nome do grupo obrigatório'); return; }
-    const g: Group = { id: Date.now().toString(), name: newGroupName.trim(), repCodes: [], createdAt: new Date().toISOString() };
+    const g: Group = { id: Date.now().toString(), name: newGroupName.trim(), userIds: [], createdAt: new Date().toISOString() };
     saveGroups([...groups, g]); addAudit('create_group', 'Grupo', g.id, `Criou grupo "${g.name}"`); setNewGroupName(''); toast.success('Grupo criado!');
   };
 
@@ -1037,8 +979,8 @@ export default function Admin() {
     openConfirm('Remover grupo', `O grupo "${g.name}" será removido.`, () => { closeConfirm(); saveGroups(groups.filter(x => x.id !== g.id)); addAudit('delete_group', 'Grupo', g.id, `Removeu grupo "${g.name}"`); toast.success('Grupo removido!'); });
   };
 
-  const handleSaveGroupReps = (groupId: string) => {
-    saveGroups(groups.map(g => g.id === groupId ? { ...g, repCodes: groupAddReps } : g));
+  const handleSaveGroupUsers = (groupId: string) => {
+    saveGroups(groups.map(g => g.id === groupId ? { ...g, userIds: groupAddUsers } : g));
     addAudit('update_group', 'Grupo', groupId, `Atualizou membros do grupo`);
     setExpandedGroup(null); toast.success('Grupo atualizado!');
   };
@@ -1581,12 +1523,12 @@ export default function Admin() {
           {activeTab === 'dashboard' && (() => {
             // ── Derived / filtered data ──────────────────────────────────────
             const filteredClientes = clientes.filter(c => {
-              if (dashFilterRep && c.repCode !== dashFilterRep) return false;
+              if (dashFilterUser && String(c.userId) !== dashFilterUser) return false;
               if (dashFilterUF && c.uf !== dashFilterUF) return false;
               if (dashSearch) {
                 const q = dashSearch.toLowerCase();
-                const repName = reps.find(r => r.code === c.repCode)?.name?.toLowerCase() || '';
-                if (!(c.nome_cliente || '').toLowerCase().includes(q) && !(c.cidade || '').toLowerCase().includes(q) && !(c.uf || '').toLowerCase().includes(q) && !repName.includes(q)) return false;
+                const userName = users.find(u => u.id === c.userId)?.full_name?.toLowerCase() || '';
+                if (!(c.nome_cliente || '').toLowerCase().includes(q) && !(c.cidade || '').toLowerCase().includes(q) && !(c.uf || '').toLowerCase().includes(q) && !userName.includes(q)) return false;
               }
               return true;
             });
@@ -1600,15 +1542,15 @@ export default function Admin() {
             }
             const ufEntries = Object.entries(byUF).sort((a, b) => b[1].length - a[1].length);
 
-            // Unique UFs and reps for dropdowns
+            // Unique UFs and users for dropdowns
             const allUFs = [...new Set([
               ...territories.map(t => (t.uf || '').trim().toUpperCase()),
               ...clientes.map(c => (c.uf || '').trim().toUpperCase()),
             ].filter(Boolean))].sort();
-            const activeReps = reps.filter(r => !r.isVago);
+            const activeUsers = users.filter(u => !u.isVago);
 
-            const clearFilters = () => { setDashFilterRep(''); setDashFilterUF(''); setDashSearch(''); };
-            const hasFilters = dashFilterRep || dashFilterUF || dashSearch;
+            const clearFilters = () => { setDashFilterUser(''); setDashFilterUF(''); setDashSearch(''); };
+            const hasFilters = dashFilterUser || dashFilterUF || dashSearch;
 
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20, height: '100%' }}>
@@ -1641,18 +1583,18 @@ export default function Admin() {
                       />
                     </div>
 
-                    {/* Rep dropdown */}
+                    {/* User dropdown */}
                     <select
-                      value={dashFilterRep}
-                      onChange={e => setDashFilterRep(e.target.value)}
+                      value={dashFilterUser}
+                      onChange={e => setDashFilterUser(e.target.value)}
                       style={{
                         height: 36, padding: '0 12px', borderRadius: 8, fontSize: '0.8rem', flex: '1 1 140px',
                         border: '1.5px solid hsl(var(--border))', background: 'hsl(var(--background))',
                         color: 'hsl(var(--foreground))', outline: 'none', cursor: 'pointer',
                       }}
                     >
-                      <option value="">Todos Representantes</option>
-                      {activeReps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
+                      <option value="">Todos Usuários</option>
+                      {users.filter(u => !u.isVago).map(u => <option key={u.id} value={String(u.id)}>{u.username} — {u.full_name || u.fullName}</option>)}
                     </select>
 
                     {/* UF dropdown */}
@@ -1690,7 +1632,6 @@ export default function Admin() {
                       { label: 'Clientes Fitrados', value: filteredClientes.length, color: '#EAB308', bg: '#FEFCE8' },
                       { label: 'Territórios (Global)', value: territories.length, color: '#22C55E', bg: '#F0FDF4' },
                       { label: 'Estados Visíveis', value: ufEntries.length, color: '#3B82F6', bg: '#EFF6FF' },
-                      { label: 'Representantes', value: new Set(filteredClientes.map(c => c.repCode)).size, color: '#8B5CF6', bg: '#F5F3FF' },
                       { label: 'Pendentes', value: pendingInterests, color: '#F59E0B', bg: '#FFFBEB' },
                       { label: 'Usuários', value: users.length, color: '#06B6D4', bg: '#ECFEFF' },
                     ].map(s => (
@@ -1713,7 +1654,7 @@ export default function Admin() {
                         <p style={{ fontSize: '0.9rem' }}>Nenhum território encontrado</p>
                       </div>
                     ) : ufEntries.map(([uf, terrs]) => {
-                      const uniqueReps = [...new Set(terrs.map(t => t.repCode))];
+                      const uniqueUserIds = [...new Set(terrs.map(t => t.userId))];
                       const modos = [...new Set(terrs.map(t => t.modo))];
                       return (
                         <div key={uf} className="admin-card" style={{ padding: 0, overflow: 'hidden', flexShrink: 0 }}>
@@ -1732,7 +1673,7 @@ export default function Admin() {
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <p style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 2 }}>
-                                {terrs.length} cliente(s) — {uniqueReps.length} rep(s)
+                                {terrs.length} cliente(s) — {uniqueUserIds.length} usuário(s)
                               </p>
                               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                 <span style={{
@@ -1746,13 +1687,14 @@ export default function Admin() {
                                 </span>
                               </div>
                             </div>
-                            {/* Rep avatars */}
+                            {/* User avatars */}
                             <div style={{ display: 'flex', gap: -4 }}>
-                              {uniqueReps.slice(0, 4).map((code, idx) => {
-                                const rep = reps.find(r => r.code === code);
-                                const color = rep && !rep.isVago ? REP_COLOR_PALETTE[rep.colorIndex] : 'hsl(0 0% 40%)';
+                              {uniqueUserIds.slice(0, 4).map((id, idx) => {
+                                const user = users.find(u => u.id === id);
+                                const color = user && !user.isVago ? REP_COLOR_PALETTE[user.colorIndex || 0] : 'hsl(0 0% 40%)';
+                                const initials = (user?.full_name || user?.fullName || user?.username || 'SR').substring(0, 2).toUpperCase();
                                 return (
-                                  <div key={code} title={rep?.name || code} style={{
+                                  <div key={id} title={user?.full_name || user?.username || String(id)} style={{
                                     width: 28, height: 28, borderRadius: '50%', background: color,
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     color: '#fff', fontSize: '0.65rem', fontWeight: 800,
@@ -1760,18 +1702,18 @@ export default function Admin() {
                                     marginLeft: idx > 0 ? -8 : 0, zIndex: 4 - idx,
                                     position: 'relative',
                                   }}>
-                                    {(code || 'SR').substring(0, 2).toUpperCase()}
+                                    {initials}
                                   </div>
                                 );
                               })}
-                              {uniqueReps.length > 4 && (
+                              {uniqueUserIds.length > 4 && (
                                 <div style={{
                                   width: 28, height: 28, borderRadius: '50%', background: 'hsl(var(--muted))',
                                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                                   color: 'hsl(var(--muted-foreground))', fontSize: '0.6rem', fontWeight: 700,
                                   border: '2px solid hsl(var(--admin-card-bg))', marginLeft: -8, position: 'relative',
                                 }}>
-                                  +{uniqueReps.length - 4}
+                                  +{uniqueUserIds.length - 4}
                                 </div>
                               )}
                             </div>
@@ -1791,8 +1733,8 @@ export default function Admin() {
                           {/* Municipality rows (collapsed by default, show top 5) */}
                           <div>
                             {terrs.slice(0, 5).map(c => {
-                              const rep = reps.find(r => r.code === c.repCode);
-                              const color = rep && !rep.isVago ? REP_COLOR_PALETTE[rep.colorIndex] : 'hsl(0 0% 40%)';
+                              const user = users.find(u => u.id === c.userId);
+                              const color = user && !user.isVago ? REP_COLOR_PALETTE[user.colorIndex || 0] : 'hsl(0 0% 40%)';
                               return (
                                 <div key={c.codigo_cliente || c.id_cliente} style={{
                                   display: 'flex', alignItems: 'center', gap: 12,
@@ -1808,7 +1750,7 @@ export default function Admin() {
                                     textTransform: 'uppercase',
                                     minWidth: 50, textAlign: 'center'
                                   }}>
-                                    {rep?.code || 'S/ REP'}
+                                    {user?.username || 'S/ USER'}
                                   </span>
                                 </div>
                               );
@@ -1840,33 +1782,31 @@ export default function Admin() {
                       <div style={{ padding: '8px 8px 4px', background: 'hsl(var(--admin-sidebar-bg) / 0.03)' }}>
                         <MiniMapBrasil
                           territories={territories}
-                          reps={reps}
                           filterUF={dashFilterUF}
-                          filterRep={dashFilterRep}
                           onClickUF={uf => setDashFilterUF(prev => prev === uf ? '' : uf)}
                         />
                       </div>
                     </div>
 
-                    {/* Rep legend */}
+                    {/* User legend */}
                     <div className="admin-card" style={{ padding: 0, overflow: 'hidden', flex: 1 }}>
                       <div style={{ padding: '12px 16px', borderBottom: '1px solid hsl(var(--admin-card-border))', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Briefcase style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
-                        <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>Representantes</span>
+                        <UsersRound style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
+                        <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>Usuários Ativos</span>
                       </div>
                       <div style={{ padding: '8px 0', maxHeight: 200, overflowY: 'auto' }}>
-                        {activeReps.length === 0 ? (
+                        {users.filter(u => !u.isVago).length === 0 ? (
                           <p style={{ padding: '12px 16px', fontSize: '0.78rem', color: 'hsl(var(--muted-foreground))' }}>
-                            Nenhum representante cadastrado
+                            Nenhum usuário cadastrado
                           </p>
-                        ) : activeReps.map(rep => {
-                          const color = REP_COLOR_PALETTE[rep.colorIndex] || 'hsl(220 15% 40%)';
-                          const count = clientes.filter(c => c.repCode === rep.code).length;
-                          const isActive = dashFilterRep === rep.code;
+                        ) : users.filter(u => !u.isVago).map(user => {
+                          const color = REP_COLOR_PALETTE[user.colorIndex || 0] || 'hsl(220 15% 40%)';
+                          const count = clientes.filter(c => c.userId === user.id).length;
+                          const isActive = dashFilterUser === String(user.id);
                           return (
                             <button
-                              key={rep.code}
-                              onClick={() => setDashFilterRep(prev => prev === rep.code ? '' : rep.code)}
+                              key={user.id}
+                              onClick={() => setDashFilterUser(prev => prev === String(user.id) ? '' : String(user.id))}
                               style={{
                                 width: '100%', display: 'flex', alignItems: 'center', gap: 10,
                                 padding: '7px 16px', border: 'none', cursor: 'pointer', textAlign: 'left',
@@ -1876,7 +1816,7 @@ export default function Admin() {
                               }}
                             >
                               <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0, border: isActive ? `2px solid ${color}` : 'none' }} />
-                              <span style={{ flex: 1, fontSize: '0.78rem', fontWeight: isActive ? 700 : 500 }}>{rep.name}</span>
+                              <span style={{ flex: 1, fontSize: '0.78rem', fontWeight: isActive ? 700 : 500 }}>{user.full_name || user.fullName || user.username}</span>
                               <span style={{
                                 fontSize: '0.68rem', fontWeight: 700, padding: '1px 8px', borderRadius: 10,
                                 background: `${color}22`, color,
@@ -2002,7 +1942,7 @@ export default function Admin() {
                     setEditingUserId(null);
                     setNewUser({
                       fullName: '', email: '', password: '', confirmPassword: '',
-                      role: 'user', repCode: '', code: '', documentType: 'cpf',
+                      role: 'user', code: '', documentType: 'cpf',
                       document: '', companyName: '', birthDate: '', telefone: '', photo: '',
                       cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
                       cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
@@ -2074,7 +2014,6 @@ export default function Admin() {
                             </div>
                             <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
                               <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase" style={{ backgroundColor: `${cardColor}20`, color: cardColor }}>{userType?.name || u.role}</span>
-                              {u.repCode && <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase bg-secondary text-muted-foreground">Rep: {u.repCode}</span>}
                             </div>
                           </div>
                           <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-border/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
@@ -2087,7 +2026,6 @@ export default function Admin() {
                                 password: '',
                                 confirmPassword: '',
                                 role: u.role as 'user' | 'supervisor' | 'admin',
-                                repCode: u.repCode || '',
                                 code: u.code || '',
                                 photo: u.photo || '',
                                 telefone: u.telefone || '',
@@ -2341,327 +2279,10 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ━━ REPRESENTANTES ━━ */}
-          {activeTab === 'reps' && (
-            <div className="space-y-4">
-              <Card className="border-border/40">
-                <CardHeader className="pb-3 px-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Briefcase className="w-5 h-5 text-primary" />
-                        Representantes
-                      </CardTitle>
-                      <p className="text-xs text-muted-foreground mt-1">Gerencie a equipe de representantes e suas informações de contato.</p>
-                    </div>
-
-                    <Dialog open={isRepModalOpen} onOpenChange={setIsRepModalOpen}>
-                      <DialogTrigger asChild>
-                        <Button className="gap-2">
-                          <Plus className="w-4 h-4" />
-                          Cadastrar Representante
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                        <DialogHeader>
-                          <DialogTitle className="flex items-center gap-2">
-                            <UserPlus className="w-5 h-5 text-primary" />
-                            Novo Representante
-                          </DialogTitle>
-                          <DialogDescription>
-                            Vincule um usuário do sistema para torná-lo um representante oficial.
-                          </DialogDescription>
-                        </DialogHeader>
-                        
-                        {(() => {
-                          const availableUsers = users.filter(u => {
-                            const hasRepLink = reps.some(r => r.code === u.code || r.code === u.repCode);
-                            const isAlreadyRepRole = u.role === 'representante' || u.tipo === 'representante';
-                            return !hasRepLink && !isAlreadyRepRole;
-                          });
-
-                          const usedColorIndices = reps.filter(r => !r.isVago).map(r => r.colorIndex);
-                          const availableColors = Object.entries(REP_COLOR_PALETTE)
-                            .filter(([idx]) => !usedColorIndices.includes(Number(idx)))
-                            .map(([idx, color]) => ({ idx: Number(idx), color }));
-
-                          return (
-                            <form onSubmit={(e) => { handleCreateRep(e); }} className="space-y-6 pt-4">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Seleção de Usuário */}
-                                <div className="space-y-2">
-                                  <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Vincular Usuário *</Label>
-                                  <CustomSelect 
-                                    options={availableUsers.map(u => ({ 
-                                      value: String(u.id), 
-                                      label: `${u.code || u.username} — ${u.full_name || u.fullName || u.username}` 
-                                    }))} 
-                                    value={newRep.userId} 
-                                    onChange={id => {
-                                      const u = users.find(user => String(user.id) === id);
-                                      if (u) {
-                                        setNewRep({
-                                          ...newRep,
-                                          userId: id,
-                                          code: u.code || '',
-                                          name: (u.full_name || u.fullName || '').split(' ')[0] || u.username,
-                                          fullName: u.full_name || u.fullName || '',
-                                          email: u.email || u.username || '',
-                                          contato: u.telefone || '',
-                                          colorIndex: availableColors.length > 0 ? availableColors[0].idx : 1
-                                        });
-                                      }
-                                    }} 
-                                    placeholder="Selecione um usuário..." 
-                                  />
-                                  <p className="text-[10px] text-muted-foreground italic">Apenas usuários sem vínculo de representante aparecem aqui.</p>
-                                </div>
-
-                                {/* Seleção de Cor */}
-                                <div className="space-y-2">
-                                  <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Cor no Mapa *</Label>
-                                  <div className="grid grid-cols-6 gap-2 p-2 bg-secondary/10 rounded-lg border border-border/40">
-                                    {availableColors.length > 0 ? (
-                                      availableColors.map(({ idx, color }) => (
-                                        <button
-                                          key={idx}
-                                          type="button"
-                                          onClick={() => setNewRep({ ...newRep, colorIndex: idx })}
-                                          className={`w-6 h-6 rounded-full border-2 transition-all ${newRep.colorIndex === idx ? 'border-primary ring-2 ring-primary/20 scale-110 shadow-sm' : 'border-transparent hover:scale-110 opacity-60 hover:opacity-100'}`}
-                                          style={{ background: color }}
-                                          title={`Cor ${idx}`}
-                                        />
-                                      ))
-                                    ) : (
-                                      <p className="col-span-6 text-[10px] text-destructive font-medium p-1">Todas as cores estão em uso.</p>
-                                    )}
-                                  </div>
-                                  <p className="text-[10px] text-muted-foreground italic">Cores já utilizadas por outros representantes estão ocultas.</p>
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-4 opacity-70">
-                                <div className="space-y-1.5"><Label className="text-xs font-medium">Código</Label><Input disabled value={newRep.code} /></div>
-                                <div className="space-y-1.5"><Label className="text-xs font-medium">Nome Curto</Label><Input disabled value={newRep.name} /></div>
-                              </div>
-
-                              <div className="flex justify-between items-center pt-4 border-t border-border/10">
-                                <div className="flex items-center gap-2 text-xs">
-                                  <span className={newRep.userId && newRep.colorIndex ? "text-emerald-500 flex items-center gap-1" : "text-amber-500 flex items-center gap-1"}>
-                                    {newRep.userId && newRep.colorIndex ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                                    {newRep.userId && newRep.colorIndex ? "Pronto para cadastrar" : "Preencha os campos obrigatórios"}
-                                  </span>
-                                </div>
-                                <div className="flex gap-3">
-                                  <Button type="submit" disabled={!newRep.userId || !newRep.colorIndex} className="w-48 gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
-                                    <Save className="w-4 h-4" /> Finalizar Cadastro
-                                  </Button>
-                                </div>
-                              </div>
-                            </form>
-                          );
-                        })()}
-                      </DialogContent>
-                    </Dialog>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {reps.length === 0 ? (
-                    <div className="py-24 text-center text-muted-foreground">
-                      <Briefcase className="w-12 h-12 mx-auto mb-4 opacity-10" />
-                      <p className="text-sm">Nenhum representante cadastrado</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="hover:bg-transparent border-border/40">
-                            <TableHead className="w-12 pl-6"></TableHead>
-                            <TableHead className="w-24">Código</TableHead>
-                            <TableHead>Representante</TableHead>
-                            <TableHead>Contato</TableHead>
-                            <TableHead>Localização</TableHead>
-                            <TableHead className="w-24 text-center">Comissão</TableHead>
-                            <TableHead className="w-24 text-center">Clientes</TableHead>
-                            <TableHead className="w-24 text-center">Territórios</TableHead>
-                            <TableHead className="w-20 pr-6 text-right">Ações</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {reps.map(rep => (
-                            <React.Fragment key={rep.code}>
-                              <TableRow className={`border-border/30 ${editingCode === rep.code ? 'bg-primary/5' : 'hover:bg-secondary/30 transition-colors'}`}>
-                                <TableCell className="pl-6">
-                                  <div className="w-3.5 h-3.5 rounded-full shadow-sm" style={{ background: getRepColor(rep) }} />
-                                </TableCell>
-                                <TableCell className="font-mono text-xs font-bold text-primary">{rep.code}</TableCell>
-                                <TableCell>
-                                  <div className="max-w-[200px]">
-                                    <p className="text-xs font-semibold truncate">{rep.name}</p>
-                                    <p className="text-[10px] text-muted-foreground truncate">{rep.fullName || '—'}</p>
-                                    {Boolean(rep.isVago) && <span className="text-[9px] bg-orange-500/10 text-orange-500 px-1 rounded font-bold uppercase tracking-tighter">VAGO</span>}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="space-y-0.5">
-                                    {rep.email && <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Mail className="w-3 h-3 text-primary/60" />{rep.email}</div>}
-                                    {rep.contato && <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Phone className="w-3 h-3 text-primary/60" />{rep.contato}</div>}
-                                    {!rep.email && !rep.contato && <span className="text-[10px] text-muted-foreground/40 italic">Sem contato</span>}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  {rep.cidade ? (
-                                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                                      <MapPinned className="w-3 h-3 text-primary/60" />
-                                      <span>{rep.cidade}{rep.uf ? `/${rep.uf}` : ''}</span>
-                                    </div>
-                                  ) : (
-                                    <span className="text-[10px] text-muted-foreground/40 italic">Não informada</span>
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  {rep.comissao !== null && rep.comissao !== undefined ? (
-                                    <span className="text-xs font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full">{rep.comissao}%</span>
-                                  ) : '—'}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  <span className="text-xs font-bold text-emerald-600">{rep._count?.clientes || 0}</span>
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  <span className="text-xs font-medium text-muted-foreground">{rep._count?.territories || 0}</span>
-                                </TableCell>
-                                <TableCell className="pr-6">
-                                  <div className="flex gap-1 justify-end">
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 hover:bg-primary/10 hover:text-primary transition-colors"
-                                      onClick={() => editingCode === rep.code ? setEditingCode(null) : (setEditingCode(rep.code), setEditForm({
-                                        name: rep.name,
-                                        fullName: rep.fullName || '',
-                                        isVago: !!rep.isVago,
-                                        colorIndex: rep.colorIndex || 1,
-                                        email: rep.email || '',
-                                        contato: rep.contato || '',
-                                        endereco: rep.endereco || '',
-                                        bairro: rep.bairro || '',
-                                        cidade: rep.cidade || '',
-                                        uf: rep.uf || '',
-                                        cep: rep.cep || '',
-                                        comissao: rep.comissao?.toString() || ''
-                                      }))}
-                                    >
-                                      {editingCode === rep.code ? <X className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                                      onClick={() => handleDeleteRep(rep.code, rep.name)}
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-
-                              {editingCode === rep.code && (
-                                <TableRow className="bg-primary/5 border-border/30">
-                                  <TableCell colSpan={9} className="py-6 px-8">
-                                    <div className="space-y-4 max-w-4xl animate-in fade-in slide-in-from-top-1 duration-200">
-                                      <div className="flex items-center justify-between">
-                                        <h4 className="text-xs font-bold text-primary uppercase tracking-widest flex items-center gap-2">
-                                          <Pencil className="w-3 h-3" />
-                                          Editando Representante: {rep.code}
-                                        </h4>
-                                        <div className="flex gap-2">
-                                          <Button size="sm" className="gap-1.5 h-8 text-xs font-semibold" onClick={() => handleUpdateRep(rep.code)}>
-                                            <Save className="w-3.5 h-3.5" /> Salvar Alterações
-                                          </Button>
-                                          <Button size="sm" variant="ghost" className="h-8 text-xs font-semibold" onClick={() => setEditingCode(null)}>
-                                            Cancelar
-                                          </Button>
-                                        </div>
-                                      </div>
-
-                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div className="space-y-1.5">
-                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Nome Curto</Label>
-                                          <Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className="h-9 text-xs bg-background" />
-                                        </div>
-                                        <div className="md:col-span-2 space-y-1.5">
-                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Razão Social / Nome Completo</Label>
-                                          <Input value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} className="h-9 text-xs bg-background" />
-                                        </div>
-                                      </div>
-
-                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div className="space-y-1.5">
-                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Email</Label>
-                                          <Input value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} className="h-9 text-xs bg-background" />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Contato</Label>
-                                          <Input value={editForm.contato} onChange={e => setEditForm(f => ({ ...f, contato: e.target.value }))} className="h-9 text-xs bg-background" />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Comissão %</Label>
-                                          <Input type="number" step="0.01" value={editForm.comissao} onChange={e => setEditForm(f => ({ ...f, comissao: e.target.value }))} className="h-9 text-xs bg-background" />
-                                        </div>
-                                      </div>
-
-                                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                        <div className="md:col-span-2 space-y-1.5">
-                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Endereço</Label>
-                                          <Input value={editForm.endereco} onChange={e => setEditForm(f => ({ ...f, endereco: e.target.value }))} className="h-9 text-xs bg-background" />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Bairro</Label>
-                                          <Input value={editForm.bairro} onChange={e => setEditForm(f => ({ ...f, bairro: e.target.value }))} className="h-9 text-xs bg-background" />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Cidade/UF</Label>
-                                          <div className="flex gap-1">
-                                            <Input value={editForm.cidade} onChange={e => setEditForm(f => ({ ...f, cidade: e.target.value }))} className="h-9 text-xs bg-background flex-1" />
-                                            <Input value={editForm.uf} onChange={e => setEditForm(f => ({ ...f, uf: e.target.value?.toUpperCase() }))} className="h-9 text-xs bg-background w-12 text-center" maxLength={2} />
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-                                        <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground transition-colors selection:bg-transparent">
-                                          <input type="checkbox" checked={editForm.isVago} onChange={e => setEditForm(f => ({ ...f, isVago: e.target.checked }))} className="rounded border-border" />
-                                          Marcar como Vago
-                                        </label>
-
-                                        <div className="flex-1 space-y-2">
-                                          <Label className="text-[10px] font-bold text-muted-foreground uppercase">Escolher Cor no Mapa</Label>
-                                          <ColorPicker
-                                            value={editForm.colorIndex}
-                                            onChange={v => setEditForm(f => ({ ...f, colorIndex: v }))}
-                                            disabled={editForm.isVago}
-                                          />
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              )}
-                            </React.Fragment>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
           {/* ━━ TERRITÓRIOS ━━ */}
           {activeTab === 'territories' && (() => {
             const computedTerritories = (() => {
-              const map = new globalThis.Map<string, { municipio: string, uf: string, repCodes: Set<string>, clientCount: number }>();
+              const map = new globalThis.Map<string, { municipio: string, uf: string, userIds: Set<number>, clientCount: number }>();
               
               // Process clients
               clientes.forEach(c => {
@@ -2670,10 +2291,10 @@ export default function Admin() {
                 const uf = c.uf.trim().toUpperCase();
                 const key = `${city}-${uf}`;
 
-                if (!map.has(key)) map.set(key, { municipio: city, uf, repCodes: new Set(), clientCount: 0 });
+                if (!map.has(key)) map.set(key, { municipio: city, uf, userIds: new Set(), clientCount: 0 });
                 const entry = map.get(key)!;
                 entry.clientCount++;
-                if (c.repCode) entry.repCodes.add(c.repCode);
+                if (c.userId) entry.userIds.add(c.userId);
               });
 
               // Process explicit territories from database
@@ -2684,17 +2305,15 @@ export default function Admin() {
                 const key = `${city}-${uf}`;
                 
                 if (!map.has(key)) {
-                  map.set(key, { municipio: city, uf, repCodes: new Set(), clientCount: 0 });
+                  map.set(key, { municipio: city, uf, userIds: new Set(), clientCount: 0 });
                 }
-                const entry = map.get(key)!;
-                if (t.repCode) entry.repCodes.add(t.repCode);
               });
 
               return Array.from(map.values()).map((t, idx) => ({
                 id: idx,
                 municipio: t.municipio,
                 uf: t.uf,
-                repCodes: Array.from(t.repCodes),
+                userIds: Array.from(t.userIds),
                 clientCount: t.clientCount
               })).sort((a, b) => a.uf.localeCompare(b.uf) || a.municipio.localeCompare(b.municipio));
             })();
@@ -2714,7 +2333,7 @@ export default function Admin() {
                     <CardContent className="p-0 flex-1 overflow-auto max-h-[calc(100vh-250px)]">
                       {filteredTerritories.length === 0 ? (<div className="py-16 text-center text-muted-foreground"><MapPin className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Nenhum território encontrado</p></div>) : (
                         <Table>
-                          <TableHeader><TableRow className="hover:bg-transparent border-border/40"><TableHead className="pl-4">Município</TableHead><TableHead className="w-12">UF</TableHead><TableHead className="text-center">Clientes</TableHead><TableHead>Representantes Ativos</TableHead></TableRow></TableHeader>
+                          <TableHeader><TableRow className="hover:bg-transparent border-border/40"><TableHead className="pl-4">Município</TableHead><TableHead className="w-12">UF</TableHead><TableHead className="text-center">Clientes</TableHead><TableHead>Usuários Responsáveis</TableHead></TableRow></TableHeader>
                           <TableBody>{filteredTerritories.map(t => (
                             <TableRow key={t.id} className="border-border/30 hover:bg-secondary/30">
                               <TableCell className="text-xs font-medium pl-4">{t.municipio}</TableCell>
@@ -2722,9 +2341,9 @@ export default function Admin() {
                               <TableCell className="text-center"><span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">{t.clientCount}</span></TableCell>
                               <TableCell>
                                 <div className="flex flex-wrap gap-1">
-                                  {t.repCodes.length === 0 ? <span className="text-[10px] text-muted-foreground italic">Sem representante</span> : t.repCodes.map(code => {
-                                    const r = reps.find(r => r.code === code);
-                                    return <span key={code} className="text-[10px] px-1.5 py-0.5 rounded-md border border-border/50 bg-background/50 flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full" style={{ background: r && !r.isVago ? REP_COLOR_PALETTE[r.colorIndex] : '#888' }} /> {r ? r.name : code}</span>
+                                  {t.userIds.length === 0 ? <span className="text-[10px] text-muted-foreground italic">Sem usuário</span> : t.userIds.map(id => {
+                                    const u = users.find(u => u.id === id);
+                                    return <span key={id} className="text-[10px] px-1.5 py-0.5 rounded-md border border-border/50 bg-background/50 flex items-center gap-1">{u ? u.full_name || u.username : `ID: ${id}`}</span>
                                   })}
                                 </div>
                               </TableCell>
@@ -2744,7 +2363,7 @@ export default function Admin() {
                     </CardHeader>
                     <CardContent className="p-4 bg-primary/5 flex justify-center">
                       <div style={{ width: '100%', maxWidth: '350px' }}>
-                        <MiniMapBrasil territories={computedTerritories.flatMap(t => t.repCodes.map(r => ({ id: t.id, municipio: t.municipio, uf: t.uf, repCode: r, modo: 'atendimento' as const })))} reps={reps} filterUF={filterUF} filterRep="" onClickUF={uf => setFilterUF(prev => prev === uf ? '' : uf)} />
+                        <MiniMapBrasil territories={computedTerritories.flatMap(t => t.userIds.map(id => ({ id: t.id, municipio: t.municipio, uf: t.uf, userId: id, modo: 'atendimento' as const })))} filterUF={filterUF} filterRep="" onClickUF={uf => setFilterUF(prev => prev === uf ? '' : uf)} />
                       </div>
                     </CardContent>
                   </Card>
@@ -2782,15 +2401,24 @@ export default function Admin() {
                         <div key={g.id} className="px-4 py-3">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3"><div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center"><UsersRound className="w-4 h-4 text-primary" /></div>
-                              <div><p className="text-sm font-semibold">{g.name}</p><p className="text-[10px] text-muted-foreground">{g.repCodes.length} representante(s) • {new Date(g.createdAt).toLocaleDateString('pt-BR')}</p></div>
+                              <div><p className="text-sm font-semibold">{g.name}</p><p className="text-[10px] text-muted-foreground">{g.userIds.length} usuário(s) • {new Date(g.createdAt).toLocaleDateString('pt-BR')}</p></div>
                             </div>
                             <div className="flex gap-1">
-                              <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-primary/10 hover:text-primary" onClick={() => { setExpandedGroup(expandedGroup === g.id ? null : g.id); setGroupAddReps(g.repCodes); }}><ChevronRight className={`w-3.5 h-3.5 transition-transform ${expandedGroup === g.id ? 'rotate-90' : ''}`} /></Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-primary/10 hover:text-primary" onClick={() => { setExpandedGroup(expandedGroup === g.id ? null : g.id); setGroupAddUsers(g.userIds); }}><ChevronRight className={`w-3.5 h-3.5 transition-transform ${expandedGroup === g.id ? 'rotate-90' : ''}`} /></Button>
                               <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteGroup(g)}><Trash2 className="w-3.5 h-3.5" /></Button>
                             </div>
                           </div>
-                          {expandedGroup === g.id && (<div className="mt-3 ml-11 space-y-3"><p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Selecione os representantes</p><MultiRepSelect reps={reps} value={groupAddReps} onChange={setGroupAddReps} /><div className="flex gap-2"><Button size="sm" className="gap-1.5 h-7 text-xs" onClick={() => handleSaveGroupReps(g.id)}><Save className="w-3 h-3" />Salvar</Button><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setExpandedGroup(null)}>Cancelar</Button></div></div>)}
-                          {g.repCodes.length > 0 && expandedGroup !== g.id && (<div className="mt-2 ml-11 flex flex-wrap gap-1">{g.repCodes.map(code => { const r = reps.find(r => r.code === code); return r ? (<span key={code} className="text-[10px] bg-secondary px-2 py-0.5 rounded-full font-medium text-muted-foreground">{r.code} — {r.name}</span>) : null; })}</div>)}
+                          {expandedGroup === g.id && (<div className="mt-3 ml-11 space-y-3"><p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Selecione os usuários</p>
+                            <div className="border border-border rounded-md max-h-44 overflow-y-auto">
+                              {users.map(u => (
+                                <label key={u.id} className="flex items-center gap-3 px-3 py-2 hover:bg-secondary/40 cursor-pointer">
+                                  <input type="checkbox" className="rounded" checked={groupAddUsers.includes(u.id)} onChange={() => setGroupAddUsers(prev => prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id])} />
+                                  <span className="text-sm">{u.username} — {u.full_name || u.fullName}</span>
+                                </label>
+                              ))}
+                            </div>
+                            <div className="flex gap-2"><Button size="sm" className="gap-1.5 h-7 text-xs" onClick={() => handleSaveGroupUsers(g.id)}><Save className="w-3 h-3" />Salvar</Button><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setExpandedGroup(null)}>Cancelar</Button></div></div>)}
+                          {g.userIds.length > 0 && expandedGroup !== g.id && (<div className="mt-2 ml-11 flex flex-wrap gap-1">{g.userIds.map(id => { const u = users.find(u => u.id === id); return u ? (<span key={id} className="text-[10px] bg-secondary px-2 py-0.5 rounded-full font-medium text-muted-foreground">{u.username} — {u.full_name || u.fullName}</span>) : null; })}</div>)}
                         </div>
                       ))}</div>
                     )}
@@ -2999,10 +2627,10 @@ export default function Admin() {
                 <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><Filter className="w-4 h-4 text-primary" />Filtros</CardTitle></CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-3 items-center">
-                    <select className="h-9 px-3 bg-background border border-input rounded-md text-sm" value={auditFilterRep} onChange={e => setAuditFilterRep(e.target.value)}><option value="">Todos os Representantes</option>{reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}</select>
+                    <select className="h-9 px-3 bg-background border border-input rounded-md text-sm" value={auditFilterUser} onChange={e => setAuditFilterUser(e.target.value)}><option value="">Todos os Representantes</option>{reps.map(r => <option key={r.id} value={r.code || ''}>{r.code || ''} — {r.full_name || r.fullName || r.username}</option>)}</select>
                     <select className="h-9 px-3 bg-background border border-input rounded-md text-sm" value={auditFilterUF} onChange={e => setAuditFilterUF(e.target.value)}><option value="">Todos os Estados</option>{UF_DATA.map(u => <option key={u.sigla} value={u.sigla}>{u.sigla}</option>)}</select>
                     <select className="h-9 px-3 bg-background border border-input rounded-md text-sm" value={auditFilterAction} onChange={e => setAuditFilterAction(e.target.value)}><option value="">Todas as Ações</option>{Object.entries(auditActionLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => { setAuditFilterRep(''); setAuditFilterAction(''); setAuditFilterUF(''); }}><X className="w-3.5 h-3.5" />Limpar</Button>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => { setAuditFilterUser(''); setAuditFilterAction(''); setAuditFilterUF(''); }}><X className="w-3.5 h-3.5" />Limpar</Button>
                     <span className="ml-auto text-xs text-muted-foreground">{filteredAudit.length} de {auditLogs.length} registros</span>
                   </div>
                 </CardContent>
@@ -3050,7 +2678,7 @@ export default function Admin() {
                           <TableCell className="pl-4">
                             <div className="flex items-center gap-2">
                               <p className="text-sm font-bold">{req.nome}</p>
-                              {req.repCode && <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono font-bold tracking-tight">{req.repCode}</span>}
+                              {req.userId && <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono font-bold tracking-tight">ID: {req.userId}</span>}
                             </div>
                             <div className="flex flex-wrap gap-x-3 mt-0.5">
                               {req.empresa && <span className="text-[10px] text-muted-foreground">{req.empresa}</span>}
@@ -3175,7 +2803,6 @@ export default function Admin() {
                         </DialogHeader>
                         <UserProfileManager
                           user={editingUser}
-                          reps={reps}
                           userTypes={userTypes}
                           onUpdate={fetchAll}
                           onClose={() => setIsUserModalOpen(false)}

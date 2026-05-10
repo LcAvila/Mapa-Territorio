@@ -33,7 +33,14 @@ router.get('/', requirePermission('clients', 'view'), async (req, res) => {
     if (user && user.role !== 'admin') {
       where.userId = user.id;
     } else {
-      if (userId) where.userId = Number(userId);
+      if (userId) {
+        const ids = String(userId).split(',').map(id => Number(id.trim())).filter(id => !isNaN(id));
+        if (ids.length > 1) {
+          where.userId = { in: ids };
+        } else if (ids.length === 1) {
+          where.userId = ids[0];
+        }
+      }
     }
 
     const clientes = await prisma.cliente.findMany({

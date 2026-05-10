@@ -1,14 +1,14 @@
 import { Router } from 'express';
 import { prisma } from '../prisma';
-import { authenticate, requirePermission } from '../middlewares/auth';
+import { authenticate, requirePermission, AuthRequest } from '../middlewares/auth';
 import { logUserActivity } from '../utils/logger';
 
 const router = Router();
 
 // Get notification history
-router.get('/', authenticate, requirePermission('notifications', 'view'), async (req, res) => {
+router.get('/', authenticate, requirePermission('notifications', 'view'), async (req: AuthRequest, res) => {
   try {
-    console.log(`[NOTIF] User ${req.user.id} requesting notifications history`);
+    console.log(`[NOTIF] User ${req.user?.id} requesting notifications history`);
     // Usando queryRaw para evitar problemas com o Prisma Client desatualizado no node_modules
     const allNotifications: any[] = await prisma.$queryRawUnsafe(`
       SELECT "id", "title", "message", "targetAll", "targetUserIds", "senderName", "createdAt"
@@ -17,8 +17,8 @@ router.get('/', authenticate, requirePermission('notifications', 'view'), async 
       LIMIT 80
     `);
     
-    const currentUserId = Number((req as any).user?.id || 0);
-    const isAdminLike = (req as any).user?.role === 'admin' || (req as any).user?.role === 'supervisor';
+    const currentUserId = Number(req.user?.id || 0);
+    const isAdminLike = req.user?.role === 'admin' || req.user?.role === 'supervisor';
 
     const notifications = isAdminLike
       ? allNotifications
@@ -40,7 +40,7 @@ router.get('/', authenticate, requirePermission('notifications', 'view'), async 
 });
 
 // Send new notification (Admin only)
-router.post('/', authenticate, requirePermission('notifications', 'edit'), async (req: any, res) => {
+router.post('/', authenticate, requirePermission('notifications', 'edit'), async (req: AuthRequest, res) => {
   const { title, message, targetAll = true, targetUserIds = [] } = req.body;
   const senderName = req.user?.full_name || req.user?.fullName || req.user?.username || 'Administrador';
 
@@ -91,7 +91,7 @@ router.post('/', authenticate, requirePermission('notifications', 'edit'), async
 });
 
 // Clear history (Admin only)
-router.delete('/clear', authenticate, requirePermission('notifications', 'edit'), async (req: any, res) => {
+router.delete('/clear', authenticate, requirePermission('notifications', 'edit'), async (req: AuthRequest, res) => {
   try {
     await prisma.$executeRawUnsafe('DELETE FROM "notifications"');
     await logUserActivity(req.user.id, 'clear_notifications', 'Limpou o histórico de notificações', req);

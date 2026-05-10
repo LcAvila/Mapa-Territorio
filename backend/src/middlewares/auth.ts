@@ -80,8 +80,7 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
       ...user,
       id: user.id,
       role: user.role,
-      tipo: user.tipo,
-      repCode: user.repCode
+      tipo: user.tipo
     };
 
     // Update last_active in background (if possible)

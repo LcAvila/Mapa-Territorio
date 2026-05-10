@@ -468,7 +468,7 @@ export function BaseClientePanel({ onSwitchToReps }: { onSwitchToReps?: () => vo
 
                   <div className="col-span-2 mt-2 border-t pt-4">
                     <div className="flex items-center gap-2 mb-4 text-sm font-medium text-muted-foreground">
-                      <Briefcase className="w-4 h-4" /> Vínculos e Classificação
+                      <Briefcase className="w-4 h-4" /> Vínculo
                     </div>
                   </div>
 

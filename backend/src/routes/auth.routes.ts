@@ -7,7 +7,7 @@ import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router();
 const PUBLIC_USER_FIELDS = { 
-  id: true, username: true, role: true, repCode: true, code: true, tipo: true, 
+  id: true, username: true, role: true, code: true, tipo: true, 
   full_name: true, cpf_cnpj: true, telefone: true, cargo: true, company_name: true, groupId: true,
   cep: true, logradouro: true, numero: true, 
   complemento: true, bairro_end: true, cidade: true, estado_end: true, photo: true, 

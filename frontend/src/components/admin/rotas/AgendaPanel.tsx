@@ -8,9 +8,9 @@ const SEMANAS = ['Semana 1', 'Semana 2', 'Semana 3', 'Semana 4'];
 const DIAS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
 
 export function AgendaPanel() {
-  const { selectedRepCode, setSelectedRepCode } = useRotas();
+  const { selectedUserId, setSelectedUserId } = useRotas();
   const { data: reps = [] } = useApiRepresentatives(true);
-  const { data: clientes = [], isLoading } = useApiClientes(selectedRepCode || null);
+  const { data: clientes = [], isLoading } = useApiClientes(selectedUserId || null);
 
   // Distribui clientes: 4 semanas × 5 dias úteis
   const agenda = useMemo(() => {
@@ -54,19 +54,19 @@ export function AgendaPanel() {
         <div className="relative min-w-[250px]">
           <select
             className="w-full h-10 px-3 bg-background border border-input rounded-md text-sm appearance-none pr-10"
-            value={selectedRepCode}
-            onChange={e => setSelectedRepCode(e.target.value)}
+            value={selectedUserId || ''}
+            onChange={e => setSelectedUserId(e.target.value ? Number(e.target.value) : null)}
           >
             <option value="">-- Selecione um Representante --</option>
             {reps.map(r => (
-              <option key={r.code} value={r.code}>{r.code} — {r.name}</option>
+              <option key={r.id} value={r.id}>{r.code || 'S/ COD'} — {r.full_name || r.fullName || r.username}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
         </div>
       </div>
 
-      {!selectedRepCode ? (
+      {!selectedUserId ? (
         <Card className="border-border/40">
           <CardContent className="py-20 text-center text-muted-foreground">
             <Calendar className="w-12 h-12 mx-auto mb-4 opacity-20" />

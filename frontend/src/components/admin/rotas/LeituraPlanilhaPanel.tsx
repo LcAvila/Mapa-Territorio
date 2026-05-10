@@ -11,7 +11,6 @@ interface PlanilhaRow {
   codigo_cliente: string | number;
   nome_cliente: string;
   nome_abreviado: string;
-  supervisor: string;
   regiao: string;
   uf: string;
   representante: string;
@@ -19,7 +18,6 @@ interface PlanilhaRow {
   cidade: string;
   bairro: string;
   cep: string;
-  classificacao: string;
   distancia_km: number | string;
   semana: string;
   prioridade: string;
@@ -31,7 +29,6 @@ const COLUMN_MAP: Record<string, keyof PlanilhaRow> = {
   'Cod Cliente - Matriz': 'codigo_cliente',
   'Cliente': 'nome_cliente',
   'Nome Abreviado - Matriz': 'nome_abreviado',
-  'Supervisor': 'supervisor',
   'Região': 'regiao',
   'UF': 'uf',
   'Repres': 'representante',
@@ -39,7 +36,6 @@ const COLUMN_MAP: Record<string, keyof PlanilhaRow> = {
   'Cidade': 'cidade',
   'Bairro': 'bairro',
   'CEP': 'cep',
-  'Classificação': 'classificacao',
   'Distância (km)': 'distancia_km',
   'Semana': 'semana',
   'Prioridade': 'prioridade',
@@ -133,7 +129,6 @@ export function LeituraPlanilhaPanel() {
 
   const stats = {
     total: parsed.length,
-    estrategicos: parsed.filter(r => r.classificacao === 'Estratégico').length,
     alta: parsed.filter(r => r.prioridade === 'Alta').length,
     ufs: new Set(parsed.map(r => r.uf).filter(Boolean)).size,
   };
@@ -197,10 +192,9 @@ export function LeituraPlanilhaPanel() {
             <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleFileUpload} />
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             {[
               { label: 'Total Clientes', value: stats.total, color: 'text-foreground' },
-              { label: 'Estratégicos', value: stats.estrategicos, color: 'text-blue-600' },
               { label: 'Prioridade Alta', value: stats.alta, color: 'text-red-500' },
               { label: 'Estados (UF)', value: stats.ufs, color: 'text-emerald-600' },
             ].map(s => (

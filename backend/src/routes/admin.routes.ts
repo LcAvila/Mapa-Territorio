@@ -13,9 +13,7 @@ router.use(authenticate);
 router.get('/user-types', authenticate, async (req, res) => {
   try {
     // @ts-ignore
-    const types = await prisma.userType.findMany({
-      orderBy: { name: 'asc' }
-    });
+    const types = await prisma.$queryRawUnsafe(`SELECT * FROM "user_types" ORDER BY "name" ASC`);
     res.json(types);
   } catch (error) {
     console.error('Error fetching user types:', error);
@@ -30,20 +28,19 @@ router.post('/user-types', authenticate, requirePermission('settings', 'edit'), 
 
   try {
     // @ts-ignore
-    const type = await prisma.userType.create({
-      data: {
-        name,
-        color: color || '#3b82f6',
-        icon: icon || 'User',
-        showInMenu: !!showInMenu,
-        active: active !== undefined ? !!active : true,
-        isAdmin: !!isAdmin,
-        isSystemDefault: false
-      }
-    });
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "user_types" ("name", "color", "icon", "showInMenu", "active", "isAdmin", "isSystemDefault")
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      name, color || '#3b82f6', icon || 'User', !!showInMenu, 
+      active !== undefined ? !!active : true, !!isAdmin, false
+    );
     
-    await logUserActivity(req.user.id, 'create_user_type', `Criou tipo de usuário: ${name}`, req, 'UserType', String(type.id));
-    res.status(201).json(type);
+    // @ts-ignore
+    const type = await prisma.$queryRawUnsafe(`SELECT * FROM "user_types" WHERE "name" = $1`, name);
+    const createdType = Array.isArray(type) ? type[0] : null;
+    
+    await logUserActivity(req.user.id, 'create_user_type', `Criou tipo de usuário: ${name}`, req, 'UserType', createdType ? String(createdType.id) : 'N/A');
+    res.status(201).json(createdType);
   } catch (error) {
     console.error('Error creating user type:', error);
     res.status(500).json({ message: 'Erro ao criar tipo de usuário' });
@@ -57,20 +54,21 @@ router.put('/user-types/:id', authenticate, requirePermission('settings', 'edit'
 
   try {
     // @ts-ignore
-    const type = await prisma.userType.update({
-      where: { id },
-      data: {
-        name,
-        color,
-        icon,
-        showInMenu: showInMenu !== undefined ? !!showInMenu : undefined,
-        active: active !== undefined ? !!active : undefined,
-        isAdmin: isAdmin !== undefined ? !!isAdmin : undefined
-      }
-    });
+    await prisma.$executeRawUnsafe(
+      `UPDATE "user_types" 
+       SET "name" = COALESCE($1, "name"), 
+           "color" = COALESCE($2, "color"), 
+           "icon" = COALESCE($3, "icon"), 
+           "showInMenu" = COALESCE($4, "showInMenu"), 
+           "active" = COALESCE($5, "active"), 
+           "isAdmin" = COALESCE($6, "isAdmin"),
+           "updatedAt" = NOW()
+       WHERE "id" = $7`,
+      name, color, icon, showInMenu, active, isAdmin, id
+    );
 
     await logUserActivity(req.user.id, 'update_user_type', `Atualizou tipo de usuário: ${name || id}`, req, 'UserType', String(id));
-    res.json(type);
+    res.json({ message: 'Tipo atualizado com sucesso' });
   } catch (error) {
     console.error('Error updating user type:', error);
     res.status(500).json({ message: 'Erro ao atualizar tipo de usuário' });
@@ -82,23 +80,18 @@ router.delete('/user-types/:id', authenticate, requirePermission('settings', 'ed
   const id = Number(req.params.id);
   try {
     // @ts-ignore
-    const type = await prisma.userType.findUnique({ where: { id } });
+    const typeResults = await prisma.$queryRawUnsafe(`SELECT * FROM "user_types" WHERE "id" = $1`, id);
+    const type = Array.isArray(typeResults) ? typeResults[0] : null;
+    
     if (type?.isSystemDefault) {
       return res.status(403).json({ message: 'Tipos padrão do sistema não podem ser removidos' });
     }
 
     // Primeiro limpa as referências nos usuários
-    await prisma.user.updateMany({
-      // @ts-ignore
-      where: { userTypeId: id },
-      // @ts-ignore
-      data: { userTypeId: null }
-    });
+    await prisma.$executeRawUnsafe(`UPDATE "users" SET "userTypeId" = NULL WHERE "userTypeId" = $1`, id);
     
     // @ts-ignore
-    await prisma.userType.delete({
-      where: { id }
-    });
+    await prisma.$executeRawUnsafe(`DELETE FROM "user_types" WHERE "id" = $1`, id);
 
     await logUserActivity(req.user.id, 'delete_user_type', `Removeu tipo de usuário ID: ${id}`, req, 'UserType', String(id));
     res.json({ message: 'Tipo removido com sucesso' });
@@ -109,7 +102,7 @@ router.delete('/user-types/:id', authenticate, requirePermission('settings', 'ed
 });
 
 const PUBLIC_USER_FIELDS = { 
-  id: true, username: true, role: true, repCode: true, code: true, tipo: true, userTypeId: true,
+  id: true, username: true, role: true, code: true, tipo: true, userTypeId: true,
   full_name: true, cpf_cnpj: true, telefone: true, cargo: true, company_name: true, groupId: true,
   photo: true, birth_date: true, colorIndex: true, comissao: true, isVago: true,
   email: true, // Incluído o campo email no SELECT
@@ -180,7 +173,7 @@ router.get('/users', requirePermission('users', 'view'), async (req, res) => {
 
 router.post('/users', requirePermission('users', 'edit'), async (req: any, res) => {
   const { 
-    password, role, tipo, userTypeId, full_name, repCode, code, photo, colorIndex, comissao, isVago, 
+    password, role, tipo, userTypeId, full_name, code, photo, colorIndex, comissao, isVago, 
     telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
     cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
     email
@@ -217,7 +210,6 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
         role: role || 'user', 
         tipo: tipo || 'normal', 
         full_name, 
-        repCode: (repCode === '' || repCode === null) ? null : repCode, 
         code,
         photo,
         telefone,
@@ -275,7 +267,7 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
 router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, res) => {
   const id = Number(req.params.id);
   const { 
-    password, role, repCode, tipo, userTypeId, full_name, photo, colorIndex, comissao, isVago, 
+    password, role, tipo, userTypeId, full_name, photo, colorIndex, comissao, isVago, 
     telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
     cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
     email 
@@ -363,7 +355,6 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
     // 2. Prepare data for Prisma update
     const data: any = { 
         role, 
-        repCode: (repCode === '' || repCode === null) ? null : repCode, 
         tipo, 
         // @ts-ignore
         userTypeId: (userTypeId !== undefined && userTypeId !== '' && userTypeId !== null) ? Number(userTypeId) : (userTypeId === '' || userTypeId === null ? null : undefined),
@@ -407,7 +398,7 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
   } catch (error: any) {
     console.error('Update user error:', error);
     
-    // Specific check for Unique constraint (repCode or username)
+    // Specific check for Unique constraint (code or username)
     if (error.code === 'P2002') {
       const field = error.meta?.target?.[0] || 'campo único';
       return res.status(400).json({ 
@@ -445,156 +436,6 @@ router.delete('/users/:id', requireAdmin, async (req: any, res) => {
   }
 });
 
-// --- REPS (Now based on Users filtering) ---
-router.get('/reps', requirePermission('reps', 'view'), async (req, res) => {
-  const user = (req as any).user;
-
-  // Build base filter: must have a repCode AND be a representative by role or tipo
-  let where: any = {
-    repCode: { not: null },
-    OR: [
-      { role: 'representante' },
-      { tipo: 'representante' }
-    ]
-  };
-
-  // If the requester is a rep themselves, restrict to only their own record
-  if (user && user.role === 'representante' && user.repCode) {
-    where = { repCode: user.repCode };
-  }
-
-  try {
-    const reps = await prisma.user.findMany({ 
-      where,
-      select: {
-        repCode: true,
-        full_name: true,
-        username: true,
-        colorIndex: true,
-        isVago: true,
-        comissao: true,
-        _count: {
-          select: { clientes: true, territories: true }
-        }
-      },
-      orderBy: { repCode: 'asc' } 
-    });
-
-    // Map to the Representative format the frontend expects
-    const formattedReps = reps.map(r => ({
-      code: r.repCode || '',
-      name: r.full_name || r.username,
-      fullName: r.full_name,
-      colorIndex: r.colorIndex,
-      isVago: r.isVago,
-      comissao: r.comissao,
-      _count: r._count
-    })).filter(r => r.code !== ''); // Ensure only those with repCode are treated as reps
-
-    res.json(formattedReps);
-  } catch (error) {
-    console.warn('[ADMIN] Prisma failed to fetch reps list. Attempting HTTP Fallback...');
-    // Simple HTTP Fallback for reps
-    let query = supabaseAdmin
-      .from('users')
-      .select('*')
-      .not('repCode', 'is', null) // repCode != null
-      .or('role.eq.representante,tipo.eq.representante')
-      .order('repCode', { ascending: true });
-    
-    if (user && user.role === 'representante' && user.repCode) {
-      query = query.eq('repCode', user.repCode);
-    }
-
-    const { data: repsData, error: httpError } = await query;
-    
-    if (httpError) return res.status(500).json({ message: 'Erro ao listar representantes (Modo Offline)' });
-
-    const formatted = (repsData || []).map(r => ({
-      code: r.repCode || '',
-      name: r.full_name || r.username,
-      fullName: r.full_name,
-      colorIndex: r.colorIndex,
-      isVago: r.isVago === 1,
-      comissao: r.comissao,
-      _count: { clientes: 0, territories: 0 } // Counts limited in fallback mode
-    })).filter(r => r.code !== '');
-
-    res.json(formatted);
-  }
-});
-
-router.post('/reps', requireAdmin, async (req: any, res) => {
-  const { userId, code, colorIndex } = req.body;
-  if (!userId || !code) return res.status(400).json({ message: 'UserId e código são obrigatórios' });
-
-  try {
-    const user = await prisma.user.update({
-      where: { id: Number(userId) },
-      data: {
-        repCode: code,
-        role: 'representante',
-        tipo: 'representante',
-        colorIndex: colorIndex !== undefined ? Number(colorIndex) : undefined
-      }
-    });
-
-    await logUserActivity(req.user.id, 'create_rep', `Promoveu usuário ${user.username} para representante (${code})`, req, 'User', String(userId));
-    res.json({ message: 'Representante vinculado com sucesso', user });
-  } catch (error: any) {
-    if (error.code === 'P2002') {
-        return res.status(400).json({ message: 'Este código de representante já está em uso.' });
-    }
-    res.status(500).json({ message: 'Erro ao vincular representante' });
-  }
-});
-
-router.put('/reps/:code', requireAdmin, async (req: any, res) => {
-  const code = req.params.code;
-  const { name, colorIndex, isVago, comissao } = req.body;
-  
-  try {
-    const user = await prisma.user.update({
-      where: { repCode: code },
-      data: {
-        full_name: name,
-        colorIndex: colorIndex !== undefined ? Number(colorIndex) : undefined,
-        isVago: isVago !== undefined ? (isVago ? 1 : 0) : undefined,
-        comissao: comissao ? parseFloat(comissao) : null
-      }
-    });
-
-    await logUserActivity(req.user.id, 'update_rep', `Atualizou dados do rep ${code}`, req, 'User', String(user.id));
-    res.json({ message: 'Atualizado com sucesso' });
-  } catch (error) {
-    res.status(500).json({ message: 'Erro ao atualizar representante' });
-  }
-});
-
-router.delete('/reps/:code', requireAdmin, async (req: any, res) => {
-  const code = req.params.code;
-  
-  try {
-    // We clear the repCode from the user, effectively "demoting" them
-    const user = await prisma.user.update({
-      where: { repCode: code },
-      data: {
-        repCode: null,
-        role: 'user',
-        tipo: 'normal'
-      }
-    });
-
-    // Also remove their territories as requested in the frontend UI message
-    await prisma.territory.deleteMany({ where: { repCode: code } });
-
-    await logUserActivity(req.user.id, 'delete_rep', `Removeu vínculo de representante de ${code}`, req, 'User', String(user.id));
-    res.json({ message: 'Representante removido com sucesso' });
-  } catch (error) {
-    res.status(500).json({ message: 'Erro ao remover representante' });
-  }
-});
-
 // --- TERRITORIES ---
 router.get('/territories', requirePermission('territories', 'view'), async (req, res) => {
   const user = (req as any).user;
@@ -626,15 +467,21 @@ router.get('/territories', requirePermission('territories', 'view'), async (req,
   }
 });
 
-router.post('/territories/import', requireAdmin, async (req, res) => {
+router.post('/territories/import', requireAdmin, async (req: any, res) => {
   const { mappings } = req.body;
   if (!Array.isArray(mappings)) return res.status(400).json({ message: 'Formato inválido' });
   
-  await prisma.$transaction(
-    mappings.map((m: any) => prisma.territory.create({ data: { municipio: m.municipio, uf: m.uf, userId: m.userId ? Number(m.userId) : null, modo: m.modo || 'planejamento' } }))
-  );
-  
-  res.json({ message: `${mappings.length} territórios importados.` });
+  try {
+    await prisma.$transaction(
+      mappings.map((m: any) => prisma.territory.create({ data: { municipio: m.municipio, uf: m.uf, userId: m.userId ? Number(m.userId) : null, modo: m.modo || 'planejamento' } }))
+    );
+    
+    await logUserActivity(req.user.id, 'import_territories', `Importou ${mappings.length} territórios`, req);
+    res.json({ message: `${mappings.length} territórios importados.` });
+  } catch (error) {
+    console.error('Error importing territories:', error);
+    res.status(500).json({ message: 'Erro ao importar territórios' });
+  }
 });
 
 router.post('/bairros/import', requireAdmin, async (req, res) => {

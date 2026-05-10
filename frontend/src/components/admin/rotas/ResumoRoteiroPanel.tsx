@@ -12,7 +12,7 @@ import {
   CheckCircle2, Calendar, Navigation2, Info, ChevronDown
 } from 'lucide-react';
 import { useRotas } from '@/contexts/RotasContext';
-import { useApiRepresentatives, useApiClientes } from '@/hooks/use-api-data';
+import { useApiUsers, useApiClientes } from '@/hooks/use-api-data';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const SEMANAS = ['Semana 1', 'Semana 2', 'Semana 3', 'Semana 4'];
@@ -22,14 +22,15 @@ function formatKm(meters: number) {
 }
 
 export function ResumoRoteiroPanel() {
-  const { routeResults, selectedRepCode, setSelectedRepCode } = useRotas();
-  const { data: reps = [] } = useApiRepresentatives(true);
-  const { data: clientes = [] } = useApiClientes(selectedRepCode || null);
+  const { routeResults, selectedUserId, setSelectedUserId } = useRotas();
+  const { data: users = [] } = useApiUsers(true);
+  const { data: clientes = [] } = useApiClientes(selectedUserId || null);
 
-  // Agrupa os resultados por representante
+  // Agrupa os resultados por usuário
   const summary = useMemo(() => {
     return routeResults.map(entry => {
-      const { repCode, semana, result, clients, calculatedAt } = entry;
+      const { userId, semana, result, clients, calculatedAt } = entry;
+      const user = users.find(u => u.id === userId);
 
       // Pega cidades únicas percorridas
       const cidades = [...new Set(clients.map(c => c.cidade).filter(Boolean))];
@@ -40,7 +41,8 @@ export function ResumoRoteiroPanel() {
       const kmMedio = clients.length > 0 ? kmTotal / clients.length : 0;
 
       return {
-        repCode,
+        userId,
+        userName: user ? user.full_name || user.fullName || user.username : `ID: ${userId}`,
         semana,
         ufs: ufs.join(', '),
         cidades: cidades.length,
@@ -54,10 +56,10 @@ export function ResumoRoteiroPanel() {
         calculatedAt,
       };
     }).sort((a, b) => {
-      if (a.repCode !== b.repCode) return a.repCode.localeCompare(b.repCode);
+      if (a.userName !== b.userName) return a.userName.localeCompare(b.userName);
       return SEMANAS.indexOf(a.semana) - SEMANAS.indexOf(b.semana);
     });
-  }, [routeResults]);
+  }, [routeResults, users]);
 
   // KPIs globais
   const globals = useMemo(() => {
@@ -65,18 +67,18 @@ export function ResumoRoteiroPanel() {
     const totalVisitas = summary.reduce((a, s) => a + s.totalVisitas, 0);
     const totalKm = summary.reduce((a, s) => a + s.kmTotal, 0);
     const avgKm = totalKm / summary.length;
-    const repsUnicas = [...new Set(summary.map(s => s.repCode))].length;
-    return { totalVisitas, totalKm, avgKm, repsUnicas };
+    const usersUnicos = [...new Set(summary.map(s => s.userId))].length;
+    return { totalVisitas, totalKm, avgKm, usersUnicos };
   }, [summary]);
 
   // Estimativa para semanas não calculadas ainda
   const semanasSemCalculo = useMemo(() => {
-    if (!selectedRepCode) return [];
+    if (!selectedUserId) return [];
     const calculadas = routeResults
-      .filter(r => r.repCode === selectedRepCode)
+      .filter(r => r.userId === selectedUserId)
       .map(r => r.semana);
     return SEMANAS.filter(s => !calculadas.includes(s));
-  }, [selectedRepCode, routeResults]);
+  }, [selectedUserId, routeResults]);
 
   const clientesTotal = clientes.filter(c => c.latitude && c.longitude).length;
   const estimativaPorSemana = Math.ceil(clientesTotal / 4);
@@ -97,11 +99,11 @@ export function ResumoRoteiroPanel() {
         <div className="relative min-w-[250px]">
           <select
             className="w-full h-10 px-3 bg-background border border-input rounded-md text-sm appearance-none pr-10"
-            value={selectedRepCode}
-            onChange={e => setSelectedRepCode(e.target.value)}
+            value={selectedUserId || ""}
+            onChange={e => setSelectedUserId(e.target.value ? Number(e.target.value) : null)}
           >
-            <option value="">-- Filtrar por Representante --</option>
-            {reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
+            <option value="">-- Filtrar por Usuário Responsável --</option>
+            {users.map(u => <option key={u.id} value={u.id}>{u.username} — {u.full_name || u.fullName}</option>)}
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
         </div>
@@ -114,7 +116,7 @@ export function ResumoRoteiroPanel() {
             <BarChart2 className="w-16 h-16 mx-auto mb-4 opacity-20" />
             <p className="text-base font-semibold text-foreground">Nenhum roteiro calculado ainda</p>
             <p className="text-sm mt-1 max-w-md mx-auto">
-              Vá até a aba <strong>"Roteiro Sequencial"</strong>, selecione um representante e calcule
+              Vá até a aba <strong>"Roteiro Sequencial"</strong>, selecione um usuário e calcule
               os roteiros de cada semana. Os resultados aparecerão aqui automaticamente.
             </p>
           </CardContent>
@@ -126,7 +128,7 @@ export function ResumoRoteiroPanel() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { label: 'Roteiros Calculados', value: summary.length, icon: CheckCircle2, color: 'text-emerald-600' },
-            { label: 'Representantes', value: globals.repsUnicas, icon: Users, color: 'text-primary' },
+            { label: 'Usuários Ativos', value: globals.usersUnicos, icon: Users, color: 'text-primary' },
             { label: 'Total de Visitas', value: globals.totalVisitas, icon: MapPin, color: 'text-blue-600' },
             { label: 'KM Total Acumulado', value: formatKm(globals.totalKm), icon: Route, color: 'text-orange-500' },
           ].map(k => (
@@ -144,7 +146,7 @@ export function ResumoRoteiroPanel() {
       )}
 
       {/* Estimativa para semanas ainda não calculadas */}
-      {selectedRepCode && semanasSemCalculo.length > 0 && clientesTotal > 0 && (
+      {selectedUserId && semanasSemCalculo.length > 0 && clientesTotal > 0 && (
         <Card className="border-yellow-500/20 bg-yellow-500/5">
           <CardHeader className="pb-3 border-b border-yellow-500/15">
             <CardTitle className="text-sm flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
@@ -180,7 +182,7 @@ export function ResumoRoteiroPanel() {
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent border-border/40">
-                    <TableHead className="pl-4">Representante</TableHead>
+                    <TableHead className="pl-4">Usuário Responsável</TableHead>
                     <TableHead>Semana</TableHead>
                     <TableHead>Estados</TableHead>
                     <TableHead className="text-center">Cidades</TableHead>
@@ -194,12 +196,16 @@ export function ResumoRoteiroPanel() {
                 </TableHeader>
                 <TableBody>
                   {summary
-                    .filter(s => !selectedRepCode || s.repCode === selectedRepCode)
+                    .filter(s => !selectedUserId || s.userId === selectedUserId)
                     .map((s, idx) => (
-                      <TableRow key={`${s.repCode}-${s.semana}`} className="border-border/30 hover:bg-secondary/30">
+                      <TableRow key={`${s.userId}-${s.semana}`} className="border-border/30 hover:bg-secondary/30">
                         <TableCell className="pl-4">
-                          <div>
-                            <p className="text-xs font-bold font-mono text-primary">{s.repCode}</p>
+                          <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-7 rounded-full bg-primary/20" />
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold">{s.userName}</span>
+                              <span className="text-[10px] font-mono text-muted-foreground">ID: {s.userId}</span>
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -246,10 +252,10 @@ export function ResumoRoteiroPanel() {
       )}
 
       {/* Breakdown por semana (cards visuais) */}
-      {summary.filter(s => !selectedRepCode || s.repCode === selectedRepCode).length > 0 && (
+      {summary.filter(s => !selectedUserId || s.userId === selectedUserId).length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {summary
-            .filter(s => !selectedRepCode || s.repCode === selectedRepCode)
+            .filter(s => !selectedUserId || s.userId === selectedUserId)
             .map(s => {
               const semanaColors: Record<string, { border: string; badge: string; icon: string }> = {
                 'Semana 1': { border: 'border-l-blue-500', badge: 'bg-blue-500/10 text-blue-600', icon: '🔵' },
@@ -259,14 +265,14 @@ export function ResumoRoteiroPanel() {
               };
               const cc = semanaColors[s.semana] || semanaColors['Semana 1'];
               return (
-                <Card key={`card-${s.repCode}-${s.semana}`} className={`border-border/40 border-l-4 ${cc.border}`}>
+                <Card key={`card-${s.userId}-${s.semana}`} className={`border-border/40 border-l-4 ${cc.border}`}>
                   <CardHeader className="pb-3 border-b border-border/40 bg-secondary/5">
                     <CardTitle className="text-sm flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${cc.badge}`}>
                           {cc.icon} {s.semana}
                         </span>
-                        <span className="font-mono text-primary text-xs">{s.repCode}</span>
+                        <span className="font-mono text-primary text-xs">{s.userName}</span>
                       </div>
                       <span className="text-xs text-muted-foreground font-normal">
                         {new Date(s.calculatedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}

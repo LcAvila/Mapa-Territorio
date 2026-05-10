@@ -18,7 +18,6 @@ router.post('/', interestLimiter, async (req, res) => {
   // Optional authentication: if token provided, link to user
   const authHeader = req.headers.authorization;
   let userId: number | undefined;
-  let repCode: string | undefined;
 
   if (authHeader) {
       try {
@@ -33,15 +32,13 @@ router.post('/', interestLimiter, async (req, res) => {
   const { nome, email, telefone, empresa, municipio, uf, modo, observacoes } = req.body;
   if (!nome || !municipio || !uf) return res.status(400).json({ message: 'Campos obrigatórios: nome, municipio, uf' });
   
-  // Actually, let's use the provided userId/repCode from body if it comes from the app
+  // Actually, let's use the provided userId from body if it comes from the app
   const bodyUserId = req.body.userId ? Number(req.body.userId) : null;
-  const bodyRepCode = req.body.repCode || null;
 
   const int = await prisma.interestRequest.create({ 
     data: { 
       nome, email, telefone, empresa, municipio, uf, modo, observacoes,
-      userId: bodyUserId,
-      repCode: bodyRepCode
+      userId: bodyUserId
     } 
   });
   res.status(201).json(int);
@@ -88,14 +85,14 @@ router.put('/:id/status', authenticate, requirePermission('interests', 'edit'), 
   }
   
   // Automated Territory Creation on ACCEPT
-  if (status === 'accepted' && existing.repCode) {
+  if (status === 'accepted' && existing.userId) {
     try {
-      // Check if territory already exists for this rep
+      // Check if territory already exists for this user
       const existingTerritory = await prisma.territory.findFirst({
         where: {
           municipio: existing.municipio,
           uf: existing.uf,
-          repCode: existing.repCode
+          userId: existing.userId
         }
       });
 
@@ -104,14 +101,14 @@ router.put('/:id/status', authenticate, requirePermission('interests', 'edit'), 
           data: {
             municipio: existing.municipio,
             uf: existing.uf,
-            repCode: existing.repCode,
-            modo: existing.modo || 'atendimento'
+            userId: existing.userId,
+            modo: existing.modo || 'planejamento'
           }
         });
-        console.log(`[INTEREST] Territory auto-created for rep ${existing.repCode}: ${existing.municipio}/${existing.uf}`);
+        console.log(`[INTEREST] Territory created for user ${existing.userId} in ${existing.municipio}/${existing.uf}`);
       }
     } catch (err) {
-      console.error('[INTEREST] Error auto-creating territory:', err);
+      console.error('[INTEREST] Error creating territory on accept:', err);
     }
   }
 

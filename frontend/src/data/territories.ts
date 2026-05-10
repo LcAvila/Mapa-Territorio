@@ -2,19 +2,20 @@
 // This file only exports types. All data comes from the backend API.
 
 export interface TerritoryAssignment {
-  id?: number;
+  id: number;
   municipio: string;
   uf: string;
-  repCode: string;
+  userId?: number;
   modo: "planejamento" | "atendimento";
 }
 
 export interface BairroAssignment {
+  id: number;
   bairro: string;
   regiao: string;
   municipio: string;
   uf: string;
-  repCode: string;
+  userId?: number;
   modo: "planejamento" | "atendimento";
 }
 
@@ -28,14 +29,15 @@ export function getMunicipioResponsaveis(
   uf: string,
   modo: "planejamento" | "atendimento",
   territories: TerritoryAssignment[] = []
-): string[] {
+): number[] {
   return territories
     .filter(t =>
       t.municipio.toLowerCase() === municipio.toLowerCase() &&
       t.uf === uf &&
-      t.modo === modo
+      t.modo === modo &&
+      t.userId !== undefined
     )
-    .map(t => t.repCode);
+    .map(t => t.userId as number);
 }
 
 export function getBairroResponsaveis(
@@ -44,15 +46,16 @@ export function getBairroResponsaveis(
   uf: string,
   modo: "planejamento" | "atendimento",
   bairros: BairroAssignment[] = []
-): string[] {
+): number[] {
   return bairros
     .filter(b =>
       b.bairro.toLowerCase() === bairro.toLowerCase() &&
       b.municipio.toLowerCase() === municipio.toLowerCase() &&
       b.uf === uf &&
-      b.modo === modo
+      b.modo === modo &&
+      b.userId !== undefined
     )
-    .map(b => b.repCode);
+    .map(b => b.userId as number);
 }
 
 export function hasBairros(municipio: string, uf: string, bairros: BairroAssignment[] = []): boolean {

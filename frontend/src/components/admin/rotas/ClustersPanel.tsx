@@ -6,8 +6,8 @@ import { useApiClientes } from '@/hooks/use-api-data';
 import { Button } from '@/components/ui/button';
 
 export function ClustersPanel() {
-  const { selectedRepCode } = useRotas();
-  const { data: clientes = [], isLoading } = useApiClientes(selectedRepCode || null);
+  const { selectedUserId } = useRotas();
+  const { data: clientes = [], isLoading } = useApiClientes(selectedUserId || null);
 
   const bairros = clientes.reduce((acc: Record<string, number>, c) => {
     if (c.bairro) {
@@ -33,7 +33,7 @@ export function ClustersPanel() {
             <CardTitle className="text-sm flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /> Sugestões de Agrupamentos por Bairro (Top 10)</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-             {selectedRepCode && !isLoading && sortedBairros.length > 0 ? (
+             {selectedUserId && !isLoading && sortedBairros.length > 0 ? (
                <div className="divide-y divide-border/40">
                  {sortedBairros.slice(0, 10).map(([bairro, count]) => (
                    <div key={bairro} className="flex items-center justify-between p-4 hover:bg-secondary/20 transition-colors">

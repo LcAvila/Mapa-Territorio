@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck, Users, Flame, Filter, X, UserCheck } from "lucide-react";
+import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck, Users, Flame, Filter, X, UserCheck, Check } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context-core";
 import { UF_DATA } from "@/data/uf-codes";
-import { Representative, Cliente, SearchSuggestion } from "@/hooks/use-api-data";
+import { SystemUser, Cliente, SearchSuggestion } from "@/hooks/use-api-data";
+import { REP_COLOR_PALETTE } from "@/data/representatives";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,15 +33,13 @@ interface MapHeaderProps {
   onToggleClientes?: () => void;
   showHeatmap?: boolean;
   onToggleHeatmap?: () => void;
-  showReps?: boolean;
-  onToggleReps?: () => void;
   onSearchEnter?: (q: string) => void;
   suggestions?: SearchSuggestion[];
   onSelectSuggestion?: (item: SearchSuggestion) => void;
-  reps?: Representative[];
+  users?: SystemUser[];
   clients?: Cliente[];
-  filtroRepresentante?: string | null;
-  onFilterRep?: (code: string | null) => void;
+  filtroUsuario?: string | null;
+  onFilterUser?: (id: string | null) => void;
   onSelectClient?: (client: Cliente) => void;
   minimal?: boolean;
 }
@@ -49,17 +48,17 @@ export default function MapHeader({
   selectedUF, onSelectUF, 
   searchQuery, onSearchChange, isAuthenticated, role, logout,
   showClientes, onToggleClientes, showHeatmap, onToggleHeatmap,
-  showReps, onToggleReps,
   onSearchEnter, suggestions, onSelectSuggestion,
-  reps = [], clients = [], filtroRepresentante, onFilterRep, onSelectClient,
+  users = [], clients = [], filtroUsuario, onFilterUser, onSelectClient,
   minimal = false
 }: MapHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { repCode, userName, userId, token, tokenVersion } = useAuth();
+  const { userName, userId, token, tokenVersion } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
+  const [userSearchQuery, setUserSearchQuery] = useState("");
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
 
@@ -130,7 +129,7 @@ export default function MapHeader({
       {/* Logo / Brand */}
       <div className="flex items-center gap-4 shrink-0 cursor-pointer group" onClick={() => navigate('/mapa')}>
         <div className="relative">
-          <img src="/Logo.png" alt="Logo" className="h-14 w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
+          <img src="/Logo.png" alt="Logo" className="h-10 w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
           <div className="absolute inset-0 bg-primary/10 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
         </div>
       </div>
@@ -217,25 +216,13 @@ export default function MapHeader({
                 <Flame className="w-4 h-4" />
                 <span className="hidden md:inline text-xs font-semibold">Calor</span>
               </Button>
-              {role === 'admin' && (
-                <Button
-                  variant={showReps ? "default" : "ghost"}
-                  size="sm"
-                  onClick={onToggleReps}
-                  className={`h-8 gap-2 px-3 ${showReps ? 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700' : 'text-muted-foreground hover:bg-background'}`}
-                >
-                  <UserCheck className="w-4 h-4" />
-                  <span className="hidden xl:inline text-[11px] font-bold">Representantes</span>
-                </Button>
-              )}
-
               <div className="w-[1px] h-4 bg-border/40 mx-0.5" />
 
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className={`h-8 gap-2 px-2 hover:bg-background ${filtroRepresentante ? 'text-primary' : 'text-muted-foreground'}`}>
+                  <Button variant="ghost" size="sm" className={`h-8 gap-2 px-2 hover:bg-background ${filtroUsuario ? 'text-primary' : 'text-muted-foreground'}`}>
                     <Filter className="w-4 h-4" />
-                    {filtroRepresentante && <Badge variant="secondary" className="h-4 px-1 text-[10px] bg-primary/20 text-primary border-0">{filtroRepresentante}</Badge>}
+                    {filtroUsuario && <Badge variant="secondary" className="h-4 px-1 text-[10px] bg-primary/20 text-primary border-0">Filtrado</Badge>}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-80 p-4 bg-card border-border shadow-2xl z-[3000]" align="end">
@@ -245,28 +232,103 @@ export default function MapHeader({
                         <Filter className="w-4 h-4 text-primary" />
                         Filtros Avançados
                       </h3>
-                      {filtroRepresentante && (
-                        <Button variant="ghost" size="sm" onClick={() => onFilterRep?.(null)} className="h-6 text-[10px] text-destructive p-0">Limpar</Button>
+                      {filtroUsuario && (
+                        <Button variant="ghost" size="sm" onClick={() => onFilterUser?.(null)} className="h-6 text-[10px] text-destructive p-0">Limpar</Button>
                       )}
                     </div>
 
-                    {/* Rep Filter - Admins Only */}
+                    {/* User Filter (Multi-select) */}
                     {role === 'admin' && (
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Representante</label>
-                        <div className="relative">
-                          <select 
-                            value={filtroRepresentante || ""}
-                            onChange={(e) => onFilterRep?.(e.target.value || null)}
-                            className="w-full bg-secondary text-foreground text-xs pl-3 pr-8 py-2 rounded-md border border-border appearance-none cursor-pointer"
-                          >
-                            <option value="">Todos os Representantes</option>
-                            {reps.filter(r => !r.isVago).sort((a,b) => a.name.localeCompare(b.name)).map(r => (
-                              <option key={r.code} value={r.code}>{r.code} — {r.name}</option>
-                            ))}
-                          </select>
-                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
-                        </div>
+                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Usuários</label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" size="sm" className="w-full h-9 justify-between bg-secondary text-foreground text-xs font-normal border-border hover:bg-secondary/80 px-3">
+                              <span className="truncate">
+                                {!filtroUsuario ? "Todos Usuários" : 
+                                  filtroUsuario.split(',').length === 1 ? 
+                                    (users.find(u => String(u.id) === filtroUsuario)?.username || "1 Usuário") :
+                                    `${filtroUsuario.split(',').length} Selecionados`}
+                              </span>
+                              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[280px] p-2 bg-card border-border shadow-xl z-[3000]" align="start">
+                            <div className="px-2 py-2 mb-2 sticky top-0 bg-card z-10">
+                              <div className="relative">
+                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                <input
+                                  type="text"
+                                  placeholder="Pesquisar usuário..."
+                                  value={userSearchQuery}
+                                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                                  className="w-full bg-secondary/50 text-xs pl-8 pr-8 py-1.5 rounded-md border border-border focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                />
+                                {userSearchQuery && (
+                                  <button 
+                                    onClick={() => setUserSearchQuery("")}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="space-y-1 max-h-[260px] overflow-y-auto custom-scrollbar pr-1">
+                              <button
+                                onClick={() => onFilterUser?.(null)}
+                                className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded-md transition-colors ${!filtroUsuario ? 'bg-primary/10 text-primary' : 'hover:bg-secondary'}`}
+                              >
+                                <Users size={14} /> Todos Usuários
+                                {!filtroUsuario && <Check size={14} className="ml-auto" />}
+                              </button>
+                              <div className="h-px bg-border/50 my-1" />
+                              {users
+                                .filter(u => {
+                                  if (!userSearchQuery) return true;
+                                  const q = userSearchQuery.toLowerCase();
+                                  return u.username.toLowerCase().includes(q) || 
+                                         (u.full_name || u.fullName || "").toLowerCase().includes(q);
+                                })
+                                .map(u => {
+                                const isSelected = filtroUsuario?.split(',').includes(String(u.id));
+                                return (
+                                  <button
+                                    key={u.id}
+                                    onClick={() => {
+                                      const currentIds = filtroUsuario ? filtroUsuario.split(',') : [];
+                                      let newIds: string[];
+                                      if (isSelected) {
+                                        newIds = currentIds.filter(id => id !== String(u.id));
+                                      } else {
+                                        newIds = [...currentIds, String(u.id)];
+                                      }
+                                      onFilterUser?.(newIds.length > 0 ? newIds.join(',') : null);
+                                    }}
+                                    className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded-md transition-colors ${isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-secondary'}`}
+                                  >
+                                    <div 
+                                      className="w-2.5 h-2.5 rounded-full shrink-0" 
+                                      style={{ background: REP_COLOR_PALETTE[u.colorIndex || 0] || 'hsl(var(--primary))' }} 
+                                    />
+                                    <span className="truncate flex-1 text-left">{u.username} — {u.full_name || u.fullName}</span>
+                                    {isSelected && <Check size={14} className="ml-auto shrink-0" />}
+                                  </button>
+                                );
+                              })}
+                              {users.filter(u => {
+                                const q = userSearchQuery.toLowerCase();
+                                return u.username.toLowerCase().includes(q) || 
+                                       (u.full_name || u.fullName || "").toLowerCase().includes(q);
+                              }).length === 0 && (
+                                <div className="py-6 text-center text-[10px] text-muted-foreground italic">
+                                  Nenhum usuário encontrado
+                                </div>
+                              )}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                       </div>
                     )}
 

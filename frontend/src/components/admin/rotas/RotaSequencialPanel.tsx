@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useRotas } from '@/contexts/RotasContext';
-import { useApiRepresentatives, useApiClientes, Cliente } from '@/hooks/use-api-data';
+import { useApiUsers, useApiClientes, Cliente } from '@/hooks/use-api-data';
 import { useRouting, RouteWaypoint } from '@/hooks/use-routing';
 import { toast } from 'sonner';
 
@@ -28,9 +28,9 @@ const CLASSIFICATION_COLORS: Record<string, string> = {
 };
 
 export function RotaSequencialPanel() {
-  const { selectedRepCode, setSelectedRepCode, addRouteResult } = useRotas();
-  const { data: reps = [] } = useApiRepresentatives(true);
-  const { data: clientes = [], isLoading: loadingClientes } = useApiClientes(selectedRepCode || null);
+  const { selectedUserId, setSelectedUserId, addRouteResult } = useRotas();
+  const { data: users = [] } = useApiUsers(true);
+  const { data: clientes = [], isLoading: loadingClientes } = useApiClientes(selectedUserId || null);
   const { calculateRoute, isLoading: routing, result, error, clearRoute } = useRouting();
 
   const [selectedSemana, setSelectedSemana] = useState('Semana 1');
@@ -62,10 +62,10 @@ export function RotaSequencialPanel() {
     }));
 
     const routeResult = await calculateRoute(waypoints, 'car');
-    if (routeResult) {
+    if (routeResult && selectedUserId) {
       setCalculatedClients(clientesForSemana);
       addRouteResult({
-        repCode: selectedRepCode,
+        userId: selectedUserId,
         semana: selectedSemana,
         result: routeResult,
         clients: clientesForSemana,
@@ -99,15 +99,15 @@ export function RotaSequencialPanel() {
       {/* Filtros */}
       <div className="flex flex-wrap gap-3 items-end">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Representante</label>
+          <label className="text-xs font-medium text-muted-foreground">Usuário Responsável</label>
           <div className="relative min-w-[250px]">
             <select
               className="w-full h-10 px-3 bg-background border border-input rounded-md text-sm appearance-none pr-10"
-              value={selectedRepCode}
-              onChange={e => { setSelectedRepCode(e.target.value); clearRoute(); setCalculatedClients([]); }}
+              value={selectedUserId || ""}
+              onChange={e => { setSelectedUserId(e.target.value ? Number(e.target.value) : null); clearRoute(); setCalculatedClients([]); }}
             >
-              <option value="">-- Selecione um Representante --</option>
-              {reps.map(r => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
+              <option value="">-- Selecione um Usuário --</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.username} — {u.full_name || u.fullName}</option>)}
             </select>
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
           </div>
@@ -141,7 +141,7 @@ export function RotaSequencialPanel() {
           )}
           <Button
             className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-            disabled={!selectedRepCode || clientesForSemana.length < 2 || routing || loadingClientes}
+            disabled={!selectedUserId || clientesForSemana.length < 2 || routing || loadingClientes}
             onClick={handleCalculate}
           >
             {routing
@@ -153,7 +153,7 @@ export function RotaSequencialPanel() {
       </div>
 
       {/* Aviso de clientes sem GPS */}
-      {selectedRepCode && clientesSemGPS > 0 && (
+      {selectedUserId && clientesSemGPS > 0 && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-700 dark:text-yellow-400 text-xs">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>
@@ -164,13 +164,13 @@ export function RotaSequencialPanel() {
       )}
 
       {/* Estado inicial */}
-      {!selectedRepCode && (
+      {!selectedUserId && (
         <Card className="border-border/40">
           <CardContent className="py-20 text-center text-muted-foreground">
             <Route className="w-16 h-16 mx-auto mb-4 opacity-20" />
             <p className="text-base font-semibold text-foreground">Roteiro Sequencial HERE API</p>
             <p className="text-sm mt-1 max-w-md mx-auto">
-              Selecione um representante e a semana desejada. O sistema usa inteligência de rotas
+              Selecione um usuário e a semana desejada. O sistema usa inteligência de rotas
               real da HERE para calcular o percurso sequencial mínimo entre os clientes da carteira.
             </p>
           </CardContent>

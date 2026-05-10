@@ -25,11 +25,8 @@ export const requireOwnership = (modelName: string, idParam: string = 'id', owne
       if (!resource) return res.status(404).json({ message: 'Recurso não encontrado' });
 
       // Check if user is the owner
-      // Special case: if ownerField is 'repCode', compare with req.user.repCode
       const ownerId = resource[ownerField];
-      const isOwner = ownerField === 'repCode' 
-        ? ownerId === req.user.repCode 
-        : ownerId === req.user.id;
+      const isOwner = ownerId === req.user.id;
 
       if (!isOwner) {
         return res.status(403).json({ message: 'Acesso negado: Você não é o proprietário deste recurso' });

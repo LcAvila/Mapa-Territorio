@@ -1,4 +1,4 @@
-import { X, MapPin, User, Building2, Layers, Search, CheckCircle2, Navigation2 } from "lucide-react";
+import { X, MapPin, User, Building2, Layers, Search, CheckCircle2, Navigation2, Maximize2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -22,9 +22,10 @@ interface ClientDetailPanelProps {
   onClose: () => void;
   onSelectClient?: (client: Client) => void;
   onCalculateRoute?: () => void;
+  onZoomToClient?: (client: Client) => void;
 }
 
-const ClientDetailPanel = ({ clients, onClose, onSelectClient, onCalculateRoute }: ClientDetailPanelProps) => {
+const ClientDetailPanel = ({ clients, onClose, onSelectClient, onCalculateRoute, onZoomToClient }: ClientDetailPanelProps) => {
   if (clients.length === 0) return null;
 
   return (
@@ -116,24 +117,38 @@ const ClientDetailPanel = ({ clients, onClose, onSelectClient, onCalculateRoute 
       </ScrollArea>
 
       {(clients.length >= 1) && (
-        <div className="p-3 bg-muted/20 border-t border-border flex gap-2">
-          {onCalculateRoute && clients.some(c => c.latitude && c.longitude) && (
-            <Button
-              variant="default"
-              className="flex-1 h-8 text-xs gap-2 bg-blue-600 hover:bg-blue-500 text-white"
-              onClick={onCalculateRoute}
-            >
-              <Navigation2 className="w-3.5 h-3.5" />
-              Calcular Rota
-            </Button>
-          )}
+        <div className="p-3 bg-muted/20 border-t border-border flex flex-col gap-2">
+          <div className="flex gap-2 w-full">
+            {onZoomToClient && clients.length === 1 && (
+              <Button
+                variant="outline"
+                className="flex-1 h-8 text-xs gap-2 border-primary/30 hover:bg-primary/5"
+                onClick={() => onZoomToClient(clients[0])}
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+                Zoom no Cliente
+              </Button>
+            )}
+            
+            {onCalculateRoute && clients.some(c => c.latitude && c.longitude) && (
+              <Button
+                variant="default"
+                className="flex-1 h-8 text-xs gap-2 bg-blue-600 hover:bg-blue-500 text-white"
+                onClick={onCalculateRoute}
+              >
+                <Navigation2 className="w-3.5 h-3.5" />
+                Calcular Rota
+              </Button>
+            )}
+          </div>
+
           <Button 
-            variant="outline" 
-            className="flex-1 h-8 text-xs gap-2"
+            variant="ghost" 
+            className="w-full h-8 text-xs gap-2"
             onClick={onClose}
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
-            Fechar
+            Fechar Detalhes
           </Button>
         </div>
       )}

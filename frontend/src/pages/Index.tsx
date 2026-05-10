@@ -11,33 +11,26 @@ import { getUFBySigla } from "@/data/uf-codes";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import ClientDetailPanel from "@/components/ClientDetailPanel";
-import RepresentativePanel from "@/components/RepresentativePanel";
 import RoutingPanel from "@/components/RoutingPanel";
-import { useApiRepresentatives, useApiClientes, useApiTerritories, Cliente, SearchSuggestion, GeoJSONFeature, Representative } from "@/hooks/use-api-data";
+import { useApiUsers, useApiClientes, useApiTerritories, Cliente, SearchSuggestion, GeoJSONFeature, SystemUser } from "@/hooks/use-api-data";
 import { RouteWaypoint } from "@/hooks/use-routing";
 
 const Index = () => {
-  const { isAuthenticated, role, logout, repCode } = useAuth();
+  const { isAuthenticated, role, logout } = useAuth();
   const navigate = useNavigate();
-  const [selectedUF, setSelectedUF] = useState<string | null>(null);
-  const [modo, setModo] = useState<"planejamento" | "atendimento">("planejamento");
-  const [filtroRepresentante, setFiltroRepresentante] = useState<string | null>(role !== 'admin' && repCode ? repCode : null);
 
-  useEffect(() => {
-    if (role !== 'admin' && repCode) {
-      setFiltroRepresentante(repCode);
-    }
-  }, [role, repCode]);
+  const [selectedUF, setSelectedUF] = useState<string | null>(null);
+  const [filtroUsuario, setFiltroUsuario] = useState<string | null>(null);
+  const [modo, setModo] = useState<"planejamento" | "atendimento">("atendimento");
   const [mostrarVagos, setMostrarVagos] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMunicipio, setSelectedMunicipio] = useState<{ nome: string; uf: string; id?: number } | null>(null);
   const [municipioCodeForBairros, setMunicipioCodeForBairros] = useState<number | null>(null);
-  const [showClientes, setShowClientes] = useState(false);
+  const [showClientes, setShowClientes] = useState(true);
   const [showHeatmap, setShowHeatmap] = useState(false);
-  const [showReps, setShowReps] = useState(false);
   const [flyToLocation, setFlyToLocation] = useState<{ center: [number, number]; zoom: number } | null>(null);
   
-  const [searchSuggestions, setSearchSuggestions] = useState<SearchSuggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const [searchResultGeo, setSearchResultGeo] = useState<GeoJSONFeature | null>(null);
 
   // Context menu state
@@ -61,11 +54,18 @@ const Index = () => {
   const handleSelectUF = useCallback((uf: string | null) => {
     setSelectedUF(uf);
     setSelectedMunicipio(null);
-    setMunicipioCodeForBairros(null);
+    setMunicipioCodeForBairros(null); // Clear neighborhoods on UF change
+    if (uf === null) {
+      setFiltroUsuario(null);
+    }
   }, []);
 
   const handleSelectMunicipio = useCallback(async (nome: string, uf: string, ibgeCode?: number) => {
     setSelectedMunicipio({ nome, uf, id: ibgeCode });
+    // Reset neighborhood view when switching municipalities to prevent cross-loading
+    if (municipioCodeForBairros && municipioCodeForBairros !== ibgeCode) {
+      setMunicipioCodeForBairros(null);
+    }
 
     // Auto-activate bairros when municipality is clicked.
     if (ibgeCode) {
@@ -154,7 +154,7 @@ const Index = () => {
   }, []);
 
   const handleSelectSuggestion = useCallback(async (item: SearchSuggestion) => {
-    setSearchSuggestions([]);
+    setSuggestions([]);
     setSearchQuery(item.display_name.split(',')[0]);
     
     // If it's a direct selection from our filters (place_id === 0), don't fetch from nominatim
@@ -193,7 +193,7 @@ const Index = () => {
   // Debounced autocomplete
   useEffect(() => {
     if (searchQuery.length < 3) {
-      setSearchSuggestions([]);
+      setSuggestions([]);
       return;
     }
 
@@ -202,7 +202,7 @@ const Index = () => {
         const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery)}&format=json&limit=5&countrycodes=br`;
         const res = await fetch(url, { headers: { 'User-Agent': 'MapaTerritorio-App/1.1' } });
         const data = await res.json();
-        setSearchSuggestions(data);
+        setSuggestions(data);
       } catch (e) {
         console.error("Autocomplete error:", e);
       }
@@ -212,55 +212,69 @@ const Index = () => {
   }, [searchQuery]);
 
   const { token } = useAuth();
-  const { data: apiReps = [] } = useApiRepresentatives(!!token);
-  const { data: apiTerritories = [] } = useApiTerritories(!!token);
-  const { data: apiClientes = [] } = useApiClientes(filtroRepresentante);
+  const { data: apiUsers = [] } = useApiUsers(true);
+  const { data: apiTerritories = [] } = useApiTerritories(true);
+  const { data: apiClientes = [] } = useApiClientes(filtroUsuario);
 
-  // Auto-zoom to representative's state when filtered
+  // Auto-zoom to filtered users' clients bounding box
   useEffect(() => {
-    if (filtroRepresentante) {
-      // 1. Strategy: Use Territory assignments if they exist
-      if (apiTerritories.length > 0) {
-        const repTerritories = apiTerritories.filter(t => t.repCode === filtroRepresentante);
-        if (repTerritories.length > 0) {
-          const rep = apiReps.find(r => r.code === filtroRepresentante);
-          const nameParts = rep?.name.split('-');
-          const nameSuffix = nameParts && nameParts.length > 1 ? nameParts[nameParts.length - 1].trim().toUpperCase() : null;
-          
-          let targetUF = repTerritories[0].uf;
-          if (nameSuffix && nameSuffix.length === 2 && repTerritories.some(t => t.uf === nameSuffix)) {
-            targetUF = nameSuffix;
-          } else {
-            const counts = repTerritories.reduce((acc, t) => {
-              acc[t.uf] = (acc[t.uf] || 0) + 1;
-              return acc;
-            }, {} as Record<string, number>);
-            const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-            targetUF = sorted[0][0];
-          }
-          
-          handleSelectUF(targetUF);
-          return;
-        }
-      }
+    if (filtroUsuario) {
+      const userIds = filtroUsuario.split(',').map(id => Number(id.trim())).filter(id => !isNaN(id));
+      if (userIds.length === 0) return;
 
-      // 2. Fallback: Use Client locations if no territories are defined
       if (apiClientes.length > 0) {
-        const counts = apiClientes.reduce((acc, c) => {
-          if (c.uf) acc[c.uf] = (acc[c.uf] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>);
-        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-        if (sorted.length > 0) {
-          handleSelectUF(sorted[0][0]);
+        // Calculate bounding box of all clients
+        let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
+        let hasValidCoords = false;
+
+        apiClientes.forEach(c => {
+          if (c.latitude && c.longitude) {
+            minLat = Math.min(minLat, c.latitude);
+            maxLat = Math.max(maxLat, c.latitude);
+            minLon = Math.min(minLon, c.longitude);
+            maxLon = Math.max(maxLon, c.longitude);
+            hasValidCoords = true;
+          }
+        });
+
+        if (hasValidCoords) {
+          const center: [number, number] = [(minLat + maxLat) / 2, (minLon + maxLon) / 2];
+          
+          // Estimate zoom level based on spread
+          const latDiff = maxLat - minLat;
+          const lonDiff = maxLon - minLon;
+          const maxDiff = Math.max(latDiff, lonDiff);
+          
+          let zoom = 12; // Default zoom for a city
+          if (maxDiff > 2) zoom = 6;
+          else if (maxDiff > 1) zoom = 8;
+          else if (maxDiff > 0.5) zoom = 10;
+          else if (maxDiff > 0.1) zoom = 12;
+          else zoom = 14;
+
+          setFlyToLocation({ center, zoom });
+          
+          // Also select the most common UF among clients to show boundaries
+          const ufCounts = apiClientes.reduce((acc, c) => {
+            if (c.uf) acc[c.uf] = (acc[c.uf] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+          const sortedUFs = Object.entries(ufCounts).sort((a, b) => b[1] - a[1]);
+          if (sortedUFs.length > 0 && sortedUFs[0][0] !== selectedUF) {
+            setSelectedUF(sortedUFs[0][0]);
+          }
         }
       }
+    } else {
+      // Reset map when filter is cleared
+      setFlyToLocation(null);
+      setSearchResultGeo(null);
     }
-  }, [filtroRepresentante, apiTerritories, apiReps, apiClientes, handleSelectUF]);
+  }, [filtroUsuario, apiClientes, selectedUF]);
 
   // Close suggestions on map click and clear highlights
   const handleMapBackgroundClick = () => {
-    setSearchSuggestions([]);
+    setSuggestions([]);
     setSearchResultGeo(null);
     setFlyToLocation(null);
     setSearchQuery("");
@@ -284,44 +298,30 @@ const Index = () => {
         onToggleClientes={() => setShowClientes(!showClientes)}
         showHeatmap={showHeatmap}
         onToggleHeatmap={() => setShowHeatmap(!showHeatmap)}
-        showReps={showReps}
-        onToggleReps={() => setShowReps(!showReps)}
         onSearchEnter={handleAddressSearch}
-        suggestions={searchSuggestions}
+        suggestions={suggestions}
         onSelectSuggestion={handleSelectSuggestion}
-        reps={apiReps as Representative[]}
+        users={apiUsers}
         clients={apiClientes}
-        filtroRepresentante={filtroRepresentante}
-        onFilterRep={setFiltroRepresentante}
-        onSelectClient={(client) => {
-          setSelectedClients([client]);
-          setFlyToLocation({
-            center: [client.latitude, client.longitude],
-            zoom: 17
-          });
-        }}
+        filtroUsuario={filtroUsuario}
+        onFilterUser={setFiltroUsuario}
       />
 
-      <div className="flex-1 relative overflow-hidden">
-        {/* Map */}
+      <main className="flex-1 relative overflow-hidden flex">
         <BrazilMap
           selectedUF={selectedUF}
           modo={modo}
-          filtroRepresentante={filtroRepresentante}
+          filtroUsuario={filtroUsuario}
           mostrarVagos={mostrarVagos}
           onSelectUF={handleSelectUF}
           onSelectMunicipio={handleSelectMunicipio}
-          searchQuery={flyToLocation ? "" : searchQuery} // Disable highlights if we have a flyTo target
+          searchQuery={searchQuery}
           municipioCodeForBairros={municipioCodeForBairros}
-          selectedMunicipioCode={selectedMunicipio?.id ?? null}
-          onDeactivateBairros={() => {
-            setMunicipioCodeForBairros(null);
-          }}
-          selectedMunicipioName={selectedMunicipio?.nome}
+          selectedMunicipioCode={selectedMunicipio?.id}
+          selectedMunicipioName={selectedMunicipio?.nome || ""}
+          onDeactivateBairros={() => setMunicipioCodeForBairros(null)}
           showClientes={showClientes}
           showHeatmap={showHeatmap}
-          onContextMenuState={handleContextMenuState}
-          onContextMenuMunicipio={handleContextMenuMunicipio}
           flyToLocation={flyToLocation}
           searchResultGeo={searchResultGeo}
           selectedClients={selectedClients}
@@ -336,8 +336,8 @@ const Index = () => {
             <MapLegend
               selectedUF={selectedUF}
               modo={modo}
-              filtroRepresentante={filtroRepresentante}
-              onFilterRep={setFiltroRepresentante}
+              filtroUsuario={filtroUsuario}
+              onFilterUser={setFiltroUsuario}
               mostrarVagos={mostrarVagos}
               onToggleVagos={() => setMostrarVagos(!mostrarVagos)}
               clients={apiClientes}
@@ -367,35 +367,6 @@ const Index = () => {
             </div>
           )}
 
-          {/* Representative Panel */}
-          <AnimatePresence>
-            {showReps && (
-              <motion.div 
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                transition={{ duration: 0.2 }}
-                className="w-[320px] pointer-events-auto shrink-0 shadow-xl rounded-lg"
-              >
-                <RepresentativePanel
-                  reps={apiReps as Representative[]}
-                  clients={apiClientes}
-                  territories={apiTerritories}
-                  selectedRep={filtroRepresentante}
-                  onSelectRep={(code) => {
-                    setFiltroRepresentante(code);
-                    if (code) setShowClientes(true);
-                  }}
-                  onClose={() => setShowReps(false)}
-                  onZoomToRep={(rep) => {
-                    setFiltroRepresentante(rep.code);
-                    setShowClientes(true);
-                  }}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* Client detail panel */}
           <AnimatePresence>
             {selectedClients.length > 0 && (
@@ -413,6 +384,12 @@ const Index = () => {
                     setFlyToLocation({
                       center: [client.latitude, client.longitude],
                       zoom: 17
+                    });
+                  }}
+                  onZoomToClient={(client) => {
+                    setFlyToLocation({
+                      center: [client.latitude, client.longitude],
+                      zoom: 18
                     });
                   }}
                   onCalculateRoute={() => setShowRouting(true)}
@@ -457,7 +434,7 @@ const Index = () => {
             </p>
           </div>
         )}
-      </div>
+      </main>
 
       {/* Right-click context menu */}
       {contextMenu && (

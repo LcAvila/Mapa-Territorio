@@ -5,9 +5,9 @@ import { useRotas } from '@/contexts/RotasContext';
 import { useApiClientes, useApiRepresentatives } from '@/hooks/use-api-data';
 
 export function DensidadePanel() {
-  const { selectedRepCode, setSelectedRepCode } = useRotas();
+  const { selectedUserId, setSelectedUserId } = useRotas();
   const { data: reps = [] } = useApiRepresentatives(true);
-  const { data: clientes = [], isLoading } = useApiClientes(selectedRepCode || null);
+  const { data: clientes = [], isLoading } = useApiClientes(selectedUserId || null);
 
   const stats = useMemo(() => {
     const total = clientes.length;
@@ -50,12 +50,12 @@ export function DensidadePanel() {
         <div className="relative min-w-[250px]">
           <select
             className="w-full h-10 px-3 bg-background border border-input rounded-md text-sm appearance-none pr-10"
-            value={selectedRepCode}
-            onChange={e => setSelectedRepCode(e.target.value)}
+            value={selectedUserId || ''}
+            onChange={e => setSelectedUserId(e.target.value ? Number(e.target.value) : null)}
           >
             <option value="">-- Todos os Representantes --</option>
             {reps.map(r => (
-              <option key={r.code} value={r.code}>{r.code} — {r.name}</option>
+              <option key={r.id} value={r.id}>{r.code || 'S/ COD'} — {r.full_name || r.fullName || r.username}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />

@@ -17,7 +17,6 @@ interface UserProfile {
     username: string;
     role: string;
     tipo: string;
-    repCode: string | null;
     full_name: string | null;
     cpf_cnpj: string | null;
     telefone: string | null;
@@ -256,14 +255,6 @@ export default function Profile() {
                                             <span className="text-[10px] text-muted-foreground ml-auto">(não editável)</span>
                                         </div>
                                     </div>
-                                    {profile?.repCode && (
-                                        <div className="space-y-1.5">
-                                            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Código do Representante</label>
-                                            <div className="flex items-center gap-2 px-3 py-2.5 bg-primary/5 rounded-lg border border-primary/20">
-                                                <span className="text-sm font-mono font-bold text-primary">{profile.repCode}</span>
-                                            </div>
-                                        </div>
-                                    )}
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Nome Completo / Empresa *</label>
                                         <div className="relative">

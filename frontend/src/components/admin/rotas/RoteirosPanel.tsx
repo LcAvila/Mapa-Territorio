@@ -8,16 +8,16 @@ import { useRouting, TransportMode, RouteWaypoint } from '@/hooks/use-routing';
 import { toast } from 'sonner';
 
 export function RoteirosPanel() {
-  const { selectedRepCode, setSelectedRepCode } = useRotas();
+  const { selectedUserId, setSelectedUserId } = useRotas();
   
   const { data: reps = [], isLoading: loadingReps } = useApiRepresentatives(true);
-  const { data: clientes = [], isLoading: loadingClientes } = useApiClientes(selectedRepCode || null);
+  const { data: clientes = [], isLoading: loadingClientes } = useApiClientes(selectedUserId || null);
   
   const [selectedClientIds, setSelectedClientIds] = useState<number[]>([]);
   const { calculateRoute, clientesToWaypoints, isLoading: routing, result, error } = useRouting();
 
   const handleSelectRep = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedRepCode(e.target.value);
+    setSelectedUserId(e.target.value ? Number(e.target.value) : null);
     setSelectedClientIds([]);
   };
 
@@ -95,20 +95,20 @@ export function RoteirosPanel() {
             </CardHeader>
             <CardContent className="pt-4">
               <div className="relative">
-                <select 
-                  className="w-full h-10 px-3 bg-background border border-input rounded-md text-sm appearance-none pr-10"
-                  value={selectedRepCode}
-                  onChange={handleSelectRep}
-                >
-                  <option value="">-- Selecione um Representante --</option>
-                  {reps.map(r => (
-                    <option key={r.code} value={r.code}>{r.code} — {r.name}</option>
-                  ))}
-                </select>
+                <select
+                    className="w-full h-10 px-3 bg-background border border-input rounded-md text-sm appearance-none pr-10"
+                    value={selectedUserId || ''}
+                    onChange={handleSelectRep}
+                  >
+                    <option value="">-- Selecione um Representante --</option>
+                    {reps.map(r => (
+                      <option key={r.id} value={r.id}>{r.code || 'S/ COD'} — {r.full_name || r.fullName || r.username}</option>
+                    ))}
+                  </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
               </div>
 
-              {selectedRepCode && (
+              {selectedUserId && (
                 <div className="mt-4 pt-4 border-t border-border/40">
                   <p className="text-xs text-muted-foreground mb-2">Selecione os clientes para a rota:</p>
                   

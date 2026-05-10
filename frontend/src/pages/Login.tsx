@@ -45,7 +45,6 @@ export default function Login() {
                     userData.role,
                     userData.full_name,
                     userData.tipo,
-                    userData.repCode,
                     userData.estado_end,
                     userData.default_workspace,
                     userData.inactivity_limit,

@@ -1,50 +1,34 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context-core";
 import { API_BASE_URL } from "@/lib/api-base";
+import type { TerritoryAssignment } from "@/data/territories";
+import type { SystemUser } from "@/data/representatives";
+
+export type { TerritoryAssignment, SystemUser };
 
 const API_BASE = API_BASE_URL;
-
-export interface Representative {
-  code: string;
-  name: string;
-  fullName?: string;
-  isVago: boolean | number;
-  colorIndex: number;
-  comissao?: number;
-  _count?: {
-    clientes: number;
-    territories: number;
-  };
-}
-
-export interface TerritoryAssignment {
-  id: number;
-  municipio: string;
-  uf: string;
-  repCode: string;
-  modo: "planejamento" | "atendimento";
-}
 
 export interface Cliente {
   id_cliente: number;
   latitude: number;
   longitude: number;
   uf: string;
+  cidade?: string;
   nome_cliente: string;
   codigo_cliente: string;
   nome_abreviado?: string;
   endereco_completo?: string;
   bairro?: string;
-  repCode?: string;
+  userId?: number;
 }
 
-export function useApiRepresentatives(enabled: boolean) {
+export function useApiUsers(enabled: boolean) {
   const { token, tokenVersion } = useAuth();
-  return useQuery<Representative[]>({
-    queryKey: ["api", "representatives", !!token],
+  return useQuery<SystemUser[]>({
+    queryKey: ["api", "users", !!token],
     queryFn: async () => {
       if (!token) return [];
-      const res = await fetch(`${API_BASE}/api/admin/reps`, {
+      const res = await fetch(`${API_BASE}/api/admin/users`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'x-user-token-version': String(tokenVersion || 0)
@@ -54,8 +38,16 @@ export function useApiRepresentatives(enabled: boolean) {
     },
     staleTime: 5_000,
     refetchInterval: token ? 10_000 : false,
-    enabled: true  // always enabled; token check inside queryFn
+    enabled: true
   });
+}
+
+export function useApiRepresentatives(enabled: boolean) {
+  const { data: users = [] } = useApiUsers(enabled);
+  return {
+    data: users.filter(u => u.role === 'user' || u.role === 'supervisor'),
+    isLoading: false // simplified, useApiUsers handles loading
+  };
 }
 
 export function useApiTerritories(enabled: boolean) {
@@ -78,13 +70,13 @@ export function useApiTerritories(enabled: boolean) {
   });
 }
 
-export function useApiClientes(repCode: string | null) {
+export function useApiClientes(userId: number | string | null) {
   const { token, tokenVersion } = useAuth();
   return useQuery<Cliente[]>({
-    queryKey: ["api", "clientes", repCode],
+    queryKey: ["api", "clientes", userId],
     queryFn: async () => {
-      const url = repCode
-        ? `${API_BASE}/api/clientes?repCode=${repCode}`
+      const url = userId
+        ? `${API_BASE}/api/clientes?userId=${userId}`
         : `${API_BASE}/api/clientes`;
       const res = await fetch(url, {
         headers: { 

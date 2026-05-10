@@ -14,7 +14,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return stored ? Number(stored) : null;
     });
     const [userName, setUserName] = useState<string | null>(localStorage.getItem('userName'));
-    const [repCode, setRepCode] = useState<string | null>(localStorage.getItem('repCode'));
     const [tipo, setTipo] = useState<string | null>(localStorage.getItem('tipo'));
     const [estado_end, setEstadoEnd] = useState<string | null>(localStorage.getItem('estado_end'));
     const [defaultWorkspace, setDefaultWorkspace] = useState<string | null>(localStorage.getItem('defaultWorkspace'));
@@ -24,8 +23,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     const clearLocalAuth = () => {
-        ['token', 'role', 'userId', 'userName', 'repCode', 'tipo', 'estado_end', 'defaultWorkspace', 'inactivityLimit', 'tokenVersion', 'lastActivityTime'].forEach(k => localStorage.removeItem(k));
-        setToken(null); setRole(null); setUserId(null); setUserName(null); setRepCode(null); setTipo(null); setEstadoEnd(null);
+        ['token', 'role', 'userId', 'userName', 'tipo', 'estado_end', 'defaultWorkspace', 'inactivityLimit', 'tokenVersion', 'lastActivityTime'].forEach(k => localStorage.removeItem(k));
+        setToken(null); setRole(null); setUserId(null); setUserName(null); setTipo(null); setEstadoEnd(null);
         setDefaultWorkspace(null); setInactivityLimit(null); setTokenVersion(null);
     };
 
@@ -53,7 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     .then(r => r.json())
                     .then(userData => {
                         if (userData.id) {
-                            login(existingToken, userData.id, userData.role, userData.fullName, userData.tipo, userData.repCode, userData.estadoEnd, userData.defaultWorkspace, userData.inactivityLimit, userData.token_version);
+                            login(existingToken, userData.id, userData.role, userData.fullName, userData.tipo, userData.estadoEnd, userData.defaultWorkspace, userData.inactivityLimit, userData.token_version);
                         }
                     })
                     .catch(e => console.error('Error restoring session metadata:', e))
@@ -90,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return stored ? Number(stored) : null;
     });
 
-    const login = (newToken: string, newUserId: number, newRole: string, newUserName?: string, newTipo?: string, newRepCode?: string, newEstadoEnd?: string, newWorkspace?: string, newLimit?: number, newTokenVersion?: number) => {
+    const login = (newToken: string, newUserId: number, newRole: string, newUserName?: string, newTipo?: string, newEstadoEnd?: string, newWorkspace?: string, newLimit?: number, newTokenVersion?: number) => {
         // Use Supabase access token for API calls
         localStorage.setItem('role', newRole);
         localStorage.setItem('token', newToken);
@@ -100,7 +99,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (newTokenVersion !== undefined) localStorage.setItem('tokenVersion', String(newTokenVersion));
 
         if (newUserName) localStorage.setItem('userName', newUserName);
-        if (newRepCode) localStorage.setItem('repCode', newRepCode);
         if (newTipo) localStorage.setItem('tipo', newTipo);
         if (newEstadoEnd) localStorage.setItem('estado_end', newEstadoEnd);
         if (newWorkspace) localStorage.setItem('defaultWorkspace', newWorkspace);
@@ -111,7 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUserId(newUserId);
         if (newTokenVersion !== undefined) setTokenVersion(newTokenVersion);
         setUserName(newUserName || null);
-        setRepCode(newRepCode || null);
         setTipo(newTipo || null);
         setEstadoEnd(newEstadoEnd || null);
         setDefaultWorkspace(newWorkspace || null);
@@ -172,7 +169,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             role,
             userId,
             userName,
-            repCode,
             tipo,
             estado_end,
             defaultWorkspace,

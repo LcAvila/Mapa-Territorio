@@ -3,7 +3,7 @@ import { Cliente } from '@/hooks/use-api-data';
 import { RouteResult } from '@/hooks/use-routing';
 
 interface RouteResultEntry {
-  repCode: string;
+  userId: number;
   semana: string;
   result: RouteResult;
   clients: Cliente[];
@@ -15,8 +15,8 @@ interface RotasContextData {
   setPlanilhaData: (data: Record<string, unknown>[]) => void;
   planilhaSummary: { totalRows: number; columns: string[] } | null;
   setPlanilhaSummary: (summary: { totalRows: number; columns: string[] } | null) => void;
-  selectedRepCode: string;
-  setSelectedRepCode: (code: string) => void;
+  selectedUserId: number | null;
+  setSelectedUserId: (id: number | null) => void;
   selectedClients: Cliente[];
   setSelectedClients: (clients: Cliente[]) => void;
   routeResults: RouteResultEntry[];
@@ -30,13 +30,13 @@ export function RotasProvider({ children }: { children: React.ReactNode }) {
   const [planilhaData, setPlanilhaData] = useState<Record<string, unknown>[]>([]);
   const [planilhaSummary, setPlanilhaSummary] = useState<{ totalRows: number; columns: string[] } | null>(null);
   
-  const [selectedRepCode, setSelectedRepCode] = useState<string>('');
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedClients, setSelectedClients] = useState<Cliente[]>([]);
   const [routeResults, setRouteResults] = useState<RouteResultEntry[]>([]);
 
   const addRouteResult = (entry: RouteResultEntry) => {
     setRouteResults(prev => {
-      const filtered = prev.filter(r => !(r.repCode === entry.repCode && r.semana === entry.semana));
+      const filtered = prev.filter(r => !(r.userId === entry.userId && r.semana === entry.semana));
       return [...filtered, entry];
     });
   };
@@ -47,7 +47,7 @@ export function RotasProvider({ children }: { children: React.ReactNode }) {
     <RotasContext.Provider value={{
       planilhaData, setPlanilhaData,
       planilhaSummary, setPlanilhaSummary,
-      selectedRepCode, setSelectedRepCode,
+      selectedUserId, setSelectedUserId,
       selectedClients, setSelectedClients,
       routeResults, addRouteResult, clearRouteResults,
     }}>

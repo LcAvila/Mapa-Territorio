@@ -17,14 +17,14 @@ import {
 import { useAuth } from "@/contexts/auth-context-core";
 import { getUFByCode, getUFBySigla } from "@/data/uf-codes";
 import { getMunicipioResponsaveis } from "@/data/territories";
-import { getRepColor, getRepByCode } from "@/data/representatives";
-import { useApiRepresentatives, useApiTerritories, useApiClientes, Representative, TerritoryAssignment, Cliente, GeoJSONFeatureCollection, GeoJSONFeature, SearchSuggestion } from "@/hooks/use-api-data";
+import { getUserColor, getUserById } from "@/data/representatives";
+import { useApiUsers, useApiTerritories, useApiClientes, SystemUser, TerritoryAssignment, Cliente, GeoJSONFeatureCollection, GeoJSONFeature, SearchSuggestion } from "@/hooks/use-api-data";
 import { API_BASE_URL } from "@/lib/api-base";
 
 interface BrazilMapProps {
   selectedUF: string | null;
   modo: "planejamento" | "atendimento";
-  filtroRepresentante: string | null;
+  filtroUsuario: string | null;
   mostrarVagos: boolean;
   onSelectUF: (uf: string) => void;
   onSearchEnter?: (q: string) => void;
@@ -63,7 +63,7 @@ function MapController({ center, zoom, flyToLocation, selectedUF }: { center: [n
     if (!map) return;
     // SÓ executamos se não estivemos num foco de cliente (flyToLocation)
     // E se não estivermos já num nível de zoom detalhado (evita resetar zoom manual)
-    if (!hasFlyTo && map.getZoom() < 10) {
+    if (!hasFlyTo && map.getZoom() < 8) {
       if (selectedUF || isFirst.current) {
         map.flyTo(center, zoom, { duration: 1.5, easeLinearity: 0.25 });
         isFirst.current = false;
@@ -211,12 +211,30 @@ function MapEventHandler({ onBackgroundClick, onBackgroundDblClick }: { onBackgr
   return null;
 }
 
-// ─── Zoom to a specific GeoJSON feature bounds ───────────────────────────────
-function ZoomToFeature({ geoJson, maxZoom = 13 }: { geoJson: GeoJSONFeature | GeoJSONFeatureCollection; maxZoom?: number }) {
+// ─── Auto-zoom helper component ──────────────────────────────────────────────
+function ZoomToFeature({ 
+  geoJson, 
+  maxZoom = 13,
+  skipIfZoomed = false
+}: { 
+  geoJson: GeoJSONFeature | GeoJSONFeatureCollection; 
+  maxZoom?: number;
+  skipIfZoomed?: boolean;
+}) {
   const map = useMap();
+  const lastGeoJsonRef = useRef<string>("");
+
   useEffect(() => {
-    if (!geoJson) return;
+    if (!geoJson || !map) return;
+    
     try {
+      const geoJsonStr = JSON.stringify(geoJson);
+      if (geoJsonStr === lastGeoJsonRef.current) return;
+      lastGeoJsonRef.current = geoJsonStr;
+
+      // Se já estivermos com zoom detalhado e o skipIfZoomed for true, não re-foca
+      if (skipIfZoomed && map.getZoom() >= 11) return;
+
       const layer = L.geoJSON(geoJson as Parameters<typeof L.geoJSON>[0]);
       const bounds = layer.getBounds();
       if (bounds.isValid()) {
@@ -230,7 +248,7 @@ function ZoomToFeature({ geoJson, maxZoom = 13 }: { geoJson: GeoJSONFeature | Ge
         setTimeout(() => map.invalidateSize(), 2100);
       }
     } catch { /* ignore */ }
-  }, [geoJson, map, maxZoom]);
+  }, [geoJson, map, maxZoom, skipIfZoomed]);
   return null;
 }
 
@@ -255,25 +273,25 @@ function HeatmapLayer({ points }: { points: [number, number, number][] }) {
 
 // ─── Main BrazilMap Component ─────────────────────────────────────────────────
 export default function BrazilMap({
-  selectedUF, modo, filtroRepresentante, mostrarVagos,
+  selectedUF, modo, filtroUsuario, mostrarVagos,
   onSelectUF, onSelectMunicipio, searchQuery,
   municipioCodeForBairros, selectedMunicipioCode, onDeactivateBairros, selectedMunicipioName, showClientes, showHeatmap,
   onContextMenuState, onContextMenuMunicipio,
   flyToLocation, searchResultGeo,
   selectedClients = [], onSelectClients, onResetMap, onZoomToLocation
 }: BrazilMapProps) {
-  const { role, estado_end, token, repCode: loggedRepCode } = useAuth();
+  const { role, estado_end, token, userId: loggedUserId } = useAuth();
   const { data: statesMetadata } = useStatesMetadata();
   const { data: statesGeo } = useStatesGeoJSON();
-  const { data: apiReps = [] } = useApiRepresentatives(!!token);
+  const { data: apiUsers = [] } = useApiUsers(!!token);
   const { data: apiTerritories = [] } = useApiTerritories(!!token);
-  // If the logged-in user is a representative, always show their clients; otherwise use the admin filter
-  const effectiveRepFilter = role === 'representante' ? loggedRepCode : filtroRepresentante;
-  const { data: apiClientes = [] } = useApiClientes(effectiveRepFilter);
+  // If the logged-in user is not admin, always show their clients; otherwise use the admin filter
+  const effectiveUserFilter = role !== 'admin' ? loggedUserId : (filtroUsuario || null);
+  const { data: apiClientes = [] } = useApiClientes(effectiveUserFilter);
 
   const [isMapMoving, setIsMapMoving] = useState(false);
   const [selectedNeighborhood, setSelectedNeighborhood] = useState<string | null>(null);
-  const [mapTheme, setMapTheme] = useState<'dark' | 'dark-labels' | 'light' | 'satellite' | 'osm'>('dark');
+  const [mapTheme, setMapTheme] = useState<'dark' | 'dark-labels' | 'light' | 'satellite' | 'osm'>('dark-labels');
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [clientContextMenu, setClientContextMenu] = useState<{ client: Cliente, x: number, y: number } | null>(null);
 
@@ -305,6 +323,13 @@ export default function BrazilMap({
     selectedMunicipioName || undefined,
     selectedUF || undefined
   );
+
+  // Sincronização de segurança: limpa bairros se sair do estado ou se não houver NADA selecionado
+  useEffect(() => {
+    if (!selectedUF || (!selectedMunicipioCode && !municipioCodeForBairros)) {
+      if (municipioCodeForBairros) onDeactivateBairros?.();
+    }
+  }, [selectedUF, selectedMunicipioCode, municipioCodeForBairros, onDeactivateBairros]);
 
   const center: [number, number] = ufInfo ? ufInfo.center : [-14.2, -51.9];
   const zoom = ufInfo ? ufInfo.zoom : 4;
@@ -380,13 +405,13 @@ export default function BrazilMap({
     const city = citiesList.find((c: { ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea));
     const ibgeName = municipioNamesByCode?.[String(codArea)];
     const name = city?.name || ibgeName || String(f?.properties?.name || f?.properties?.nome || "").trim() || `Município ${codArea}`;
-    const reps = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
+    const userIds = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
 
-    // Only highlight if the search query is a specific word that matches name/rep
+    // Only highlight if the search query is a specific word that matches name/user
     if (searchQuery && searchQuery.length > 2) {
       const q = searchQuery.toLowerCase();
-      const repNames = reps.map(c => apiReps.find(r => r.code === c)?.name || "").join(" ").toLowerCase();
-      const isMatch = name.toLowerCase().includes(q) || reps.join(" ").toLowerCase().includes(q) || repNames.includes(q);
+      const userNames = userIds.map(id => apiUsers.find(u => u.id === id)?.full_name || "").join(" ").toLowerCase();
+      const isMatch = name.toLowerCase().includes(q) || userIds.join(" ").toLowerCase().includes(q) || userNames.includes(q);
 
       if (isMatch) {
         const hasSelection = (selectedClients || []).length > 0;
@@ -400,23 +425,31 @@ export default function BrazilMap({
       }
     }
 
-    if (reps.length === 0) return blank;
-    const rep = getRepByCode(reps[0], apiReps);
-    if (!rep) return blank;
-    if (filtroRepresentante && !reps.includes(filtroRepresentante)) {
+    if (userIds.length === 0) return blank;
+    
+    const filterIds = filtroUsuario ? filtroUsuario.split(',').map(id => Number(id.trim())) : [];
+    const matchedUserId = filterIds.length > 0 
+      ? userIds.find(id => filterIds.includes(id))
+      : userIds[0];
+
+    if (filterIds.length > 0 && !matchedUserId) {
       return { fillColor: "hsl(220, 15%, 15%)", weight: 0.5, opacity: 0.3, color: "hsl(220, 15%, 20%)", fillOpacity: 0.2 };
     }
-    if (mostrarVagos && !rep.isVago) {
+
+    const user = getUserById(matchedUserId!, apiUsers);
+    if (!user) return blank;
+
+    if (mostrarVagos && !user.isVago) {
       return { fillColor: "hsl(220, 15%, 15%)", weight: 0.5, opacity: 0.3, color: "hsl(220, 15%, 20%)", fillOpacity: 0.2 };
     }
-    const color = getRepColor(rep);
+    const color = getUserColor(user);
     return {
-      fillColor: color, weight: rep.isVago ? 2 : 1.5, opacity: 1,
-      color: rep.isVago ? "hsl(0, 70%, 50%)" : color,
-      fillOpacity: rep.isVago ? 0.3 : 0.55,
-      dashArray: rep.isVago ? "6 4" : undefined,
+      fillColor: color, weight: user.isVago ? 2 : 1.5, opacity: 1,
+      color: user.isVago ? "hsl(0, 70%, 50%)" : color,
+      fillOpacity: user.isVago ? 0.3 : 0.55,
+      dashArray: user.isVago ? "6 4" : undefined,
     };
-  }, [citiesList, municipioNamesByCode, selectedUF, modo, filtroRepresentante, mostrarVagos, searchQuery, apiTerritories, apiReps, selectedClients]);
+  }, [citiesList, municipioNamesByCode, selectedUF, modo, filtroUsuario, mostrarVagos, searchQuery, apiTerritories, apiUsers, selectedClients]);
 
   const stateOutlineStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
@@ -513,21 +546,21 @@ export default function BrazilMap({
     const city = citiesList.find((c: { name: string; ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea));
     const ibgeName = municipioNamesByCode?.[String(codArea)];
     const name = city?.name || ibgeName || String(f?.properties?.name || f?.properties?.nome || "").trim() || `Município ${codArea}`;
-    const reps = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
+    const userIds = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
 
     // Role-based restrictions mapping
     let tooltipHtml = '';
     if (role === 'user' && estado_end && selectedUF !== estado_end) {
-      if (reps.length > 0) {
-        const hasVago = reps.some(c => getRepByCode(c, apiReps)?.isVago);
+      if (userIds.length > 0) {
+        const hasVago = userIds.some(id => getUserById(id, apiUsers)?.isVago);
         tooltipHtml = `<strong>${name}</strong><br/>${hasVago ? '<em>Vago</em>' : '<em>Ocupado</em>'}`;
       } else {
         tooltipHtml = `<strong>${name}</strong><br/><em>Sem responsável</em>`;
       }
     } else {
-      const repNames = reps.map(c => { const r = getRepByCode(c, apiReps); return r ? `${r.code} - ${r.name}` : c; });
-      tooltipHtml = reps.length > 0
-        ? `<strong>${name}</strong><br/>${repNames.join("<br/>")}`
+      const userNames = userIds.map(id => { const u = getUserById(id, apiUsers); return u ? `${u.username} - ${u.full_name || u.fullName}` : `ID: ${id}`; });
+      tooltipHtml = userIds.length > 0
+        ? `<strong>${name}</strong><br/>${userNames.join("<br/>")}`
         : `<strong>${name}</strong><br/><em>Sem responsável</em>`;
     }
 
@@ -550,18 +583,13 @@ export default function BrazilMap({
         const ibgeCode = Number(codArea);
         onSelectMunicipio(name, selectedUF, Number.isFinite(ibgeCode) ? ibgeCode : undefined);
       },
-      dblclick: (e: L.LeafletMouseEvent) => {
-        L.DomEvent.stopPropagation(e);
-        onSelectUF("");
-        if (onResetMap) onResetMap();
-      },
       contextmenu: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
         e.originalEvent.preventDefault();
         onContextMenuMunicipio?.(name, selectedUF, e.originalEvent.clientX, e.originalEvent.clientY);
       },
     });
-  }, [citiesList, municipioNamesByCode, selectedUF, modo, municipioStyle, onSelectMunicipio, apiTerritories, apiReps, onContextMenuMunicipio, role, estado_end, onResetMap, onSelectUF]);
+  }, [citiesList, municipioNamesByCode, selectedUF, modo, municipioStyle, onSelectMunicipio, apiTerritories, apiUsers, onContextMenuMunicipio, role, estado_end, onResetMap, onSelectUF]);
 
   // ── Neighborhood label markers — names from Brasil Aberto metadata if possible ───
   const markers: Array<{ center: L.LatLng; name: string }> = [];
@@ -661,8 +689,8 @@ export default function BrazilMap({
 
         {/* Auto-zoom to features when selected */}
         {neighborhoodGeo && <ZoomToFeature geoJson={neighborhoodGeo} maxZoom={16} />}
-        {!neighborhoodGeo && munGeo && <ZoomToFeature geoJson={munGeo} maxZoom={15} />}
-        {!neighborhoodGeo && !munGeo && stateGeo && <ZoomToFeature geoJson={stateGeo} maxZoom={ufInfo?.zoom || 7} />}
+        {!neighborhoodGeo && munGeo && <ZoomToFeature geoJson={munGeo} maxZoom={15} skipIfZoomed={true} />}
+        {!neighborhoodGeo && !munGeo && stateGeo && <ZoomToFeature geoJson={stateGeo} maxZoom={ufInfo?.zoom || 7} skipIfZoomed={true} />}
 
         <TileLayer
           key={mapTheme}
@@ -713,7 +741,7 @@ export default function BrazilMap({
         {/* Municipalities layer (Level 2) - Always show when a state is selected */}
         {municipiosGeo && selectedUF && (
           <GeoJSON
-            key={`muns-${selectedUF}-${modo}-${filtroRepresentante}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}-${citiesList.length}`}
+            key={`muns-${selectedUF}-${modo}-${filtroUsuario}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}-${citiesList.length}`}
             data={municipiosGeo}
             style={municipioStyle}
             onEachFeature={onEachMunicipio}
@@ -721,8 +749,8 @@ export default function BrazilMap({
           />
         )}
 
-        {/* Bairros layer (Level 3) */}
-        {municipioCodeForBairros && (
+        {/* Bairros layer (Level 3) - Strict Hierarchy: Only when municipality is selected and active */}
+        {municipioCodeForBairros && selectedMunicipioCode && String(municipioCodeForBairros) === String(selectedMunicipioCode) && (
           <Pane name="bairrosPane" style={{ zIndex: 450, pointerEvents: 'auto' }}>
             {/* Show selected municipality boundary */}
             {municipiosGeo && selectedUF && (
@@ -734,7 +762,7 @@ export default function BrazilMap({
               />
             )}
 
-            {/* Neighborhood polygons */}
+            {/* Neighborhood polygons - Only render if we have a reasonable amount of features or high zoom */}
             {neighborhoodsGeo && (
               <GeoJSON
                 key={`hoods-${municipioCodeForBairros}-${neighborhoodsGeo.features?.length ?? 0}`}
@@ -792,8 +820,8 @@ export default function BrazilMap({
           <Pane name="topPane" style={{ zIndex: 700, pointerEvents: 'none' }}>
             {visibleClientes.map((cliente) => {
               const isSelected = selectedClients.some(c => c.id_cliente === cliente.id_cliente);
-              const rep = getRepByCode(cliente.repCode as string, apiReps);
-              const repColor = rep ? getRepColor(rep) : "hsl(190, 100%, 50%)";
+              const user = getUserById(cliente.userId as number, apiUsers);
+              const color = user ? getUserColor(user) : "hsl(190, 100%, 50%)";
 
               return (
                 <CircleMarker
@@ -802,8 +830,8 @@ export default function BrazilMap({
                   radius={isSelected ? 6 : 4}
                   pathOptions={{
                     pane: "markerPane", // Elevates it above SVG polygons
-                    fillColor: isSelected ? "hsl(45, 100%, 50%)" : repColor,
-                    color: isSelected ? "white" : (rep ? repColor : "hsl(190, 100%, 30%)"),
+                    fillColor: isSelected ? "hsl(45, 100%, 50%)" : color,
+                    color: isSelected ? "white" : (user ? color : "hsl(190, 100%, 30%)"),
                     weight: isSelected ? 3 : 2,
                     opacity: 0.9,
                     fillOpacity: 1
@@ -812,6 +840,9 @@ export default function BrazilMap({
                   eventHandlers={{
                     click: (e) => {
                       L.DomEvent.stopPropagation(e);
+                      // Previne o dblclick nativo do Leaflet de disparar zoom indesejado ao clicar no marcador
+                      L.DomEvent.preventDefault(e);
+                      
                       if (clientContextMenu) setClientContextMenu(null);
                       const isCtrl = e.originalEvent.ctrlKey;
 
@@ -826,6 +857,11 @@ export default function BrazilMap({
                           onSelectClients([cliente]);
                         }
                       }
+                    },
+                    dblclick: (e) => {
+                      // Mata explicitamente o zoom por clique duplo no marcador
+                      L.DomEvent.stopPropagation(e);
+                      L.DomEvent.preventDefault(e);
                     },
                     contextmenu: (e) => {
                       L.DomEvent.stopPropagation(e);
