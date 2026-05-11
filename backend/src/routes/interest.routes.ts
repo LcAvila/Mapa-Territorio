@@ -15,40 +15,64 @@ const interestLimiter = rateLimit({
 });
 
 router.post('/', interestLimiter, async (req, res) => {
-  // Optional authentication: if token provided, link to user
-  const authHeader = req.headers.authorization;
-  let userId: number | undefined;
+  try {
+    // Optional authentication: if token provided, link to user
+    const authHeader = req.headers.authorization;
+    let userId: number | undefined;
 
-  if (authHeader) {
-      try {
-          // Quick one-off check for user if token present (avoiding full authenticate middleware blockage)
-          const { authenticate } = require('../middlewares/auth');
-          // Actually, we can just use the middleware logic manually or just wrap it.
-          // For simplicity, let's just make it a normal route if we want mandatory, 
-          // but user might want anonymous too.
-      } catch (e) {}
+    if (authHeader) {
+        try {
+            // Quick one-off check for user if token present (avoiding full authenticate middleware blockage)
+            const { authenticate } = require('../middlewares/auth');
+        } catch (e) {}
+    }
+
+    const { nome, email, telefone, empresa, municipio, uf, modo, observacoes } = req.body;
+    if (!nome || !municipio || !uf) return res.status(400).json({ message: 'Campos obrigatórios: nome, municipio, uf' });
+    
+    // Actually, let's use the provided userId from body if it comes from the app
+    const bodyUserId = req.body.userId ? Number(req.body.userId) : null;
+
+    console.log(`[INTEREST] Creating request for ${nome} in ${municipio}/${uf}`);
+
+    const int = await prisma.interestRequest.create({ 
+      data: { 
+        nome, email, telefone, empresa, municipio, uf, modo, observacoes,
+        userId: bodyUserId
+      } 
+    });
+    res.status(201).json(int);
+  } catch (error: any) {
+    console.error('[INTEREST] Error creating interest request:', error);
+    res.status(500).json({ 
+      message: 'Erro ao registrar interesse. Tente novamente.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
-
-  const { nome, email, telefone, empresa, municipio, uf, modo, observacoes } = req.body;
-  if (!nome || !municipio || !uf) return res.status(400).json({ message: 'Campos obrigatórios: nome, municipio, uf' });
-  
-  // Actually, let's use the provided userId from body if it comes from the app
-  const bodyUserId = req.body.userId ? Number(req.body.userId) : null;
-
-  const int = await prisma.interestRequest.create({ 
-    data: { 
-      nome, email, telefone, empresa, municipio, uf, modo, observacoes,
-      userId: bodyUserId
-    } 
-  });
-  res.status(201).json(int);
 });
 
 router.get('/', authenticate, requirePermission('interests', 'view'), async (req, res) => {
-  const ints = await prisma.interestRequest.findMany({ 
-    orderBy: { created_at: 'desc' }
-  });
-  res.json(ints);
+  try {
+    const user = (req as any).user;
+    const where: any = {};
+
+    // Restrição por hierarquia:
+    // - Admin: Vê tudo.
+    // - Supervisor/User: Vê apenas os seus próprios interesses e os de seus subordinados.
+    if (user && user.role !== 'admin') {
+      const subordinateIds = user.subordinateIds || [];
+      where.userId = { in: [user.id, ...subordinateIds] };
+    }
+
+    const ints = await prisma.interestRequest.findMany({ 
+      where,
+      orderBy: { created_at: 'desc' }
+    });
+    res.json(ints);
+  } catch (error) {
+    console.error('[INTEREST] Error fetching interests:', error);
+    res.status(500).json({ message: 'Erro ao buscar interesses' });
+  }
 });
 
 router.put('/:id/status', authenticate, requirePermission('interests', 'edit'), async (req, res) => {
@@ -60,6 +84,18 @@ router.put('/:id/status', authenticate, requirePermission('interests', 'edit'), 
   
   const existing = await prisma.interestRequest.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ message: 'Não encontrado' });
+
+  // Validação de permissão por hierarquia para edição
+  const user = (req as any).user;
+  if (user && user.role !== 'admin') {
+    const subordinateIds = user.subordinateIds || [];
+    const allowedIds = [user.id, ...subordinateIds];
+    
+    if (!existing.userId || !allowedIds.includes(existing.userId)) {
+      console.warn(`[INTEREST] Usuário ${user.id} tentou alterar interesse #${id} de outro usuário (${existing.userId})`);
+      return res.status(403).json({ message: 'Você não tem permissão para gerenciar este interesse.' });
+    }
+  }
   
   const int = await prisma.interestRequest.update({ where: { id }, data: { status } });
 
@@ -92,6 +128,7 @@ router.put('/:id/status', authenticate, requirePermission('interests', 'edit'), 
         where: {
           municipio: existing.municipio,
           uf: existing.uf,
+          // @ts-ignore - Prisma type sync issue in IDE
           userId: existing.userId
         }
       });
@@ -101,6 +138,7 @@ router.put('/:id/status', authenticate, requirePermission('interests', 'edit'), 
           data: {
             municipio: existing.municipio,
             uf: existing.uf,
+            // @ts-ignore - Prisma type sync issue in IDE
             userId: existing.userId,
             modo: existing.modo || 'planejamento'
           }
@@ -113,7 +151,6 @@ router.put('/:id/status', authenticate, requirePermission('interests', 'edit'), 
   }
 
   // Log Activity
-  const user = (req as any).user;
   if (user) await logUserActivity(user.id, 'interest', `${user.username} alterou status do interesse #${id} para ${status}`, req, 'Interesse', String(id));
 
   res.json({ message: 'Status atualizado com sucesso', request: int });

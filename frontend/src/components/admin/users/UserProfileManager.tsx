@@ -158,12 +158,35 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
         fetch(`${API}/api/admin/users/${user.id}/permissions`, { headers: authHeaders })
       ]);
       
-      if (modulesRes.ok) setAvailableModules(await modulesRes.json());
+      if (modulesRes.ok) {
+        const rawModules: Module[] = await modulesRes.ok ? await modulesRes.json() : [];
+        
+        // Mapeamento de nomes e filtragem conforme solicitado pelo usuário
+        const moduleMap: Record<string, string> = {
+          'clientes': 'base clientes',
+          'notifications': 'Central de Alertas',
+          'users': 'Gerenciamento de Usuários',
+          'interests': 'Gestão de Interesses',
+          'routes': 'Gestão de rotas',
+          'audit': 'Auditoria',
+          'settings': 'Editar sistema'
+        };
+
+        const filteredModules = rawModules
+          .filter(m => moduleMap[m.id])
+          .map(m => ({
+            ...m,
+            name: moduleMap[m.id]
+          }));
+
+        setAvailableModules(filteredModules);
+      }
+      
       if (permsRes.ok) setPermissions(await permsRes.json());
     } catch (error) {
       console.error('Error fetching profile data:', error);
     }
-  }, [user.id, authHeaders]);
+  }, [user.id, authHeaders, API]);
 
   const fetchActivities = useCallback(async () => {
     try {
@@ -225,16 +248,23 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
       }
     }
 
+    if (formData.role === 'admin') {
+      toast.info('Usuário promovido a ADMIN automaticamente!');
+    }
+
     setLoading(true);
     try {
+      // Se for administrador, garantir que enviamos o role 'admin'
+      const finalRole = formData.role === 'admin' ? 'admin' : formData.role;
+
       const res = await fetch(`${API}/api/admin/users/${user.id}`, {
         method: 'PUT',
         headers: authHeaders,
         body: JSON.stringify({
           username: formData.username,
           full_name: formData.fullName,
-          email: formData.email, // Incluindo o email no corpo da requisição
-          role: formData.role,
+          email: formData.email,
+          role: finalRole,
           photo: formData.photo,
           colorIndex: formData.colorIndex,
           comissao: formData.comissao,
@@ -253,7 +283,9 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
           area_atuacao: formData.area_atuacao,
           base_logistica: formData.base_logistica,
           userTypeId: formData.userTypeId ? Number(formData.userTypeId) : null,
-          managedUserIds: formData.managedUserIds
+          managedUserIds: formData.managedUserIds,
+          // Se for admin, envia todas as permissões para o backend persistir
+          permissions: finalRole === 'admin' ? availableModules.map(m => ({ moduleId: m.id, canView: true, canEdit: true })) : permissions
         })
       });
 
@@ -392,7 +424,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
           </UserInfoHome>
         </SidebarHeader>
 
-        <Nav>
+        <Nav className="custom-scrollbar">
           <NavItem $active={activeTab === 'profile'} onClick={() => setActiveTab('profile')}>
             <User size={18} /> PERFIL
           </NavItem>
@@ -430,7 +462,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
            </div>
         </ContentHeader>
 
-        <ContentBody $scroll={true}>
+        <ContentBody $scroll={true} className="custom-scrollbar">
           {activeTab === 'profile' && (
             <FormGrid>
               <div className="section-title">Informações Básicas</div>
@@ -559,187 +591,297 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
               </div>
 
               <div className="field col-span-2">
-                <Label>Gerenciamento</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      className="w-full justify-between h-10 bg-background border rounded-md text-sm hover:bg-secondary/50 transition-all"
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <Users2 className="w-4 h-4 text-primary" />
-                        <span className="truncate">
-                          {formData.managedUserIds.length === 0 
-                            ? "Nenhum usuário selecionado" 
-                            : `${formData.managedUserIds.length} usuário(s) selecionado(s)`}
-                        </span>
-                      </div>
-                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent 
-                    className="w-[350px] p-0 bg-card border-border shadow-2xl z-[3000] overflow-hidden rounded-xl" 
-                    align="start"
-                    onWheel={(e) => e.stopPropagation()}
-                  >
-                    <div className="p-3 border-b border-border/50 bg-secondary/20">
-                      <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <input
-                          type="text"
-                          placeholder="Pesquisar por nome ou código..."
-                          className="w-full bg-background text-xs pl-10 pr-8 py-2.5 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all"
-                          onChange={(e) => {
-                            const q = e.target.value.toLowerCase();
-                            const items = document.querySelectorAll('.managed-user-item-edit');
-                            items.forEach((item: any) => {
-                              const text = item.getAttribute('data-search').toLowerCase();
-                              item.style.display = text.includes(q) ? 'flex' : 'none';
-                            });
-                          }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between mt-2.5 px-1">
-                        <span className="text-[10px] text-muted-foreground font-medium">
-                          {formData.managedUserIds.length} selecionados
-                        </span>
-                        <div className="flex gap-3">
-                          <button 
-                            type="button"
-                            onClick={() => setFormData({ ...formData, managedUserIds: allUsers.filter(u => u.id !== user.id).map(u => u.id) })}
-                            className="text-[10px] font-bold text-primary hover:underline"
-                          >
-                            Todos
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={() => setFormData({ ...formData, managedUserIds: [] })}
-                            className="text-[10px] font-bold text-destructive hover:underline"
-                          >
-                            Limpar
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div 
-                      className="max-h-[300px] overflow-y-auto overflow-x-hidden py-1 custom-scrollbar select-none"
-                      style={{ WebkitOverflowScrolling: 'touch' }}
-                    >
-                      {allUsers.filter(u => u.id !== user.id).map(u => {
-                        const isSelected = formData.managedUserIds.includes(u.id);
-                        const displayName = u.full_name || u.fullName || u.username;
-                        return (
-                          <button
-                            key={u.id}
-                            type="button"
-                            data-search={`${u.code} ${displayName}`}
-                            className={`managed-user-item-edit w-full flex items-center gap-3 px-4 py-2.5 text-xs transition-all hover:bg-secondary group ${isSelected ? 'bg-primary/5' : ''}`}
-                            onClick={() => {
-                              const ids = [...formData.managedUserIds];
-                              if (isSelected) {
-                                setFormData({ ...formData, managedUserIds: ids.filter(id => id !== u.id) });
-                              } else {
-                                setFormData({ ...formData, managedUserIds: [...ids, u.id] });
-                              }
-                            }}
-                          >
-                            <div className={`w-4.5 h-4.5 rounded border flex items-center justify-center transition-all ${isSelected ? 'bg-primary border-primary text-white' : 'border-border group-hover:border-primary/50'}`}>
-                              {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                            </div>
-                            <div className="flex flex-col items-start truncate">
-                              <span className={`font-semibold truncate ${isSelected ? 'text-primary' : 'text-foreground/90'}`}>
-                                {displayName}
-                              </span>
-                              {u.code && (
-                                <span className="text-[10px] text-muted-foreground font-mono">
-                                  {u.code}
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                      {allUsers.length === 0 && (
-                        <p className="text-[10px] text-muted-foreground p-4 text-center italic">
-                          Nenhum usuário disponível para seleção.
-                        </p>
-                      )}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-                <p className="text-[10px] text-muted-foreground mt-1">Este usuário poderá visualizar todos os clientes dos usuários selecionados.</p>
-                
-                {/* Visualização dos selecionados (UserProfileManager) */}
-                {formData.managedUserIds.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-3">
-                    {formData.managedUserIds.map(id => {
-                      const u = allUsers.find(user => user.id === id);
-                      if (!u) return null;
-                      return (
-                        <div 
-                          key={id} 
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-[10px] text-primary font-medium animate-in fade-in zoom-in duration-200"
-                        >
-                          <span className="opacity-70 font-mono">{u.code}</span>
-                          <span>{u.full_name || u.username}</span>
-                          <button 
-                            type="button"
-                            onClick={() => setFormData({ ...formData, managedUserIds: formData.managedUserIds.filter(mid => mid !== id) })}
-                            className="hover:text-destructive transition-colors ml-1"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
+                <Label>Gerenciamento de Perfis</Label>
+                {formData.role === 'admin' ? (
+                  <div className="p-4 rounded-lg bg-secondary/20 border border-dashed border-border/60 flex flex-col items-center justify-center gap-2">
+                    <ShieldCheck className="w-8 h-8 text-primary/40" />
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-tight">Gerenciamento Desnecessário</p>
+                    <p className="text-[10px] text-muted-foreground/80 text-center max-w-xs">
+                      Este usuário é um **Administrador**. Ele já possui acesso total a todos os clientes do sistema por padrão.
+                    </p>
                   </div>
+                ) : (
+                  <>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-between h-10 bg-background border rounded-md text-sm hover:bg-secondary/50 transition-all"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <Users2 className="w-4 h-4 text-primary" />
+                            <span className="truncate">
+                              {formData.managedUserIds.length === 0 
+                                ? "Nenhum usuário selecionado" 
+                                : `${formData.managedUserIds.length} usuário(s) selecionado(s)`}
+                            </span>
+                          </div>
+                          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent 
+                        className="w-[350px] p-0 bg-card border-border shadow-2xl z-[3000] overflow-hidden rounded-xl" 
+                        align="start"
+                        onWheel={(e) => e.stopPropagation()}
+                      >
+                        <div className="p-3 border-b border-border/50 bg-secondary/20">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <input
+                              type="text"
+                              placeholder="Pesquisar por nome ou código..."
+                              className="w-full bg-background text-xs pl-10 pr-8 py-2.5 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all"
+                              onChange={(e) => {
+                                const q = e.target.value.toLowerCase();
+                                const items = document.querySelectorAll('.managed-user-item-edit');
+                                items.forEach((item: any) => {
+                                  const text = item.getAttribute('data-search').toLowerCase();
+                                  item.style.display = text.includes(q) ? 'flex' : 'none';
+                                });
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between mt-2.5 px-1">
+                            <span className="text-[10px] text-muted-foreground font-medium">
+                              {formData.managedUserIds.length} selecionados
+                            </span>
+                            <div className="flex gap-3">
+                              <button 
+                                type="button"
+                                onClick={() => setFormData({ ...formData, managedUserIds: allUsers.filter(u => u.id !== user.id).map(u => u.id) })}
+                                className="text-[10px] font-bold text-primary hover:underline"
+                              >
+                                Todos
+                              </button>
+                              <button 
+                                type="button"
+                                onClick={() => setFormData({ ...formData, managedUserIds: [] })}
+                                className="text-[10px] font-bold text-destructive hover:underline"
+                              >
+                                Limpar
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div 
+                          className="max-h-[300px] overflow-y-auto overflow-x-hidden py-1 custom-scrollbar select-none"
+                          style={{ WebkitOverflowScrolling: 'touch' }}
+                        >
+                          {allUsers.filter(u => u.id !== user.id).map(u => {
+                            const isSelected = formData.managedUserIds.includes(u.id);
+                            const displayName = u.full_name || u.fullName || u.username;
+                            return (
+                              <button
+                                key={u.id}
+                                type="button"
+                                data-search={`${u.code} ${displayName}`}
+                                className={`managed-user-item-edit w-full flex items-center gap-3 px-4 py-2.5 text-xs transition-all hover:bg-secondary group ${isSelected ? 'bg-primary/5' : ''}`}
+                                onClick={() => {
+                                  const ids = [...formData.managedUserIds];
+                                  if (isSelected) {
+                                    setFormData({ ...formData, managedUserIds: ids.filter(id => id !== u.id) });
+                                  } else {
+                                    setFormData({ ...formData, managedUserIds: [...ids, u.id] });
+                                  }
+                                }}
+                              >
+                                <div className={`w-4.5 h-4.5 rounded border flex items-center justify-center transition-all ${isSelected ? 'bg-primary border-primary text-white' : 'border-border group-hover:border-primary/50'}`}>
+                                  {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                </div>
+                                <div className="flex flex-col items-start truncate">
+                                  <span className={`font-semibold truncate ${isSelected ? 'text-primary' : 'text-foreground/90'}`}>
+                                    {displayName}
+                                  </span>
+                                  {u.code && (
+                                    <span className="text-[10px] text-muted-foreground font-mono">
+                                      {u.code}
+                                    </span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                          {allUsers.length === 0 && (
+                            <p className="text-[10px] text-muted-foreground p-4 text-center italic">
+                              Nenhum usuário disponível para seleção.
+                            </p>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    <p className="text-[10px] text-muted-foreground mt-1">Este usuário poderá visualizar todos os clientes dos usuários selecionados.</p>
+                    
+                    {/* Visualização dos selecionados (UserProfileManager) */}
+                    {formData.managedUserIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-3">
+                        {formData.managedUserIds.map(id => {
+                          const u = allUsers.find(user => user.id === id);
+                          if (!u) return null;
+                          return (
+                            <div 
+                              key={id} 
+                              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-[10px] text-primary font-medium animate-in fade-in zoom-in duration-200"
+                            >
+                              <span className="opacity-70 font-mono">{u.code}</span>
+                              <span>{u.full_name || u.username}</span>
+                              <button 
+                                type="button"
+                                onClick={() => setFormData({ ...formData, managedUserIds: formData.managedUserIds.filter(mid => mid !== id) })}
+                                className="hover:text-destructive transition-colors ml-1"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </FormGrid>
           )}
 
           {activeTab === 'perms' && (
-            <div className="space-y-4">
-              <div className="section-title">Permissões por Módulo</div>
-              <p className="text-xs text-muted-foreground mb-4">Escolha quais módulos este usuário pode visualizar ou editar.</p>
+            <div className="space-y-6">
+              <div className="flex flex-col gap-1">
+                <div className="section-title">Permissões de Acesso</div>
+                <p className="text-[11px] text-muted-foreground">Configure quais áreas do sistema este usuário pode visualizar ou gerenciar.</p>
+              </div>
               
-              <PermissionTable>
-                <thead>
-                  <tr>
-                    <th>Módulo</th>
-                    <th className="text-center">Visualizar</th>
-                    <th className="text-center">Editar/Gerenciar</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {availableModules.map(mod => {
-                    const p = permissions.find(p => p.moduleId === mod.id);
-                    return (
-                      <tr key={mod.id}>
-                        <td className="font-medium text-sm">
-                           <div className="flex items-center gap-3">
-                             <div className="w-8 h-8 rounded bg-secondary/50 flex items-center justify-center">
-                               <Fingerprint size={14} className="text-primary/60" />
+              <div className="rounded-xl border border-border/50 bg-secondary/5 overflow-hidden shadow-sm">
+                <PermissionTable>
+                  <thead>
+                    <tr className="bg-secondary/20">
+                      <th className="w-[50%]">Módulo do Sistema</th>
+                      <th className="text-center">Visualizar</th>
+                      <th className="text-center">Editar / Gerenciar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {availableModules.map(mod => {
+                      const p = permissions.find(p => p.moduleId === mod.id);
+                      
+                      // Definindo ícones por módulo
+                      const getIcon = (id: string) => {
+                        switch(id) {
+                          case 'clientes': return <Users className="w-4 h-4" />;
+                          case 'notifications': return <Bell className="w-4 h-4" />;
+                          case 'users': return <User className="w-4 h-4" />;
+                          case 'interests': return <BadgeCheck className="w-4 h-4" />;
+                          case 'routes': return <MapPin className="w-4 h-4" />;
+                          case 'audit': return <History className="w-4 h-4" />;
+                          case 'settings': return <Settings className="w-4 h-4" />;
+                          default: return <Fingerprint className="w-4 h-4" />;
+                        }
+                      };
+
+                      const isFullAdmin = formData.role === 'admin';
+
+                      return (
+                        <tr key={mod.id} className={`transition-colors group ${isFullAdmin ? 'opacity-50 grayscale-[0.5] pointer-events-none bg-secondary/5' : 'hover:bg-primary/5'}`}>
+                          <td className="font-medium text-sm" data-label="Módulo">
+                             <div className="flex items-center gap-4">
+                               <div className={`w-9 h-9 rounded-lg bg-background border border-border/40 flex items-center justify-center transition-all shadow-sm ${isFullAdmin ? 'text-muted-foreground' : 'text-primary/70 group-hover:text-primary group-hover:scale-110'}`}>
+                                 {getIcon(mod.id)}
+                               </div>
+                               <div className="flex flex-col">
+                                 <span className="font-bold text-foreground/90">{mod.name}</span>
+                                 <span className="text-[10px] text-muted-foreground">
+                                   {isFullAdmin ? 'Liberado via Acesso Total' : `Acesso ao módulo ${mod.id}`}
+                                 </span>
+                               </div>
                              </div>
-                             {mod.name}
-                           </div>
-                        </td>
-                        <td className="text-center">
-                          <Checkbox checked={!!p?.canView} onClick={() => togglePermission(mod.id, 'canView')}>
-                             {p?.canView && <Check size={14} />}
-                          </Checkbox>
-                        </td>
-                        <td className="text-center">
-                          <Checkbox checked={!!p?.canEdit} onClick={() => togglePermission(mod.id, 'canEdit')}>
-                             {p?.canEdit && <Check size={14} />}
-                          </Checkbox>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </PermissionTable>
+                          </td>
+                          <td className="text-center" data-label="Visualizar">
+                            <div className="flex justify-center">
+                              <Checkbox 
+                                checked={isFullAdmin || !!p?.canView} 
+                                onClick={() => !isFullAdmin && togglePermission(mod.id, 'canView')}
+                                className={isFullAdmin ? 'cursor-default' : 'hover:scale-110 active:scale-95'}
+                              >
+                                {(isFullAdmin || p?.canView) && <Check className="w-3.5 h-3.5 stroke-[4]" />}
+                              </Checkbox>
+                            </div>
+                          </td>
+                          <td className="text-center" data-label="Editar/Gerenciar">
+                            <div className="flex justify-center">
+                              <Checkbox 
+                                checked={isFullAdmin || !!p?.canEdit} 
+                                onClick={() => {
+                                  if (isFullAdmin) return;
+                                  togglePermission(mod.id, 'canEdit');
+                                  if (mod.id === 'clientes' && !p?.canEdit) {
+                                    toast.info('Permissão de gerenciamento concedida. O botão de cadastro será habilitado após salvar.', { duration: 5000 });
+                                  }
+                                }}
+                                className={isFullAdmin ? 'cursor-default' : 'hover:scale-110 active:scale-95'}
+                              >
+                                {(isFullAdmin || p?.canEdit) && <Check className="w-3.5 h-3.5 stroke-[4]" />}
+                              </Checkbox>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </PermissionTable>
+              </div>
+
+              {/* Opção de Acesso Total (Administrador) */}
+              <div className="mt-8 pt-6 border-t border-border/50">
+                <div 
+                  className={`p-5 rounded-xl border transition-all duration-300 flex items-center justify-between gap-6 ${formData.role === 'admin' 
+                    ? 'bg-primary/10 border-primary/30 shadow-md' 
+                    : 'bg-secondary/10 border-border/40 hover:border-primary/20'}`}
+                >
+                  <div className="flex items-center gap-5">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors duration-300 ${formData.role === 'admin' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-muted text-muted-foreground'}`}>
+                      <ShieldCheck className="w-6 h-6" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="font-black text-sm uppercase tracking-tight text-foreground">Acesso Total (Administrador)</span>
+                      <p className="text-[11px] text-muted-foreground max-w-md leading-relaxed">
+                        Ao ativar esta opção, o usuário terá acesso irrestrito a todas as funções, configurações e dados do sistema, ignorando as permissões individuais acima.
+                      </p>
+                    </div>
+                  </div>
+                  <Switch 
+                    $active={formData.role === 'admin'} 
+                    onClick={() => {
+                      const newIsAdmin = formData.role !== 'admin';
+                      setFormData(prev => ({ ...prev, role: newIsAdmin ? 'admin' : 'user' }));
+                      
+                      if (newIsAdmin) {
+                        // Marca TODAS as permissões automaticamente no estado local
+                        const allPerms = availableModules.map(m => ({
+                          moduleId: m.id,
+                          canView: true,
+                          canEdit: true
+                        }));
+                        setPermissions(allPerms);
+                        toast.info('Perfil de Administrador preparado. Clique em "Salvar Perfil" para aplicar as mudanças.', {
+                          icon: <ShieldCheck className="text-primary" />
+                        });
+                      }
+                    }}
+                    className="scale-110 shadow-sm"
+                  >
+                    <div className="handle shadow-sm" />
+                  </Switch>
+                </div>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20 flex gap-3 items-start animate-in fade-in slide-in-from-top-2 duration-500">
+                <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-amber-700">Nota de Segurança</p>
+                  <p className="text-[10px] text-amber-600/80 leading-relaxed">
+                    As permissões de edição geralmente incluem permissão de visualização. Ao conceder acesso de "Editar / Gerenciar", o usuário poderá alterar dados críticos neste módulo.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -970,8 +1112,18 @@ const Container = styled.div`
   border-radius: 12px;
   overflow: hidden;
   height: 80vh;
+  width: 95vw;
+  max-width: 1200px;
   box-shadow: 0 10px 40px -10px rgba(0,0,0,0.2);
   border: 1px solid hsl(var(--border) / 0.5);
+  margin: auto;
+
+  @media (max-width: 1024px) {
+    flex-direction: column;
+    height: 95vh;
+    width: 98vw;
+    border-radius: 8px;
+  }
 `;
 
 const Sidebar = styled.div`
@@ -980,6 +1132,14 @@ const Sidebar = styled.div`
   border-right: 1px solid hsl(var(--border) / 0.5);
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
+
+  @media (max-width: 1024px) {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid hsl(var(--border) / 0.5);
+    max-height: 35%;
+  }
 `;
 
 const SidebarHeader = styled.div`
@@ -989,6 +1149,13 @@ const SidebarHeader = styled.div`
   align-items: center;
   text-align: center;
   border-bottom: 1px solid hsl(var(--border) / 0.3);
+
+  @media (max-width: 1024px) {
+    padding: 15px;
+    flex-direction: row;
+    text-align: left;
+    gap: 15px;
+  }
 `;
 
 const UserAvatarHome = styled.div`
@@ -1003,6 +1170,13 @@ const UserAvatarHome = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+
+  @media (max-width: 1024px) {
+    width: 60px;
+    height: 60px;
+    margin-bottom: 0;
+  }
 
   img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
   
@@ -1023,17 +1197,44 @@ const UserAvatarHome = styled.div`
     color: #444;
     z-index: 11;
     border: 1px solid hsl(var(--border) / 0.5);
+
+    @media (max-width: 1024px) {
+      width: 20px;
+      height: 20px;
+      svg { width: 10px; height: 10px; }
+    }
   }
 `;
 
 const UserInfoHome = styled.div`
   h3 { font-size: 0.95rem; font-weight: 800; color: hsl(var(--foreground)); margin: 0; }
   p { font-size: 0.65rem; color: hsl(var(--muted-foreground)); margin: 4px 0 0; font-weight: 600; }
+
+  @media (max-width: 1024px) {
+    flex: 1;
+    h3 { font-size: 0.85rem; }
+    button { padding: 0 8px; height: 24px; font-size: 9px; }
+  }
 `;
 
 const Nav = styled.nav`
   padding: 20px 0;
   flex: 1;
+  overflow-y: auto;
+  
+  @media (max-width: 1024px) {
+    padding: 0;
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    border-bottom: 1px solid hsl(var(--border) / 0.3);
+    
+    &::-webkit-scrollbar {
+      height: 4px;
+    }
+  }
 `;
 
 const NavItem = styled.button<{ $active?: boolean }>`
@@ -1052,6 +1253,14 @@ const NavItem = styled.button<{ $active?: boolean }>`
   border-left: 4px solid ${props => props.$active ? 'hsl(var(--primary))' : 'transparent'};
   text-align: left;
 
+  @media (max-width: 1024px) {
+    width: auto;
+    padding: 12px 20px;
+    border-left: none;
+    border-bottom: 3px solid ${props => props.$active ? 'hsl(var(--primary))' : 'transparent'};
+    flex-shrink: 0;
+  }
+
   &:hover {
     background: ${props => props.$active ? 'hsl(var(--background))' : 'hsl(var(--secondary) / 0.5)'};
     color: ${props => props.$active ? 'hsl(var(--primary))' : 'hsl(var(--foreground))'};
@@ -1061,6 +1270,10 @@ const NavItem = styled.button<{ $active?: boolean }>`
 const SidebarFooter = styled.div`
   padding: 10px;
   border-top: 1px solid hsl(var(--border) / 0.3);
+
+  @media (max-width: 1024px) {
+    display: none;
+  }
 `;
 
 const MainContent = styled.div`
@@ -1068,6 +1281,7 @@ const MainContent = styled.div`
   display: flex;
   flex-direction: column;
   background: hsl(var(--background));
+  min-height: 0;
 `;
 
 const ContentHeader = styled.div`
@@ -1077,10 +1291,17 @@ const ContentHeader = styled.div`
   align-items: center;
   justify-content: space-between;
 
+  @media (max-width: 768px) {
+    padding: 10px 15px;
+  }
+
   .breadcrumb {
     font-size: 0.7rem;
     color: hsl(var(--muted-foreground));
     font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     span { color: hsl(var(--foreground)); font-weight: 700; }
   }
 `;
@@ -1090,6 +1311,10 @@ const ContentBody = styled.div<{ $scroll?: boolean }>`
   flex: 1;
   overflow-y: ${props => props.$scroll ? 'auto' : 'hidden'};
   min-height: 0;
+
+  @media (max-width: 768px) {
+    padding: 20px 15px;
+  }
 `;
 
 const ContentFooter = styled.div`
@@ -1101,6 +1326,12 @@ const ContentFooter = styled.div`
   gap: 10px;
   background: hsl(var(--secondary) / 0.15);
   flex-shrink: 0;
+
+  @media (max-width: 768px) {
+    padding: 12px 15px;
+    flex-direction: column-reverse;
+    button { width: 100%; }
+  }
 `;
 
 const FormGrid = styled.div`
@@ -1108,6 +1339,11 @@ const FormGrid = styled.div`
   grid-template-columns: 1fr 1fr;
   gap: 20px;
   max-width: 800px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
 
   .section-title {
     grid-column: span 2;
@@ -1118,6 +1354,10 @@ const FormGrid = styled.div`
     margin-bottom: 10px;
     padding-bottom: 5px;
     border-bottom: 2px solid hsl(var(--primary) / 0.1);
+
+    @media (max-width: 768px) {
+      grid-column: span 1;
+    }
   }
 
   .field {
@@ -1131,6 +1371,38 @@ const PermissionTable = styled.table`
   width: 100%;
   border-collapse: collapse;
   
+  @media (max-width: 640px) {
+    display: block;
+    
+    thead { display: none; }
+    
+    tbody, tr, td {
+      display: block;
+      width: 100%;
+    }
+
+    tr {
+      padding: 15px 0;
+      border-bottom: 1px solid hsl(var(--border) / 0.5);
+    }
+
+    td {
+      padding: 5px 0;
+      border: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+
+      &:before {
+        content: attr(data-label);
+        font-size: 0.65rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        color: hsl(var(--muted-foreground));
+      }
+    }
+  }
+
   th {
     text-align: left;
     padding: 12px 15px;
@@ -1164,6 +1436,10 @@ const Checkbox = styled.button<{ checked: boolean }>`
   margin: 0 auto;
   transition: all 0.2s;
 
+  @media (max-width: 640px) {
+    margin: 0;
+  }
+
   &:hover { border-color: hsl(var(--primary)); }
 `;
 
@@ -1195,6 +1471,13 @@ const NotifToggle = styled.div`
   border-radius: 8px;
   border: 1px solid hsl(var(--border) / 0.3);
 
+  @media (max-width: 768px) {
+    grid-column: span 1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
   .info {
     display: flex;
     align-items: center;
@@ -1215,6 +1498,10 @@ const Switch = styled.button<{ $active?: boolean }>`
   border: none;
   cursor: pointer;
   transition: all 0.2s;
+
+  @media (max-width: 768px) {
+    align-self: flex-end;
+  }
 
   .handle {
     position: absolute;
@@ -1267,6 +1554,11 @@ const TimelineItem = styled.div`
       
       .action { font-size: 0.85rem; font-weight: 700; color: hsl(var(--foreground)); }
       .time { font-size: 0.7rem; color: hsl(var(--muted-foreground)); }
+
+      @media (max-width: 480px) {
+        flex-direction: column;
+        gap: 4px;
+      }
     }
 
     .footer {

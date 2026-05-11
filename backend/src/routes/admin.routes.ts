@@ -122,7 +122,12 @@ const PUBLIC_USER_FIELDS = {
   cargo: true,
   last_active: true,
   isVago: true,
-  token_version: true
+  token_version: true,
+  permissions: {
+    include: {
+      module: true
+    }
+  }
 };
 
 // --- KICK USER ---
@@ -187,7 +192,7 @@ router.get('/users', requirePermission('users', 'view'), async (req, res) => {
 
 router.post('/users', requirePermission('users', 'edit'), async (req: any, res) => {
   const { 
-      password, role, tipo, userTypeId, managedUserIds, full_name, photo, colorIndex, comissao, isVago, 
+      code, password, role, tipo, userTypeId, managedUserIds, full_name, photo, colorIndex, comissao, isVago, 
       telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
       cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
       email // Recebendo o email do frontend
@@ -241,6 +246,7 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
         area_atuacao,
         base_logistica,
         groupId: groupId ? Number(groupId) : null,
+        // @ts-ignore
         managedUsers: managedUserIds ? {
           connect: managedUserIds.map((id: number) => ({ id }))
         } : undefined,
@@ -287,7 +293,7 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
     password, role, tipo, userTypeId, managedUserIds, full_name, photo, colorIndex, comissao, isVago, 
     telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
     cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
-    email 
+    email, permissions // Adicionando permissions aqui
   } = req.body;
 
   // Validação de e-mail no backend
@@ -304,7 +310,7 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
   if (!existing) return res.status(404).json({ message: 'Usuário não encontrado' });
   
   try {
-    // 1. Password sync to Supabase
+    // 1. Password sync to Supabase (mantendo lógica existente)
     if (password) {
       try {
         console.log(`[AUTH] Iniciando troca de senha para usuário ID local: ${id}`);
@@ -369,50 +375,72 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
       }
     }
 
-    // 2. Prepare data for Prisma update
-    const data: any = { 
-        role, 
-        tipo, 
-        // @ts-ignore
-        userTypeId: (userTypeId !== undefined && userTypeId !== '' && userTypeId !== null) ? Number(userTypeId) : (userTypeId === '' || userTypeId === null ? null : undefined),
+    // 2. Perform database update
+    const user: any = await prisma.user.update({ 
+      where: { id },
+      data: { 
+        role: role || undefined, 
+        tipo: tipo || undefined, 
         full_name, 
-        telefone, 
-        cpf_cnpj, 
-        cargo, 
+        photo,
+        telefone,
+        cpf_cnpj,
+        cargo,
         company_name,
-        email, // Salvando o email no banco de dados
-        cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
-        // Ensure groupId is not 0 if empty string is passed
-        groupId: (groupId !== undefined && groupId !== '' && groupId !== null) ? Number(groupId) : (groupId === '' || groupId === null ? null : undefined),
+        email: email || undefined,
+        cep,
+        logradouro,
+        numero,
+        complemento,
+        bairro_end,
+        cidade,
+        estado_end,
+        area_atuacao,
+        base_logistica,
+        groupId: groupId !== undefined ? (groupId ? Number(groupId) : null) : undefined,
+        // @ts-ignore
         managedUsers: managedUserIds ? {
           set: managedUserIds.map((id: number) => ({ id }))
         } : undefined,
         birth_date: birth_date ? new Date(birth_date) : undefined,
         colorIndex: colorIndex !== undefined ? Number(colorIndex) : undefined,
-        isVago: isVago !== undefined ? (isVago ? 1 : 0) : undefined
-    };
-
-    // Safe Float parsing for comissao
-    if (comissao !== undefined) {
-      if (comissao === '' || comissao === null) {
-        data.comissao = null;
-      } else {
-        const val = parseFloat(comissao);
-        data.comissao = isNaN(val) ? null : val;
-      }
-    }
-
-    if (photo !== undefined) data.photo = photo;
-    
-    // 3. Perform database update
-    const user = await prisma.user.update({ 
-      where: { id }, 
-      data, 
+        comissao: (comissao !== undefined && comissao !== '' && comissao !== null) ? parseFloat(comissao) : (comissao === null ? null : undefined),
+        isVago: isVago !== undefined ? (isVago ? 1 : 0) : undefined,
+        // @ts-ignore
+        userTypeId: userTypeId ? Number(userTypeId) : null,
+      }, 
       select: PUBLIC_USER_FIELDS 
     });
 
-    console.log(`[ADMIN] Usuário ${user.username} (ID: ${id}) atualizado com sucesso no Prisma.`);
+    // 3. Update permissions if provided (Novo!)
+    if (Array.isArray(permissions) && permissions.length > 0) {
+      console.log(`[ADMIN] Atualizando permissões para usuário ID ${id} via PUT.`);
+      await prisma.$executeRawUnsafe('DELETE FROM "user_permissions" WHERE "userId" = $1', id);
+      for (const p of permissions) {
+        await prisma.$executeRawUnsafe(
+          'INSERT INTO "user_permissions" ("userId", "moduleId", "canView", "canEdit") VALUES ($1, $2, $3, $4)',
+          id, p.moduleId, !!p.canView, !!p.canEdit
+        );
+      }
+    }
 
+    // 4. Sync Role to Supabase Auth Metadata if it changed to admin
+    if (role === 'admin') {
+       try {
+         const { data: { users: sbUsers } } = await supabaseAdmin.auth.admin.listUsers();
+         const authEmail = `${user.code || user.username}@mapaterritorio.com`;
+         const sbUser = sbUsers.find(u => u.email === authEmail);
+         if (sbUser) {
+           await supabaseAdmin.auth.admin.updateUserById(sbUser.id, {
+             user_metadata: { ...sbUser.user_metadata, role: 'admin' }
+           });
+         }
+       } catch (authErr) {
+         console.error('[AUTH] Erro ao sincronizar role no Supabase:', authErr);
+       }
+    }
+
+    console.log(`[ADMIN] Usuário ${user.username} (ID: ${id}) atualizado com sucesso.`);
     await logUserActivity(req.user.id, 'update_user', `Atualizou usuário ${user.username}`, req, 'User', String(id));
     res.json(user);
   } catch (error: any) {
@@ -461,9 +489,12 @@ router.get('/territories', requirePermission('territories', 'view'), async (req,
   const user = (req as any).user;
   const where: any = {};
   
-  // If not admin, restrict to only their own territories
+  // Restrição por hierarquia:
+  // - Admin: Vê tudo.
+  // - Supervisor/User: Vê apenas os seus próprios territórios e os de seus subordinados.
   if (user && user.role !== 'admin') {
-    where.userId = user.id;
+    const subordinateIds = user.subordinateIds || [];
+    where.userId = { in: [user.id, ...subordinateIds] };
   }
 
   try {
@@ -478,7 +509,8 @@ router.get('/territories', requirePermission('territories', 'view'), async (req,
         .order('municipio', { ascending: true });
     
     if (user && user.role !== 'admin') {
-        query = query.eq('userId', user.id);
+        const subordinateIds = user.subordinateIds || [];
+        query = query.in('userId', [user.id, ...subordinateIds]);
     }
 
     const { data, error: httpError } = await query;

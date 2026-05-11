@@ -9,69 +9,60 @@ datasource db {
 }
 
 model User {
-  id            Int      @id @default(autoincrement())
-  supabase_id   String?  @unique
-  username      String   @unique
-  password     String
-  role         String    @default("user") // admin, supervisor, user
-  tipo         String    @default("Usuário")
-  userTypeId    Int?
-  userType      UserType? @relation(fields: [userTypeId], references: [id])
-  full_name    String?
-  cpf_cnpj     String?
-  telefone     String?
-  cargo        String?
-  company_name String?
-  email        String?
-  cep          String?
-  logradouro   String?
-  numero       String?
-  complemento  String?
-  bairro_end   String?
-  cidade       String?
-  estado_end   String?
-  photo        String?
-  area_atuacao String?
-  base_logistica String?
-  code         String?   @unique
-  birth_date   DateTime?
-  groupId      Int?
-  group        Group?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  colorIndex   Int       @default(0)
-  comissao     Float?
-  isVago       Int       @default(0)
-  created_at   DateTime  @default(now())
-
-  // Hierarquia de Gerenciamento (Muitos-para-Muitos auto-relacionada)
-  managedUsers User[]    @relation("UserManagement")
-  managedBy    User[]    @relation("UserManagement")
-
-  // Configurações e Notificações
-  default_workspace String?  @default("admin")
-  inactivity_limit  Int?     @default(30) // minutos
-  notif_email       Boolean  @default(true)
-  notif_sms         Boolean  @default(false)
-  notif_push        Boolean  @default(true)
-  last_active       DateTime @default(now())
-  token_version     Int      @default(0)
-
-  // Relations
-  permissions       UserPermission[]
-  visitasLogistica  DistanciasLogistica[]
-  planejamentos     PlanejamentoVisitas[]
+  id                Int                   @id @default(autoincrement())
+  username          String                @unique
+  password          String
+  role              String                @default("user")
+  tipo              String                @default("Usuário")
+  full_name         String?
+  cpf_cnpj          String?
+  telefone          String?
+  cep               String?
+  logradouro        String?
+  numero            String?
+  complemento       String?
+  bairro_end        String?
+  cidade            String?
+  estado_end        String?
+  photo             String?
+  created_at        DateTime              @default(now())
+  default_workspace String?               @default("admin")
+  inactivity_limit  Int?                  @default(30)
+  notif_email       Boolean               @default(true)
+  notif_sms         Boolean               @default(false)
+  notif_push        Boolean               @default(true)
+  last_active       DateTime              @default(now())
+  token_version     Int                   @default(0)
+  birth_date        DateTime?
+  code              String?               @unique
+  colorIndex        Int                   @default(0)
+  comissao          Float?
+  isVago            Int                   @default(0)
+  cargo             String?
+  company_name      String?
+  groupId           Int?
+  area_atuacao      String?
+  base_logistica    String?
+  email             String?
+  supabase_id       String?               @unique
+  userTypeId        Int?
+  bairros           Bairro[]              @relation("UserBairros")
   blocosViagem      BlocosViagem[]
+  clientes          Cliente[]             @relation("UserClientes")
+  visitasLogistica  DistanciasLogistica[]
+  FeedComment       FeedComment[]
+  FeedPost          FeedPost[]
+  FeedReaction      FeedReaction[]
   historicosVisitas HistoricoVisitas[]
+  interests         InterestRequest[]     @relation("UserInterests")
+  planejamentos     PlanejamentoVisitas[]
+  territories       Territory[]           @relation("UserTerritories")
   activities        UserActivity[]
-
-  // Novas relações diretas
-  territories  Territory[] @relation("UserTerritories")
-  bairros      Bairro[]    @relation("UserBairros")
-  clientes     Cliente[]   @relation("UserClientes")
-  interests    InterestRequest[] @relation("UserInterests")
-
-  FeedPost     FeedPost[]
-  FeedComment  FeedComment[]
-  FeedReaction FeedReaction[]
+  permissions       UserPermission[]
+  group             Group?                @relation(fields: [groupId], references: [id])
+  userType          UserType?             @relation(fields: [userTypeId], references: [id])
+  managedUsers      User[]                @relation("UserManagement")
+  managedBy         User[]                @relation("UserManagement")
 
   @@map("users")
 }
@@ -110,7 +101,7 @@ model Territory {
   uf        String?
   modo      String?
   userId    Int?
-  user      User?   @relation("UserTerritories", fields: [userId], references: [id], onDelete: SetNull)
+  user      User?   @relation("UserTerritories", fields: [userId], references: [id])
 
   @@map("territories")
 }
@@ -123,7 +114,7 @@ model Bairro {
   uf        String?
   modo      String?
   userId    Int?
-  user      User?   @relation("UserBairros", fields: [userId], references: [id], onDelete: SetNull)
+  user      User?   @relation("UserBairros", fields: [userId], references: [id])
 
   @@map("bairros")
 }
@@ -139,9 +130,9 @@ model InterestRequest {
   modo        String?
   observacoes String?
   status      String   @default("pending")
-  userId      Int?
-  user        User?    @relation("UserInterests", fields: [userId], references: [id], onDelete: SetNull)
   created_at  DateTime @default(now())
+  userId      Int?
+  user        User?    @relation("UserInterests", fields: [userId], references: [id])
 
   @@map("interest_requests")
 }
@@ -161,8 +152,8 @@ model UserActivity {
 }
 
 model Cliente {
-  id_cliente        Int                    @id @default(autoincrement())
-  codigo_cliente    String?                @unique
+  id_cliente        Int                   @id @default(autoincrement())
+  codigo_cliente    String?               @unique
   nome_cliente      String
   nome_abreviado    String?
   regiao            String?
@@ -171,17 +162,17 @@ model Cliente {
   bairro            String?
   cep               String?
   endereco_completo String?
-  numero            String?
   cnpj              String?
   latitude          Float?
   longitude         Float?
-  status_ativo      Boolean                @default(true)
-  data_cadastro     DateTime               @default(now())
-  data_atualizacao  DateTime               @updatedAt
+  status_ativo      Boolean               @default(true)
+  data_cadastro     DateTime              @default(now())
+  data_atualizacao  DateTime              @updatedAt
   semana            String?
   prioridade        String?
+  numero            String?
   userId            Int?
-  user              User?                  @relation("UserClientes", fields: [userId], references: [id], onDelete: SetNull)
+  user              User?                 @relation("UserClientes", fields: [userId], references: [id])
   distancias        DistanciasLogistica[]
   historicos        HistoricoVisitas[]
   planejamentos     PlanejamentoVisitas[]
@@ -279,10 +270,10 @@ model FeedPost {
   userId    Int
   content   String
   image     String?
-  sticker   String? // URL of the sticker if provided
+  sticker   String?
   createdAt DateTime       @default(now())
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   comments  FeedComment[]
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   reactions FeedReaction[]
 
   @@map("feed_posts")
@@ -316,27 +307,27 @@ model FeedReaction {
 model Notification {
   id            Int      @id @default(autoincrement())
   title         String
-  message       String   @db.Text
+  message       String
+  createdAt     DateTime @default(now())
   targetAll     Boolean  @default(true)
   targetUserIds Json?
   senderName    String?  @default("Sistema")
-  createdAt     DateTime @default(now())
 
-  @@map(name: "notifications")
+  @@map("notifications")
 }
 
 model UserType {
   id              Int      @id @default(autoincrement())
   name            String   @unique
   color           String   @default("#3b82f6")
-  icon            String   @default("User")
   showInMenu      Boolean  @default(false)
-  active          Boolean  @default(true)
-  isAdmin         Boolean  @default(false)
-  isSystemDefault Boolean  @default(false)
   createdAt       DateTime @default(now())
+  active          Boolean  @default(true)
+  isSystemDefault Boolean  @default(false)
   updatedAt       DateTime @default(now()) @updatedAt
+  isAdmin         Boolean  @default(false)
+  icon            String   @default("User")
   users           User[]
 
-  @@map(name: "user_types")
+  @@map("user_types")
 }

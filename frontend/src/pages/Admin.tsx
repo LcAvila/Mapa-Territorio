@@ -356,6 +356,12 @@ export default function Admin() {
     return p?.canView || false;
   };
 
+  const canEdit = (moduleId: string) => {
+    if (role === 'admin') return true;
+    const p = myPermissions.find(p => p.moduleId === moduleId);
+    return p?.canEdit || false;
+  };
+
   // ── Dashboard filters ─────────────────────────────────────────────────────
   const [dashFilterUser, setDashFilterUser] = useState('');
   const [dashFilterUF, setDashFilterUF] = useState('');
@@ -873,7 +879,7 @@ export default function Admin() {
     // Mapeia tipo de cadastro → role do sistema
     const selectedType = userTypes.find(t => String(t.id) === newUser.userTypeId);
 
-    const body: Record<string, string | number | null | boolean> = {
+    const body: Record<string, any> = {
       code: newUser.code,
       full_name: newUser.fullName,
       username: newUser.email || newUser.code,
@@ -1185,7 +1191,7 @@ export default function Admin() {
     { id: 'notifications' as const, label: 'Enviar Alerta', icon: Bell, count: unreadCount, badge: unreadCount > 0, restrict: ['admin'] },
     {
       id: 'settings' as const, label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
-        { id: 'system' as const, label: 'Sistema', icon: Settings },
+        { id: 'system' as const, label: 'Editar sistema', icon: Settings },
         { id: 'audit' as const, label: 'Auditoria', icon: ScrollText, count: auditLogs.length },
       ]
     }
@@ -1203,13 +1209,23 @@ export default function Admin() {
       'notifications': 'notifications',
       'audit': 'audit',
       'users': 'users',
-      'system': 'settings'
+      'system': 'settings',
+      'settings': 'settings'
     };
 
     const moduleId = moduleMap[item.id as string];
     
     // If user has explicit modular permission, grant access regardless of role restriction
     if (moduleId && canAccess(moduleId)) return true;
+
+    // Se for subitem, também checar permissão modular do subitem
+    if (item.subItems) {
+        const hasAccessibleSubItem = item.subItems.some(sub => {
+            const subModuleId = moduleMap[sub.id as string];
+            return subModuleId && canAccess(subModuleId);
+        });
+        if (hasAccessibleSubItem) return true;
+    }
 
     // Otherwise, check role-based restriction
     if (item.restrict && !item.restrict.includes(role || '')) return false;
@@ -1994,7 +2010,8 @@ export default function Admin() {
                     const lastActive = hasEverLoggedIn ? lastDate : null;
 
                     const userType = userTypes.find(t => t.id === Number(u.userTypeId));
-                    const isAdminType = userType?.isAdmin || u.role === 'admin';
+                    const hasSettingsPerm = u.permissions?.some(p => p.moduleId === 'settings' && p.canEdit);
+                    const isAdminType = userType?.isAdmin || u.role === 'admin' || hasSettingsPerm;
                     
                     // Prioridade de cor:
                     // 1. Se for Admin (tipo ou role), usa amarelo
@@ -2059,11 +2076,11 @@ export default function Admin() {
                                 companyName: u.company_name || u.companyName || '',
                                 groupId: String(u.groupId || ''),
                                 userTypeId: String(u.userTypeId || ''),
-                                managedUserIds: (u as any).managedUsers?.map((m: any) => m.id) || []
+                                managedUserIds: u.managedUsers?.map(m => m.id) || []
                               });
                               setIsUserModalOpen(true);
                             }}><Pencil className="w-4 h-4" /></Button>
-                            {role === 'admin' && u.id !== userId && (
+                            {(role === 'admin' || canEdit('settings')) && u.id !== userId && (
                               <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-orange-500/10 hover:text-orange-500" title="Derrubar Sessão" onClick={() => handleKickUser(u)}><LogOut className="w-4 h-4" /></Button>
                             )}
                             <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteUser(u.id, u.username)}><Trash2 className="w-4 h-4" /></Button>
@@ -2079,7 +2096,7 @@ export default function Admin() {
           )}
 
           {/* ━━ SISTEMA (Personalização e Tipos de Usuário) ━━ */}
-          {activeTab === 'system' && (
+          {activeTab === 'system' && (canEdit('settings') || role === 'admin') && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
               {/* Seção de Personalização */}
               <div className="space-y-4">
@@ -2139,77 +2156,79 @@ export default function Admin() {
               </div>
 
               {/* Seção de Tipos de Usuário */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-border/40 pb-2">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-5 h-5 text-primary" />
-                    <h2 className="text-lg font-bold">Tipos de Usuário</h2>
+              {(role === 'admin' || canEdit('settings')) && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-primary" />
+                      <h2 className="text-lg font-bold">Tipos de Usuário</h2>
+                    </div>
+                    <Button size="sm" className="gap-2" onClick={() => {
+                      setEditingUserTypeId(null);
+                      setUserTypeForm({ name: '', color: '#3b82f6', icon: 'User', showInMenu: false, active: true, isAdmin: false });
+                      setIsUserTypeModalOpen(true);
+                    }}>
+                      <Plus className="w-3.5 h-3.5" /> Novo Tipo
+                    </Button>
                   </div>
-                  <Button size="sm" className="gap-2" onClick={() => {
-                    setEditingUserTypeId(null);
-                    setUserTypeForm({ name: '', color: '#3b82f6', icon: 'User', showInMenu: false, active: true, isAdmin: false });
-                    setIsUserTypeModalOpen(true);
-                  }}>
-                    <Plus className="w-3.5 h-3.5" /> Novo Tipo
-                  </Button>
-                </div>
 
-                {userTypes.length === 0 ? (
-                  <div className="py-12 flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed border-border/40 rounded-xl">
-                    <ShieldCheck className="w-10 h-10 opacity-10 mb-2" />
-                    <p className="text-sm font-medium">Nenhum tipo cadastrado</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {userTypes.map(type => {
-                      const TypeIcon = ICON_LIST[type.icon as keyof typeof ICON_LIST] || User;
-                      const isAdminType = type.isAdmin || type.name.toLowerCase() === 'admin';
-                      const isDefaultUser = !isAdminType && type.name.toLowerCase() === 'usuário';
-                      const cardColor = isAdminType ? '#fbbf24' : (isDefaultUser ? '#3b82f6' : type.color);
+                  {userTypes.length === 0 ? (
+                    <div className="py-12 flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed border-border/40 rounded-xl">
+                      <ShieldCheck className="w-10 h-10 opacity-10 mb-2" />
+                      <p className="text-sm font-medium">Nenhum tipo cadastrado</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {userTypes.map(type => {
+                        const TypeIcon = ICON_LIST[type.icon as keyof typeof ICON_LIST] || User;
+                        const isAdminType = type.isAdmin || type.name.toLowerCase() === 'admin';
+                        const isDefaultUser = !isAdminType && type.name.toLowerCase() === 'usuário';
+                        const cardColor = isAdminType ? '#fbbf24' : (isDefaultUser ? '#3b82f6' : type.color);
 
-                      return (
-                        <Card key={type.id} className={`group relative overflow-hidden border-border/40 hover:border-primary/50 transition-all duration-300 ${!type.active ? 'opacity-60 grayscale-[0.5]' : ''}`}>
-                          <div className="h-1 w-full absolute top-0 left-0" style={{ backgroundColor: cardColor }} />
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white shadow-sm" style={{ backgroundColor: cardColor }}>
-                                <TypeIcon className="w-4 h-4" />
+                        return (
+                          <Card key={type.id} className={`group relative overflow-hidden border-border/40 hover:border-primary/50 transition-all duration-300 ${!type.active ? 'opacity-60 grayscale-[0.5]' : ''}`}>
+                            <div className="h-1 w-full absolute top-0 left-0" style={{ backgroundColor: cardColor }} />
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white shadow-sm" style={{ backgroundColor: cardColor }}>
+                                  <TypeIcon className="w-4 h-4" />
+                                </div>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                                    setEditingUserTypeId(type.id);
+                                    setUserTypeForm({ name: type.name, color: type.color, icon: type.icon || 'User', showInMenu: type.showInMenu, active: type.active, isAdmin: type.isAdmin });
+                                    setIsUserTypeModalOpen(true);
+                                  }}><Pencil className="w-3.5 h-3.5" /></Button>
+                                  {!type.isSystemDefault && (
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteUserType(type.id, type.name)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                                  )}
+                                </div>
                               </div>
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
-                                  setEditingUserTypeId(type.id);
-                                  setUserTypeForm({ name: type.name, color: type.color, icon: type.icon || 'User', showInMenu: type.showInMenu, active: type.active, isAdmin: type.isAdmin });
-                                  setIsUserTypeModalOpen(true);
-                                }}><Pencil className="w-3.5 h-3.5" /></Button>
-                                {!type.isSystemDefault && (
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteUserType(type.id, type.name)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                              <h3 className="font-bold text-sm mb-1 flex items-center gap-2">
+                                {type.name}
+                                {isAdminType && <ShieldCheck className="w-3 h-3 text-amber-500" />}
+                              </h3>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground font-bold uppercase">
+                                  {users.filter(u => u.userTypeId === type.id).length} Usuários
+                                </span>
+                                {type.showInMenu && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-bold uppercase flex items-center gap-1">
+                                    <Eye className="w-2.5 h-2.5" /> Sidebar
+                                  </span>
+                                )}
+                                {!type.active && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive font-bold uppercase">Inativo</span>
                                 )}
                               </div>
-                            </div>
-                            <h3 className="font-bold text-sm mb-1 flex items-center gap-2">
-                              {type.name}
-                              {isAdminType && <ShieldCheck className="w-3 h-3 text-amber-500" />}
-                            </h3>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground font-bold uppercase">
-                                {users.filter(u => u.userTypeId === type.id).length} Usuários
-                              </span>
-                              {type.showInMenu && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-bold uppercase flex items-center gap-1">
-                                  <Eye className="w-2.5 h-2.5" /> Sidebar
-                                </span>
-                              )}
-                              {!type.active && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive font-bold uppercase">Inativo</span>
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Modal Novo/Editar Tipo */}
               <Dialog open={isUserTypeModalOpen} onOpenChange={setIsUserTypeModalOpen}>
@@ -2482,16 +2501,18 @@ export default function Admin() {
 
                     <div className="space-y-2">
                       <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Destinatários</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => { setNotifTargetAll(true); setNotifTargetUsers([]); }}
-                          className={`h-10 rounded-md border text-sm font-semibold transition-colors ${notifTargetAll
-                            ? 'bg-primary/15 text-primary border-primary/40'
-                            : 'bg-background text-muted-foreground border-border hover:text-foreground'}`}
-                        >
-                          Todos
-                        </button>
+                      <div className={`grid ${(role === 'admin' || canEdit('settings')) ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+                        {(role === 'admin' || canEdit('settings')) && (
+                          <button
+                            type="button"
+                            onClick={() => { setNotifTargetAll(true); setNotifTargetUsers([]); }}
+                            className={`h-10 rounded-md border text-sm font-semibold transition-colors ${notifTargetAll
+                              ? 'bg-primary/15 text-primary border-primary/40'
+                              : 'bg-background text-muted-foreground border-border hover:text-foreground'}`}
+                          >
+                            Todos
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => setNotifTargetAll(false)}
@@ -2515,6 +2536,16 @@ export default function Admin() {
                         <div className="rounded-md border border-border bg-background/40 max-h-52 overflow-y-auto custom-scrollbar divide-y divide-border/30">
                           {users
                             .filter(u => {
+                              // Se não for admin, filtrar por hierarquia OU categoria
+                              if (role !== 'admin' && !canEdit('settings')) {
+                                const currentUser = users.find(curr => curr.id === userId);
+                                const subordinateIds = currentUser?.managedUsers?.map((m: any) => m.id) || [];
+                                const isSubordinate = subordinateIds.includes(u.id);
+                                const isSameType = u.userTypeId === currentUser?.userTypeId && u.id !== userId;
+                                
+                                if (!isSubordinate && !isSameType) return false;
+                              }
+
                               const q = notifUserSearch.trim().toLowerCase();
                               if (!q) return true;
                               const name = (u.full_name || u.fullName || '').toLowerCase();
@@ -2729,7 +2760,7 @@ export default function Admin() {
           )}
 
           {/* ━━ PERSONALIZAÇÃO ━━ */}
-          {activeTab === 'personal' && (
+          {activeTab === 'personal' && canAccess('settings') && (
             <div className="max-w-3xl space-y-6">
               <Card className="border-border/40">
                 <CardHeader className="pb-4">
@@ -2796,7 +2827,7 @@ export default function Admin() {
           {activeTab === 'baserotas' && (
             <BaseClientePanel 
               onSwitchToReps={() => setActiveTab('reps')} 
-              canCreate={role === 'admin' || (myPermissions.find(p => p.moduleId === 'baserotas')?.canEdit || false)}
+              canCreate={role === 'admin' || canEdit('settings') || (myPermissions.find(p => p.moduleId === 'clientes')?.canEdit || false)}
             />
           )}
 

@@ -72,9 +72,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            console.log(`[AUTH] Event: ${event}`);
             setSession(session);
-            if (session && session.access_token !== localStorage.getItem('token')) {
+
+            if (event === 'SIGNED_OUT') {
+                console.warn('[AUTH] Session signed out or refresh failed. Clearing local data.');
+                clearLocalAuth();
+            } else if (session && session.access_token !== localStorage.getItem('token')) {
                 setToken(session.access_token);
                 localStorage.setItem('token', session.access_token);
                 // Garante que lastActivityTime esteja definido antes que o efeito de

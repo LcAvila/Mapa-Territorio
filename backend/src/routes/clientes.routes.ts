@@ -29,21 +29,20 @@ router.get('/', async (req, res) => {
     const where: any = {};
     
     // Cada um no seu quadrado: 
-    // - Admin vê tudo.
-    // - Supervisor vê tudo (ou podemos restringir ao grupo dele se houver essa lógica).
+    // - Admin vê tudo (a menos que gerencie usuários específicos).
     // - Usuários comuns (Representantes) só vêem os seus próprios clientes e os de seus subordinados.
     const user = (req as any).user;
-    if (user && user.role === 'user') {
-      const subordinateIds = user.subordinateIds || [];
-      if (subordinateIds.length > 0) {
-        where.userId = { in: [user.id, ...subordinateIds] };
-      } else {
-        where.userId = user.id;
+    const hasSettingsPerm = user.permissions?.some((p: any) => p.module?.id === 'settings' && p.canEdit);
+    const isAdmin = user.role === 'admin' || hasSettingsPerm;
+
+    if (isAdmin) {
+      // Se for admin/settings mas gerencia usuários específicos, filtra por eles
+      if (user.subordinateIds && user.subordinateIds.length > 0) {
+        where.userId = { in: [user.id, ...user.subordinateIds] };
       }
-    } else if (user && user.role === 'supervisor') {
-      // Por enquanto supervisor vê tudo, mas se quiser restringir:
-      // where.userId = user.id; // Descomente para restringir supervisor também
-    } else if (user && user.role === 'admin') {
+      // Se não gerencia ninguém, where continua {} (vê tudo)
+
+      // Override se houver query param userId explícito
       if (userId) {
         const ids = String(userId).split(',').map(id => Number(id.trim())).filter(id => !isNaN(id));
         if (ids.length > 1) {
@@ -52,6 +51,9 @@ router.get('/', async (req, res) => {
           where.userId = ids[0];
         }
       }
+    } else if (user && (user.role === 'user' || user.role === 'supervisor')) {
+      const subordinateIds = user.subordinateIds || [];
+      where.userId = { in: [user.id, ...subordinateIds] };
     }
 
     const clientes = await prisma.cliente.findMany({
@@ -68,21 +70,28 @@ router.get('/', async (req, res) => {
       }
     });
 
+    console.log(`[CLIENTES] Encontrados ${clientes.length} clientes para o filtro:`, JSON.stringify(where));
+
     // Anotando no caderninho quem andou bisbilhotando os clientes
     if (user) await logUserActivity(user.id, 'query', 'Usuário consultou a base de clientes', req, 'Cliente');
 
     res.json(clientes);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Deu ruim ao buscar clientes, mó zebra:', error);
-    res.status(500).json({ message: 'Erro ao buscar clientes no banco de dados' });
+    res.status(500).json({ 
+      message: 'Erro ao buscar clientes no banco de dados',
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
 // ---------------------------------------------------------
 // POST /api/clientes - Bota mais um cliente no jogo
 // ---------------------------------------------------------
-router.post('/', requirePermission('baserotas', 'edit'), async (req, res) => {
+router.post('/', requirePermission('clientes', 'edit'), async (req, res) => {
   try {
+    const user = (req as any).user;
     let { 
       codigo_cliente, 
       nome_cliente, 
@@ -96,8 +105,26 @@ router.post('/', requirePermission('baserotas', 'edit'), async (req, res) => {
       endereco_completo,
       numero,
       latitude,
-      longitude
+      longitude,
+      userId
     } = req.body;
+
+    // --- Validação de Hierarquia para Cadastro ---
+    // Se não for admin, ele só pode cadastrar clientes para SI MESMO ou para seus SUBORDINADOS.
+    if (user && user.role !== 'admin') {
+      const targetUserId = userId ? Number(userId) : user.id;
+      const subordinateIds = user.subordinateIds || [];
+      const allowedIds = [user.id, ...subordinateIds];
+
+      if (!allowedIds.includes(targetUserId)) {
+        console.warn(`[CLIENTES] Usuário ${user.id} tentou cadastrar cliente para usuário não autorizado: ${targetUserId}`);
+        return res.status(403).json({ 
+          message: 'Você só pode cadastrar clientes para você mesmo ou para sua equipe gerenciada.' 
+        });
+      }
+      // Garante que o userId final seja o validado
+      userId = targetUserId;
+    }
 
     // Se o usuário não mandou a latitude ou longitude, a gente tenta achar no Google/Nominatim.
     if ((!latitude || !longitude) && (endereco_completo || (cidade && uf))) {
@@ -161,14 +188,34 @@ router.post('/', requirePermission('baserotas', 'edit'), async (req, res) => {
 // ---------------------------------------------------------
 // PUT /api/clientes/:id - Atualiza os dados do cliente
 // ---------------------------------------------------------
-router.put('/:id', requirePermission('baserotas', 'edit'), async (req, res) => {
+router.put('/:id', requirePermission('clientes', 'edit'), async (req, res) => {
   try {
+    const user = (req as any).user;
     const id = parseInt(req.params.id as string);
     let { 
       codigo_cliente, nome_cliente, nome_abreviado, cnpj, regiao, uf, cidade, bairro, cep, 
       endereco_completo, numero, latitude, longitude, userId, 
       semana, prioridade, status_ativo 
     } = req.body;
+
+    const existingClient = await prisma.cliente.findUnique({ where: { id_cliente: id } });
+    if (!existingClient) return res.status(404).json({ message: 'Cliente não encontrado.' });
+
+    // --- Validação de Hierarquia para Edição ---
+    if (user && user.role !== 'admin') {
+      const subordinateIds = user.subordinateIds || [];
+      const allowedIds = [user.id, ...subordinateIds];
+
+      // 1. Validar se o cliente atual pertence a alguém da equipe
+      if (existingClient.userId && !allowedIds.includes(existingClient.userId)) {
+        return res.status(403).json({ message: 'Você não tem permissão para editar este cliente.' });
+      }
+
+      // 2. Se estiver tentando transferir o cliente para outro usuário, validar o novo dono
+      if (userId && !allowedIds.includes(Number(userId))) {
+        return res.status(403).json({ message: 'Você só pode atribuir clientes para você mesmo ou sua equipe.' });
+      }
+    }
 
     // Se mudar o endereço, a gente recalcula o lugar pra não ficar com o pino no lugar errado.
     if (endereco_completo || numero || cidade || uf || bairro) {
@@ -215,9 +262,24 @@ router.put('/:id', requirePermission('baserotas', 'edit'), async (req, res) => {
 // ---------------------------------------------------------
 // DELETE /api/clientes/:id - Manda o cliente pra conta do Papa
 // ---------------------------------------------------------
-router.delete('/:id', requirePermission('baserotas', 'edit'), async (req, res) => {
+router.delete('/:id', requirePermission('clientes', 'edit'), async (req, res) => {
   try {
+    const user = (req as any).user;
     const id = parseInt(req.params.id as string);
+
+    const existingClient = await prisma.cliente.findUnique({ where: { id_cliente: id } });
+    if (!existingClient) return res.status(404).json({ message: 'Cliente não encontrado.' });
+
+    // --- Validação de Hierarquia para Exclusão ---
+    if (user && user.role !== 'admin') {
+      const subordinateIds = user.subordinateIds || [];
+      const allowedIds = [user.id, ...subordinateIds];
+
+      if (existingClient.userId && !allowedIds.includes(existingClient.userId)) {
+        return res.status(403).json({ message: 'Você não tem permissão para remover este cliente.' });
+      }
+    }
+
     await prisma.cliente.delete({ where: { id_cliente: id } });
     res.json({ message: 'Cliente removido! Sumiu do mapa.' });
   } catch (error) {

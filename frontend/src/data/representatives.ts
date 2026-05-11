@@ -42,6 +42,9 @@ export interface SystemUser {
   created_at?: string;
   createdAt?: string;
   last_active?: string;
+  managedUsers?: { id: number; username: string; [key: string]: any }[];
+  managedUserIds?: number[];
+  permissions?: { moduleId: string; canView: boolean; canEdit: boolean; module?: { id: string; name: string } }[];
 }
 
 // These are populated at runtime by the API (see BrazilMap.tsx, Admin.tsx)

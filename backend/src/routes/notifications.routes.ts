@@ -39,7 +39,7 @@ router.get('/', authenticate, requirePermission('notifications', 'view'), async 
   }
 });
 
-// Send new notification (Admin only)
+// Send new notification (Admin/Supervisor)
 router.post('/', authenticate, requirePermission('notifications', 'edit'), async (req: AuthRequest, res) => {
   const { title, message, targetAll = true, targetUserIds = [] } = req.body;
   const senderName = req.user?.full_name || req.user?.fullName || req.user?.username || 'Administrador';
@@ -49,26 +49,55 @@ router.post('/', authenticate, requirePermission('notifications', 'edit'), async
   if (!title || !message) {
     return res.status(400).json({ message: 'Título e mensagem são obrigatórios' });
   }
-  if (!targetAll && (!Array.isArray(targetUserIds) || targetUserIds.length === 0)) {
-    return res.status(400).json({ message: 'Selecione ao menos um usuário destinatário' });
-  }
 
   try {
-    const normalizedTargetUserIds = Array.isArray(targetUserIds)
-      ? targetUserIds
-          .map((id) => Number(id))
-          .filter((id) => Number.isInteger(id) && id > 0)
-      : [];
-    
-    if (!targetAll && normalizedTargetUserIds.length === 0) {
+    const user = req.user;
+    let finalTargetUserIds: number[] = [];
+
+    // --- Lógica de Restrição por Hierarquia e Tipo ---
+    if (user.role !== 'admin') {
+      // Se não for admin, ele NÃO pode enviar para "Todos" (targetAll: true)
+      if (targetAll) {
+        return res.status(403).json({ message: 'Você não tem permissão para enviar notificações globais. Selecione destinatários específicos.' });
+      }
+
+      // Buscar IDs de quem ele gerencia
+      const subordinateIds: number[] = user.subordinateIds || [];
+      
+      // Buscar IDs de quem tem o mesmo tipo de usuário (categoria)
+      const sameTypeUsers: any[] = await prisma.$queryRawUnsafe(
+        'SELECT id FROM "users" WHERE "userTypeId" = $1 AND "id" != $2',
+        user.userTypeId, user.id
+      );
+      const sameTypeIds = sameTypeUsers.map(u => Number(u.id));
+
+      const allowedTargetIds = new Set([...subordinateIds, ...sameTypeIds]);
+
+      // Validar se os destinatários solicitados estão dentro do permitido
+      const requestedIds = Array.isArray(targetUserIds) ? targetUserIds.map(id => Number(id)) : [];
+      const invalidIds = requestedIds.filter(id => !allowedTargetIds.has(id));
+
+      if (invalidIds.length > 0) {
+        return res.status(403).json({ 
+          message: 'Você só pode enviar alertas para seus subordinados ou usuários do mesmo tipo (categoria).',
+          invalidIds 
+        });
+      }
+
+      finalTargetUserIds = requestedIds;
+    } else {
+      // Admin pode tudo
+      finalTargetUserIds = Array.isArray(targetUserIds) ? targetUserIds.map(id => Number(id)) : [];
+    }
+
+    if (!targetAll && finalTargetUserIds.length === 0) {
       return res.status(400).json({ message: 'Selecione ao menos um usuário destinatário válido' });
     }
 
-    const targetUserIdsJson = JSON.stringify(targetAll ? [] : normalizedTargetUserIds);
+    const targetUserIdsJson = JSON.stringify(targetAll ? [] : finalTargetUserIds);
 
     console.log('[NOTIFICATIONS] Executing Raw SQL insert...');
     
-    // Usando executeRawUnsafe para ter controle total sobre o casting e nomes de colunas
     await prisma.$executeRawUnsafe(
       `INSERT INTO "notifications" ("title", "message", "targetAll", "targetUserIds", "senderName", "createdAt")
        VALUES ($1, $2, $3, $4::jsonb, $5, NOW())`,
