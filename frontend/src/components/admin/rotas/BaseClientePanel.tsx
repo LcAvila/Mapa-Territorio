@@ -50,12 +50,14 @@ interface Cliente {
   status_ativo: boolean;
 }
 
-export function BaseClientePanel({ onSwitchToReps, canCreate = false }: { onSwitchToReps?: () => void, canCreate?: boolean }) {
+export function BaseClientePanel({ onSwitchToReps, canCreate = false, isMobileFilterOpen = false }: { onSwitchToReps?: () => void, canCreate?: boolean, isMobileFilterOpen?: boolean }) {
   const { role: currentUserRole, userId: currentUserId } = useAuth();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<Cliente | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [editingClientId, setEditingClientId] = useState<number | null>(null);
 
@@ -353,20 +355,20 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false }: { onSwit
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Base Cliente</h2>
           <p className="text-sm text-muted-foreground">Gerencie sua carteira de clientes, pesquise pela base e cadastre manualmente.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex w-full sm:w-auto gap-2">
           {canCreate && (
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+                <Button className="flex-1 sm:flex-none gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
                   <Plus className="w-4 h-4" /> Cadastrar Cliente
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar p-4 sm:p-6">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-xl">
                     {editingClientId ? <Pencil className="w-5 h-5 text-primary" /> : <Database className="w-5 h-5 text-primary" />}
@@ -377,7 +379,7 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false }: { onSwit
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSaveClient} className="space-y-4 mt-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="codigo_cliente">Código do Cliente (Matriz)</Label>
                       <Input id="codigo_cliente" name="codigo_cliente" value={formData.codigo_cliente} onChange={handleInputChange} placeholder="Ex: CLI-1020" />
@@ -394,7 +396,7 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false }: { onSwit
                       <Label htmlFor="cnpj">CNPJ</Label>
                       <Input id="cnpj" name="cnpj" value={formData.cnpj} onChange={handleInputChange} placeholder="00.000.000/0000-00" />
                     </div>
-                    <div className="col-span-2 mt-2 border-t pt-4">
+                    <div className="sm:col-span-2 mt-2 border-t pt-4">
                       <div className="flex items-center gap-2 mb-4 text-sm font-medium text-muted-foreground">
                         <MapPin className="w-4 h-4" /> Dados de Localização e Endereço
                       </div>
@@ -443,7 +445,7 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false }: { onSwit
                       <Input id="regiao" name="regiao" value={formData.regiao} onChange={handleInputChange} placeholder="Ex: SUL, NORTE" />
                     </div>
 
-                    <div className="col-span-2 space-y-3">
+                    <div className="sm:col-span-2 space-y-3">
                       <div className="flex items-center justify-between">
                         <Label className="text-sm font-semibold flex items-center gap-2">
                           <MapPin className="w-4 h-4 text-primary" /> Visualização no Mapa (Mó Precisão)
@@ -471,7 +473,7 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false }: { onSwit
                       </p>
                     </div>
 
-                    <div className="col-span-2 mt-2 border-t pt-4">
+                    <div className="sm:col-span-2 mt-2 border-t pt-4">
                       <div className="flex items-center gap-2 mb-4 text-sm font-medium text-muted-foreground">
                         <Briefcase className="w-4 h-4" /> Vínculo
                       </div>
@@ -491,13 +493,11 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false }: { onSwit
 
 
                   </div>
-                  <div className="flex justify-end pt-4 mt-6 border-t">
-                    <div className="flex gap-2">
-                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                      <Button type="submit" disabled={submitting}>
-                        {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : 'Salvar Cadastro'}
-                      </Button>
-                    </div>
+                  <div className="flex justify-end pt-4 mt-6 border-t gap-2">
+                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+                    <Button type="submit" disabled={submitting}>
+                      {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : 'Salvar Cadastro'}
+                    </Button>
                   </div>
                 </form>
               </DialogContent>
@@ -506,13 +506,13 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false }: { onSwit
         </div>
       </div>
       
-      <Card className="border-border/40 shadow-sm">
-        <CardHeader className="pb-3 border-b border-border/40 bg-card/50 space-y-3">
+      <Card className="border-border/40 shadow-sm overflow-hidden">
+        <CardHeader className={`pb-3 border-b border-border/40 bg-card/50 space-y-3 ${!isMobileFilterOpen ? 'hidden lg:block' : 'block animate-in slide-in-from-top-4 duration-300'}`}>
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium">Lista de Clientes ({filteredClientes.length} / {clientes.length})</CardTitle>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
+          <div className="flex flex-col gap-3">
+            <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
                 placeholder="Buscar por nome, código ou CNPJ..." 
@@ -521,46 +521,50 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false }: { onSwit
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
               <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              {(['Todos', 'Ativos', 'Inativos'] as const).map(f => (
-                <Button
-                  key={f}
-                  variant={filterStatus === f ? 'default' : 'outline'}
-                  size="sm"
-                  className="h-9 text-xs font-semibold"
-                  onClick={() => setFilterStatus(f)}
-                >
-                  {f}
-                </Button>
-              ))}
-              <select
-                value={filterUF}
-                onChange={e => setFilterUF(e.target.value)}
-                className="h-9 px-3 rounded-md text-xs border border-input bg-background/50 text-foreground"
-              >
-                <option value="">Todos UF</option>
-                {[...new Set(clientes.map(c => c.uf).filter(Boolean))].sort().map(uf => (
-                  <option key={uf} value={uf!}>{uf}</option>
+              <div className="flex items-center gap-2">
+                {(['Todos', 'Ativos', 'Inativos'] as const).map(f => (
+                  <Button
+                    key={f}
+                    variant={filterStatus === f ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-8 px-3 text-[10px] font-bold uppercase tracking-wider shrink-0"
+                    onClick={() => setFilterStatus(f)}
+                  >
+                    {f}
+                  </Button>
                 ))}
-              </select>
-              {currentUserRole === 'admin' && (
+              </div>
+              <div className="flex items-center gap-2">
                 <select
-                  value={filterUser}
-                  onChange={e => setFilterUser(e.target.value)}
-                  className="h-9 px-3 rounded-md text-xs border border-input bg-background/50 text-foreground max-w-[150px]"
+                  value={filterUF}
+                  onChange={e => setFilterUF(e.target.value)}
+                  className="h-8 px-2 rounded-md text-[10px] font-bold border border-input bg-background/50 text-foreground shrink-0 outline-none"
                 >
-                  <option value="">Todos Usuários</option>
-                  {systemUsers.map(u => (
-                    <option key={u.id} value={u.id.toString()}>{u.full_name || u.username}</option>
+                  <option value="">UF</option>
+                  {[...new Set(clientes.map(c => c.uf).filter(Boolean))].sort().map(uf => (
+                    <option key={uf} value={uf!}>{uf}</option>
                   ))}
                 </select>
-              )}
-              {(searchTerm || filterStatus !== 'Todos' || filterUF || filterUser) && (
-                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => { setSearchTerm(''); setFilterStatus('Todos'); setFilterUF(''); setFilterUser(''); }}>
-                  <X className="w-4 h-4" />
-                </Button>
-              )}
+                {currentUserRole === 'admin' && (
+                  <select
+                    value={filterUser}
+                    onChange={e => setFilterUser(e.target.value)}
+                    className="h-8 px-2 rounded-md text-[10px] font-bold border border-input bg-background/50 text-foreground max-w-[120px] shrink-0 outline-none"
+                  >
+                    <option value="">USUÁRIO</option>
+                    {systemUsers.map(u => (
+                      <option key={u.id} value={u.id.toString()}>{u.username}</option>
+                    ))}
+                  </select>
+                )}
+                {(searchTerm || filterStatus !== 'Todos' || filterUF || filterUser) && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => { setSearchTerm(''); setFilterStatus('Todos'); setFilterUF(''); setFilterUser(''); }}>
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -578,83 +582,210 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false }: { onSwit
             </div>
           ) : (
             <div className="overflow-auto max-h-[calc(100vh-280px)] custom-scrollbar">
-              <Table>
-                <TableHeader className="bg-muted/50 sticky top-0 z-10 font-semibold backdrop-blur-sm">
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="whitespace-nowrap h-10 w-[100px]">Cod.</TableHead>
-                    <TableHead className="whitespace-nowrap h-10 min-w-[250px]">Razão Social / Fantasia</TableHead>
-                    <TableHead className="whitespace-nowrap h-10">CNPJ</TableHead>
-                    <TableHead className="whitespace-nowrap h-10">Cidade / UF</TableHead>
-                    {currentUserRole === 'admin' && <TableHead className="whitespace-nowrap h-10">Usuário Responsável</TableHead>}
-                    <TableHead className="whitespace-nowrap h-10 text-center">Status</TableHead>
-                    <TableHead className="whitespace-nowrap h-10 text-right pr-4">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredClientes.slice(0, 100).map((row, idx) => (
-                    <TableRow key={row.id_cliente || idx} className="hover:bg-secondary/20 transition-colors">
-                        <TableCell className="font-medium text-xs py-2">{row.codigo_cliente || '-'}</TableCell>
-                        <TableCell className="py-2">
-                           <div className="flex flex-col">
-                             <span className="font-semibold text-sm text-foreground/90">{row.nome_cliente}</span>
-                             {row.nome_abreviado && <span className="text-xs text-muted-foreground">{row.nome_abreviado}</span>}
-                           </div>
-                        </TableCell>
-                        <TableCell className="text-xs py-2 whitespace-nowrap">{row.cnpj || '-'}</TableCell>
-                        <TableCell className="text-xs py-2">
-                          <div className="flex flex-col">
-                             <span className="text-foreground/80">{row.cidade || '-'}</span>
-                             <span className="text-muted-foreground">{row.uf}</span>
-                          </div>
-                        </TableCell>
-                        {currentUserRole === 'admin' && (
-                          <TableCell className="text-xs py-2">
-                            <span className="font-semibold">{row.user?.full_name || row.user?.username || 'Não vinculado'}</span>
-                          </TableCell>
-                        )}
-                        <TableCell className="text-xs py-2 text-center">
-                           {row.status_ativo ? (
-                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                               Ativo
-                             </span>
-                           ) : (
-                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-destructive/10 text-destructive border border-destructive/20">
-                               Inativo
-                             </span>
-                           )}
-                        </TableCell>
-                        <TableCell className="text-xs py-2 text-right pr-4">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary/80">
-                                <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleEditClient(row)} className="gap-2 cursor-pointer font-medium text-xs">
-                                <Pencil className="w-3.5 h-3.5" /> Editar Cliente
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleDeleteClient(row.id_cliente, row.nome_cliente)} className="gap-2 cursor-pointer text-destructive focus:text-destructive font-medium text-xs">
-                                <Trash2 className="w-3.5 h-3.5" /> Apagar Cliente
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
+              {/* Desktop Table View */}
+              <div className="hidden lg:block">
+                <Table>
+                  <TableHeader className="bg-muted/50 sticky top-0 z-10 font-semibold backdrop-blur-sm">
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="whitespace-nowrap h-10 w-[100px]">Cod.</TableHead>
+                      <TableHead className="whitespace-nowrap h-10 min-w-[250px]">Razão Social / Fantasia</TableHead>
+                      <TableHead className="whitespace-nowrap h-10">CNPJ</TableHead>
+                      <TableHead className="whitespace-nowrap h-10">Cidade / UF</TableHead>
+                      {currentUserRole === 'admin' && <TableHead className="whitespace-nowrap h-10">Usuário Responsável</TableHead>}
+                      <TableHead className="whitespace-nowrap h-10 text-center">Status</TableHead>
+                      <TableHead className="whitespace-nowrap h-10 text-right pr-4">Ações</TableHead>
                     </TableRow>
-                  ))}
-                  {filteredClientes.length > 100 && (
-                     <TableRow>
-                       <TableCell colSpan={9} className="text-center py-4 text-xs text-muted-foreground bg-muted/20">
-                         Mostrando as 100 primeiras linhas de {filteredClientes.length} registros. Use a busca para filtrar.
-                       </TableCell>
-                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredClientes.slice(0, 100).map((row, idx) => (
+                      <TableRow key={row.id_cliente || idx} className="hover:bg-secondary/20 transition-colors">
+                          <TableCell className="font-medium text-xs py-2">{row.codigo_cliente || '-'}</TableCell>
+                          <TableCell className="py-2">
+                            <div className="flex flex-col">
+                              <span className="font-semibold text-sm text-foreground/90">{row.nome_cliente}</span>
+                              {row.nome_abreviado && <span className="text-xs text-muted-foreground">{row.nome_abreviado}</span>}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs py-2 whitespace-nowrap">{row.cnpj || '-'}</TableCell>
+                          <TableCell className="text-xs py-2">
+                            <div className="flex flex-col">
+                              <span className="text-foreground/80">{row.cidade || '-'}</span>
+                              <span className="text-muted-foreground">{row.uf}</span>
+                            </div>
+                          </TableCell>
+                          {currentUserRole === 'admin' && (
+                            <TableCell className="text-xs py-2">
+                              <span className="font-semibold">{row.user?.full_name || row.user?.username || 'Não vinculado'}</span>
+                            </TableCell>
+                          )}
+                          <TableCell className="text-xs py-2 text-center">
+                            {row.status_ativo ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                Ativo
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-destructive/10 text-destructive border border-destructive/20">
+                                Inativo
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs py-2 text-right pr-4">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary/80">
+                                  <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleEditClient(row)} className="gap-2 cursor-pointer font-medium text-xs">
+                                  <Pencil className="w-3.5 h-3.5" /> Editar Cliente
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDeleteClient(row.id_cliente, row.nome_cliente)} className="gap-2 cursor-pointer text-destructive focus:text-destructive font-medium text-xs">
+                                  <Trash2 className="w-3.5 h-3.5" /> Apagar Cliente
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="lg:hidden divide-y divide-border/40">
+                {filteredClientes.slice(0, 100).map((row, idx) => (
+                  <div 
+                    key={row.id_cliente || idx} 
+                    className="p-4 active:bg-secondary/20 transition-colors flex items-center justify-between gap-4"
+                    onClick={() => { setSelectedClient(row); setIsDetailOpen(true); }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                          {row.codigo_cliente || 'S/ COD'}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-medium">{row.uf}</span>
+                      </div>
+                      <h4 className="text-sm font-bold text-foreground truncate">{row.nome_cliente}</h4>
+                      <p className="text-xs text-muted-foreground truncate">{row.nome_abreviado || row.cidade || 'Sem mais info'}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${row.status_ativo ? 'bg-emerald-500' : 'bg-destructive'}`} />
+                      <MoreVertical className="w-4 h-4 text-muted-foreground/40" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {filteredClientes.length > 100 && (
+                <div className="text-center py-4 text-xs text-muted-foreground bg-muted/20">
+                  Mostrando as 100 primeiras linhas de {filteredClientes.length} registros. Use a busca para filtrar.
+                </div>
+              )}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Client Detail Dialog (Mobile) */}
+      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+        <DialogContent className="max-w-md p-0 overflow-hidden">
+          {selectedClient && (
+            <>
+              <DialogHeader className="p-6 bg-secondary/30 border-b border-border/40">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-1 rounded uppercase tracking-widest">
+                    {selectedClient.codigo_cliente || 'SEM CÓDIGO'}
+                  </span>
+                  <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold ${selectedClient.status_ativo ? 'bg-emerald-500/10 text-emerald-500' : 'bg-destructive/10 text-destructive'}`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${selectedClient.status_ativo ? 'bg-emerald-500' : 'bg-destructive'}`} />
+                    {selectedClient.status_ativo ? 'ATIVO' : 'INATIVO'}
+                  </div>
+                </div>
+                <DialogTitle className="text-xl font-black leading-tight">{selectedClient.nome_cliente}</DialogTitle>
+                <DialogDescription className="text-xs font-bold text-muted-foreground uppercase tracking-tight">
+                  {selectedClient.nome_abreviado || 'Razão Social'}
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                {/* Info Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">CNPJ</p>
+                    <p className="text-sm font-medium">{selectedClient.cnpj || 'Não informado'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Região</p>
+                    <p className="text-sm font-medium">{selectedClient.regiao || 'Não informado'}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 border-b border-border/40 pb-2">
+                    <MapPin className="w-4 h-4 text-primary" />
+                    <span className="text-xs font-bold uppercase tracking-widest">Localização</span>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase">Endereço</p>
+                      <p className="text-sm font-medium">
+                        {selectedClient.endereco_completo}{selectedClient.numero ? `, ${selectedClient.numero}` : ''}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase">Bairro</p>
+                        <p className="text-sm font-medium">{selectedClient.bairro || '-'}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase">Cidade/UF</p>
+                        <p className="text-sm font-medium">{selectedClient.cidade} / {selectedClient.uf}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase">CEP</p>
+                        <p className="text-sm font-medium">{selectedClient.cep || '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {currentUserRole === 'admin' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 border-b border-border/40 pb-2">
+                      <Briefcase className="w-4 h-4 text-primary" />
+                      <span className="text-xs font-bold uppercase tracking-widest">Responsável</span>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">
+                        {selectedClient.user?.full_name || selectedClient.user?.username || 'Não vinculado'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 bg-secondary/20 border-t border-border/40 flex gap-2">
+                <Button 
+                  className="flex-1 gap-2 font-bold text-xs h-10" 
+                  onClick={() => { setIsDetailOpen(false); handleEditClient(selectedClient); }}
+                >
+                  <Pencil className="w-3.5 h-3.5" /> Editar Cliente
+                </Button>
+                <Button 
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 text-destructive hover:bg-destructive/10"
+                  onClick={() => { setIsDetailOpen(false); handleDeleteClient(selectedClient.id_cliente, selectedClient.nome_cliente); }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

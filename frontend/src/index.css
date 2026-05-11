@@ -570,7 +570,7 @@
 .admin-sidebar {
   width: 240px;
   flex-shrink: 0;
-  display: flex;
+  display: none;
   flex-direction: column;
   background: linear-gradient(175deg,
       hsl(var(--admin-sidebar-bg)) 0%,
@@ -578,6 +578,12 @@
   border-right: 1px solid hsl(var(--admin-sidebar-border) / 0.6);
   overflow: hidden;
   position: relative;
+}
+
+@media (min-width: 1024px) {
+  .admin-sidebar {
+    display: flex;
+  }
 }
 
 /* Subtle dot-pattern overlay on sidebar */
@@ -889,12 +895,13 @@
   flex-direction: column;
   overflow: hidden;
   background: hsl(var(--admin-content-bg));
+  width: 100%;
 }
 
 /* Top header */
 .admin-header {
   height: 62px;
-  padding: 0 24px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -904,15 +911,27 @@
   box-shadow: 0 1px 0 hsl(var(--admin-card-border));
 }
 
+@media (min-width: 1024px) {
+  .admin-header {
+    padding: 0 24px;
+  }
+}
+
 .admin-header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+}
+
+@media (min-width: 640px) {
+  .admin-header-left {
+    gap: 12px;
+  }
 }
 
 .admin-header-icon {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
   background: hsl(var(--admin-sidebar-accent) / 0.1);
   display: flex;
@@ -922,16 +941,29 @@
   flex-shrink: 0;
 }
 
+@media (min-width: 640px) {
+  .admin-header-icon {
+    width: 34px;
+    height: 34px;
+  }
+}
+
 .admin-header-title {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: hsl(var(--foreground));
   line-height: 1.2;
   letter-spacing: -0.01em;
 }
 
+@media (min-width: 640px) {
+  .admin-header-title {
+    font-size: 0.95rem;
+  }
+}
+
 .admin-header-sub {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: hsl(var(--muted-foreground));
   margin-top: 1px;
 }
@@ -939,7 +971,13 @@
 .admin-header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+}
+
+@media (min-width: 640px) {
+  .admin-header-right {
+    gap: 8px;
+  }
 }
 
 .admin-header-action-btn {
@@ -1005,9 +1043,15 @@
 .admin-content {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: 16px;
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--admin-card-border)) transparent;
+}
+
+@media (min-width: 1024px) {
+  .admin-content {
+    padding: 24px;
+  }
 }
 
 .admin-content::-webkit-scrollbar {

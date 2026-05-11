@@ -430,7 +430,7 @@ const Index = () => {
 
         {/* Info badge when no UF selected */}
         {!selectedUF && (
-          <div className="absolute bottom-4 left-4 z-[1000] bg-card/90 backdrop-blur-sm border border-border rounded-lg px-4 py-3 max-w-[280px]">
+          <div className="absolute bottom-6 left-4 z-[1000] bg-card/90 backdrop-blur-sm border border-border rounded-lg px-4 py-3 max-w-[280px] hidden sm:block">
             <p className="text-xs text-muted-foreground">
               <span className="text-primary font-semibold">Clique em um estado</span>{" "}
               ou use o filtro acima para selecionar uma UF e ver os municípios com seus responsáveis.

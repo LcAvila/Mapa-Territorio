@@ -56,9 +56,11 @@ import {
   Database, Layers, Grid3X3, Calendar, FileSpreadsheet, Camera, Percent, Mail, Phone, MapPinned,
   Route, BarChart2, ShieldAlert, UserCog, Contact, GraduationCap, Microscope, Stethoscope, 
   Headset, Construction, ShoppingBag, ChefHat, Coffee, Plane, HeartPulse, Hammer, Wrench, LucideIcon,
-  Users2
+  Users2,
+  Menu
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from 'sonner';
@@ -234,6 +236,100 @@ function CustomSelect({ options, value, onChange, placeholder, disabled = false,
   );
 }
 
+function SidebarContent({ displayPhoto, displayName, displayEmail, navItems, activeTab, setActiveTab, expandedMenus, setExpandedMenus }: {
+  displayPhoto: string;
+  displayName: string;
+  displayEmail: string;
+  navItems: any[];
+  activeTab: string;
+  setActiveTab: (id: TabId) => void;
+  expandedMenus: string[];
+  setExpandedMenus: React.Dispatch<React.SetStateAction<string[]>>;
+}) {
+  return (
+    <>
+      {/* User Profile */}
+      <div className="admin-sidebar-profile">
+        <div className="admin-sidebar-avatar">
+          {displayPhoto
+            ? <img src={displayPhoto} alt={displayName} />
+            : <User style={{ width: 28, height: 28 }} />
+          }
+        </div>
+        <p className="admin-sidebar-username">{displayName.toUpperCase()}</p>
+        {displayEmail && <p className="admin-sidebar-email">{displayEmail}</p>}
+      </div>
+
+      {/* Navigation */}
+      <nav className="admin-sidebar-nav">
+        {navItems.map(item => {
+          const Icon = item.icon;
+          const isParentActive = item.subItems?.some((s: any) => s.id === activeTab);
+          const isDirectActive = !item.subItems && activeTab === item.id;
+          const isExpanded = expandedMenus.includes(item.id);
+
+          const itemClass = [
+            'admin-nav-item',
+            isDirectActive ? 'active' : '',
+            isParentActive ? 'parent-active' : '',
+          ].filter(Boolean).join(' ');
+
+          return (
+            <div key={item.id}>
+              <button
+                className={itemClass}
+                onClick={() => {
+                  if (item.subItems) {
+                    setExpandedMenus(prev =>
+                      prev.includes(item.id) ? prev.filter(m => m !== item.id) : [...prev, item.id]
+                    );
+                  } else {
+                    setActiveTab(item.id as TabId);
+                  }
+                }}
+              >
+                <Icon className="nav-icon" />
+                <span className="nav-label">{item.label}</span>
+                {item.count !== undefined && (
+                  <span className={`admin-nav-badge${item.badge ? ' danger' : ''}`}>{item.count}</span>
+                )}
+                {item.subItems && (
+                  <ChevronDown
+                    style={{ width: 14, height: 14, flexShrink: 0, opacity: 0.6 }}
+                    className={`admin-chevron${isExpanded ? ' open' : ''}`}
+                  />
+                )}
+              </button>
+
+              {item.subItems && isExpanded && (
+                <div className="admin-nav-subitems">
+                  {item.subItems.map((sub: any) => {
+                    const SubIcon = sub.icon;
+                    const subActive = activeTab === sub.id;
+                    return (
+                      <button
+                        key={sub.id}
+                        className={`admin-nav-subitem${subActive ? ' active' : ''}`}
+                        onClick={() => setActiveTab(sub.id)}
+                      >
+                        <SubIcon className="nav-icon" />
+                        <span style={{ flex: 1 }}>{sub.label}</span>
+                        {sub.count !== undefined && (
+                          <span className="admin-nav-badge">{sub.count}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+    </>
+  );
+}
+
 export default function Admin() {
   const { token, logout, userId, tokenVersion } = useAuth();
   const navigate = useNavigate();
@@ -260,6 +356,18 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDashFiltersOpen, setIsDashFiltersOpen] = useState(false);
+  const [isDashMapOpen, setIsDashMapOpen] = useState(false);
+  const [isTerritoryMapOpen, setIsTerritoryMapOpen] = useState(false);
+  const [isTerritoryDetailOpen, setIsTerritoryDetailOpen] = useState(false);
+  const [selectedTerritory, setSelectedTerritory] = useState<{
+    id: number;
+    municipio: string;
+    uf: string;
+    userIds: number[];
+    clientCount: number;
+  } | null>(null);
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
 
   // ── Brand / Personalização ────────────────────────────────────────────────
@@ -1273,109 +1381,88 @@ export default function Admin() {
 
     <div className="admin-layout">
 
-      {/* ━━ SIDEBAR ━━ */}
-      <aside className="admin-sidebar">
-
-
-        {/* User Profile */}
-        <div className="admin-sidebar-profile">
-          <div className="admin-sidebar-avatar">
-            {displayPhoto
-              ? <img src={displayPhoto} alt={displayName} />
-              : <User style={{ width: 28, height: 28 }} />
-            }
-          </div>
-          <p className="admin-sidebar-username">{displayName.toUpperCase()}</p>
-          {displayEmail && <p className="admin-sidebar-email">{displayEmail}</p>}
-        </div>
-
-        {/* Navigation */}
-        <nav className="admin-sidebar-nav">
-          {navItems.map(item => {
-            const Icon = item.icon;
-            const isParentActive = item.subItems?.some(s => s.id === activeTab);
-            const isDirectActive = !item.subItems && activeTab === item.id;
-            const isExpanded = expandedMenus.includes(item.id);
-
-            const itemClass = [
-              'admin-nav-item',
-              isDirectActive ? 'active' : '',
-              isParentActive ? 'parent-active' : '',
-            ].filter(Boolean).join(' ');
-
-            return (
-              <div key={item.id}>
-                <button
-                  className={itemClass}
-                  onClick={() => {
-                    if (item.subItems) {
-                      setExpandedMenus(prev =>
-                        prev.includes(item.id) ? prev.filter(m => m !== item.id) : [...prev, item.id]
-                      );
-                    } else {
-                      setActiveTab(item.id as TabId);
-                    }
-                  }}
-                >
-                  <Icon className="nav-icon" />
-                  <span className="nav-label">{item.label}</span>
-                  {item.count !== undefined && (
-                    <span className={`admin-nav-badge${item.badge ? ' danger' : ''}`}>{item.count}</span>
-                  )}
-                  {item.subItems && (
-                    <ChevronDown
-                      style={{ width: 14, height: 14, flexShrink: 0, opacity: 0.6 }}
-                      className={`admin-chevron${isExpanded ? ' open' : ''}`}
-                    />
-                  )}
-                </button>
-
-                {item.subItems && isExpanded && (
-                  <div className="admin-nav-subitems">
-                    {item.subItems.map(sub => {
-                      const SubIcon = sub.icon;
-                      const subActive = activeTab === sub.id;
-                      return (
-                        <button
-                          key={sub.id}
-                          className={`admin-nav-subitem${subActive ? ' active' : ''}`}
-                          onClick={() => setActiveTab(sub.id)}
-                        >
-                          <SubIcon className="nav-icon" />
-                          <span style={{ flex: 1 }}>{sub.label}</span>
-                          {sub.count !== undefined && (
-                            <span className="admin-nav-badge">{sub.count}</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </nav>
-
-        {/* Footer buttons removed to move logout to navbar */}
+      {/* ━━ SIDEBAR (Desktop) ━━ */}
+      <aside className="admin-sidebar hidden lg:flex">
+        <SidebarContent 
+          displayPhoto={displayPhoto}
+          displayName={displayName}
+          displayEmail={displayEmail}
+          navItems={navItems}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          expandedMenus={expandedMenus}
+          setExpandedMenus={setExpandedMenus}
+        />
       </aside>
 
       {/* ━━ MAIN ━━ */}
       <div className="admin-main">
 
         {/* Top Header */}
-        <header className="admin-header">
+        <header className="admin-header px-4 lg:px-6">
           <div className="admin-header-left">
-            {activeNavInfo && (
-              <div className="admin-header-icon">
-                {React.createElement(activeNavInfo.icon, { style: { width: 17, height: 17 } })}
+            <div className="flex items-center gap-3">
+              {/* Hamburger Mobile */}
+              <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <button className="lg:hidden p-2 -ml-2 hover:bg-secondary rounded-lg transition-colors">
+                    <Menu className="w-5 h-5" />
+                  </button>
+                </SheetTrigger>
+                <SheetContent side="left" className="p-0 w-[280px] bg-sidebar border-r-border/50">
+                  <div className="h-full flex flex-col overflow-hidden bg-gradient-to-b from-[hsl(var(--admin-sidebar-bg))] to-[hsl(var(--admin-sidebar-bg-end))]">
+                    <SidebarContent 
+                      displayPhoto={displayPhoto}
+                      displayName={displayName}
+                      displayEmail={displayEmail}
+                      navItems={navItems}
+                      activeTab={activeTab}
+                      setActiveTab={(id) => { setActiveTab(id); setIsMobileMenuOpen(false); }}
+                      expandedMenus={expandedMenus}
+                      setExpandedMenus={setExpandedMenus}
+                    />
+                  </div>
+                </SheetContent>
+              </Sheet>
+
+              {activeNavInfo && (
+                <div className="admin-header-icon hidden sm:flex">
+                  {React.createElement(activeNavInfo.icon, { style: { width: 17, height: 17 } })}
+                </div>
+              )}
+              <div className="min-w-0">
+                <h1 className="admin-header-title truncate">{activeNavInfo?.label ?? 'Painel'}</h1>
+                <p className="admin-header-sub hidden lg:block">Painel Administrativo</p>
               </div>
-            )}
-            <div>
-              <h1 className="admin-header-title">{activeNavInfo?.label ?? 'Painel'}</h1>
-              <p className="admin-header-sub">Painel Administrativo</p>
             </div>
           </div>
-          <div className="admin-header-right">
+          <div className="admin-header-right gap-1.5 sm:gap-2">
+            {(activeTab === 'dashboard' || activeTab === 'baserotas' || activeTab === 'territories') && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className={`lg:hidden h-9 w-9 p-0 flex items-center justify-center transition-all border-primary/20 ${isDashFiltersOpen ? 'bg-primary/10 text-primary border-primary/40 shadow-[0_0_10px_rgba(var(--primary),0.1)]' : 'bg-background hover:bg-secondary'}`}
+                onClick={() => setIsDashFiltersOpen(!isDashFiltersOpen)}
+                title={isDashFiltersOpen ? 'Fechar Filtros' : 'Abrir Filtros'}
+              >
+                <Filter className={`w-4 h-4 ${isDashFiltersOpen ? 'animate-pulse' : ''}`} />
+              </Button>
+            )}
+
+            <button 
+              className="admin-header-icon-btn h-9 w-9 bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 flex items-center justify-center rounded-lg"
+              onClick={() => navigate('/mapa')}
+              title="Ver Mapa"
+            >
+              <Map className="w-4 h-4 shrink-0" />
+            </button>
+
+            <button className="admin-header-icon-btn h-9 w-9 flex items-center justify-center" onClick={fetchAll} title="Recarregar dados">
+              <RefreshCw style={{ width: 16, height: 16 }} />
+            </button>
+
+            <div className="w-px h-6 bg-border/50 mx-0.5" />
+
             <Popover 
               open={showNotifMenu} 
               onOpenChange={(open) => {
@@ -1384,8 +1471,8 @@ export default function Admin() {
               }}
             >
               <PopoverTrigger asChild>
-                <button className="admin-header-icon-btn relative" title="Notificações">
-                  <Bell style={{ width: 15, height: 15 }} />
+                <button className="admin-header-icon-btn relative shrink-0" title="Notificações">
+                  <Bell style={{ width: 16, height: 16 }} />
                   {unreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-destructive text-[9px] leading-[15px] text-white font-bold text-center animate-in zoom-in duration-300">
                       {unreadCount > 9 ? '9+' : unreadCount}
@@ -1393,7 +1480,7 @@ export default function Admin() {
                   )}
                 </button>
               </PopoverTrigger>
-              <PopoverContent className="w-[380px] p-0 shadow-2xl border-primary/10" align="end">
+              <PopoverContent className="w-[calc(100vw-32px)] sm:w-[380px] p-0 shadow-2xl border-primary/10 z-[1100]" align="end">
                 <div className="px-4 py-4 bg-primary/5 border-b border-border/60">
                   <div className="flex items-center justify-between">
                     <div>
@@ -1410,7 +1497,7 @@ export default function Admin() {
                     <Bell className="w-4 h-4 text-primary/40" />
                   </div>
                 </div>
-                <div className="max-h-[420px] overflow-y-auto custom-scrollbar">
+                <div className="max-h-[60vh] sm:max-h-[420px] overflow-y-auto custom-scrollbar">
                   {loadingNotifications ? (
                     <div className="py-12 flex flex-col items-center gap-3">
                       <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -1469,86 +1556,44 @@ export default function Admin() {
                 )}
               </PopoverContent>
             </Popover>
-            <button className="admin-header-icon-btn" onClick={fetchAll} title="Recarregar dados">
-              <RefreshCw style={{ width: 15, height: 15 }} />
-            </button>
-            {['baserotas', 'clusters', 'blocos', 'roteiros', 'agenda', 'densidade', 'leituraplanilha'].includes(activeTab) && (
-              <button
-                className="admin-header-action-btn"
-                onClick={handleDownloadLogisticsPlan}
-                disabled={isGeneratingPlan}
-              >
-                {isGeneratingPlan
-                  ? <Loader2 style={{ width: 15, height: 15 }} className="animate-spin" />
-                  : <Download style={{ width: 15, height: 15 }} />
-                }
-                {isGeneratingPlan ? 'Gerando...' : 'Gerar Plano Logístico'}
-              </button>
-            )}
-            <SpaceButton 
-              onClick={() => navigate('/mapa')} 
-              label="Ver Mapa" 
-            />
-            {pendingInterests > 0 && (
-              <div className="admin-pending-badge">
-                <AlertCircle style={{ width: 13, height: 13 }} />
-                <span>{pendingInterests} pendente(s)</span>
-              </div>
-            )}
+
             <Popover open={showUserMenu} onOpenChange={setShowUserMenu}>
               <PopoverTrigger asChild>
-                <button className="hidden sm:flex items-center gap-2.5 px-2.5 py-1.5 bg-secondary/60 rounded-xl border border-border/40 hover:bg-secondary/80 transition-colors min-w-[175px] text-left">
-                  <div className="w-8 h-8 rounded-full overflow-hidden bg-primary/20 flex items-center justify-center shrink-0 border border-primary/20">
-                    {displayPhoto ? (
-                      <img src={displayPhoto} alt={displayName} className="w-full h-full object-cover" />
-                    ) : (
-                      <User style={{ width: 14, height: 14 }} className="text-primary" />
-                    )}
+                <button className="admin-header-icon-btn flex items-center justify-center overflow-hidden border border-border/40 bg-secondary/40 shrink-0 h-9 w-9 rounded-lg">
+                  <div className="w-full h-full flex items-center justify-center bg-primary/10">
+                    <User style={{ width: 16, height: 16 }} className="text-primary" />
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold leading-tight truncate">{displayName}</p>
-                    <p className="text-[10px] text-muted-foreground leading-tight capitalize truncate">{String(displayCargo).toLowerCase()}</p>
-                  </div>
-                  <ChevronDown style={{ width: 13, height: 13 }} className="text-muted-foreground ml-auto shrink-0" />
                 </button>
               </PopoverTrigger>
-              <PopoverContent className="w-44 p-1.5" align="end">
+              <PopoverContent className="w-48 p-1.5 shadow-2xl border-primary/10 z-[1100]" align="end">
                 <div className="flex items-center justify-between px-2.5 py-2 border-b border-border/60 mb-1">
-                  <span className="text-[11px] font-semibold text-muted-foreground">Tema</span>
+                  <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">Interface</span>
                   <ThemeToggle />
                 </div>
+                <div className="px-2.5 py-2 mb-1">
+                  <p className="text-[11px] font-black text-foreground truncate">{displayName.toUpperCase()}</p>
+                  <p className="text-[9px] text-muted-foreground truncate uppercase tracking-tighter opacity-70">{String(displayCargo).toLowerCase()}</p>
+                </div>
+                <div className="h-px bg-border/40 my-1" />
                 <button
-                  className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors"
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-bold rounded-md hover:bg-primary/10 hover:text-primary transition-all group"
                   onClick={() => { 
                     setShowUserMenu(false); 
-                    // Use a fresh fetch to get current user data or find in list
                     const me = users.find(u => u.id === Number(userId));
-                    if (me) {
-                      setEditingUserId(me.id);
-                      setIsUserModalOpen(true);
-                    } else {
-                      // Fallback if not in list yet
-                      setEditingUserId(Number(userId));
-                      setIsUserModalOpen(true);
-                    }
+                    if (me) { setEditingUserId(me.id); setIsUserModalOpen(true); }
+                    else { setEditingUserId(Number(userId)); setIsUserModalOpen(true); }
                   }}
                 >
-                  <User style={{ width: 14, height: 14 }} />
-                  Perfil
+                  <User className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                  Meu Perfil
                 </button>
+                <div className="h-px bg-border/40 my-1" />
                 <button
-                  className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors"
-                  onClick={() => { setShowUserMenu(false); navigate('/admin'); }}
-                >
-                  <Settings style={{ width: 14, height: 14 }} />
-                  Painel
-                </button>
-                <button
-                  className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold rounded-md text-destructive hover:bg-destructive/10 transition-colors"
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-bold rounded-md text-destructive hover:bg-destructive/10 transition-all group"
                   onClick={() => { setShowUserMenu(false); logout(); navigate('/login'); }}
                 >
-                  <LogOut style={{ width: 14, height: 14 }} />
-                  Sair
+                  <LogOut className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                  Sair da Conta
                 </button>
               </PopoverContent>
             </Popover>
@@ -1591,8 +1636,8 @@ export default function Admin() {
             const hasFilters = dashFilterUser || dashFilterUF || dashSearch;
 
             return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20, height: '100%' }}>
-                <div className="admin-card" style={{ padding: '14px 20px', borderLeft: '3px solid hsl(var(--admin-sidebar-accent))' }}>
+              <div className="flex flex-col gap-5 lg:h-full overflow-y-auto lg:overflow-hidden no-scrollbar pb-10 sm:pb-0">
+                <div className="admin-card lg:shrink-0" style={{ padding: '14px 20px', borderLeft: '3px solid hsl(var(--admin-sidebar-accent))' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <MessageSquare style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
                     <span style={{ fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.02em' }}>Mensagem do Dia</span>
@@ -1602,200 +1647,144 @@ export default function Admin() {
                   </p>
                 </div>
 
-                {/* ── FILTER BAR ── */}
-                <div className="admin-card" style={{ padding: '14px 20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                {/* ── FILTER SECTION (Mobile: Collapsible / Desktop: Always visible) ── */}
+                <div className={`${isDashFiltersOpen ? 'flex animate-in slide-in-from-top-4 duration-300' : 'hidden lg:flex'} admin-card p-4 sm:p-[14px_20px] lg:shrink-0`}>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full">
                     {/* Search */}
-                    <div style={{ position: 'relative', flex: '1 1 160px', minWidth: 140 }}>
-                      <Search style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: 'hsl(var(--muted-foreground))' }} />
+                    <div className="relative flex-1 min-w-0 sm:min-w-[140px]">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                       <input
                         value={dashSearch}
                         onChange={e => setDashSearch(e.target.value)}
-                        placeholder="Buscar município, UF ou rep..."
-                        style={{
-                          width: '100%', paddingLeft: 32, paddingRight: 12, height: 36,
-                          border: '1.5px solid hsl(var(--border))', borderRadius: 8,
-                          background: 'hsl(var(--background))', color: 'hsl(var(--foreground))',
-                          fontSize: '0.8rem', outline: 'none',
-                        }}
+                        placeholder="Buscar município, UF..."
+                        className="w-full pl-9 pr-3 h-9 border border-border rounded-lg bg-background text-foreground text-xs sm:text-[0.8rem] outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                       />
                     </div>
 
-                    {/* User dropdown */}
-                    <select
-                      value={dashFilterUser}
-                      onChange={e => setDashFilterUser(e.target.value)}
-                      style={{
-                        height: 36, padding: '0 12px', borderRadius: 8, fontSize: '0.8rem', flex: '1 1 140px',
-                        border: '1.5px solid hsl(var(--border))', background: 'hsl(var(--background))',
-                        color: 'hsl(var(--foreground))', outline: 'none', cursor: 'pointer',
-                      }}
-                    >
-                      <option value="">Todos Usuários</option>
-                      {users.filter(u => !u.isVago).map(u => <option key={u.id} value={String(u.id)}>{u.username} — {u.full_name || u.fullName}</option>)}
-                    </select>
-
-                    {/* UF dropdown */}
-                    <select
-                      value={dashFilterUF}
-                      onChange={e => setDashFilterUF(e.target.value)}
-                      style={{
-                        height: 36, padding: '0 12px', borderRadius: 8, fontSize: '0.8rem', flex: '1 1 110px',
-                        border: '1.5px solid hsl(var(--border))', background: 'hsl(var(--background))',
-                        color: 'hsl(var(--foreground))', outline: 'none', cursor: 'pointer',
-                      }}
-                    >
-                      <option value="">Todos os Estados</option>
-                      {allUFs.map(uf => <option key={uf} value={uf}>{uf}</option>)}
-                    </select>
-
-                    {/* Clear */}
-                    {hasFilters && (
-                      <button
-                        onClick={clearFilters}
-                        style={{
-                          height: 36, padding: '0 14px', borderRadius: 8, fontSize: '0.8rem',
-                          border: '1.5px solid hsl(var(--destructive) / 0.4)', color: 'hsl(var(--destructive))',
-                          background: 'hsl(var(--destructive) / 0.06)', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6,
-                        }}
+                    <div className="flex items-center gap-2">
+                      {/* User dropdown */}
+                      <select
+                        value={dashFilterUser}
+                        onChange={e => setDashFilterUser(e.target.value)}
+                        className="h-9 px-3 rounded-lg text-xs sm:text-[0.8rem] flex-1 sm:flex-none sm:w-40 border border-border bg-background text-foreground outline-none cursor-pointer hover:bg-secondary/50 transition-colors"
                       >
-                        <X style={{ width: 13, height: 13 }} /> Limpar
-                      </button>
-                    )}
-                  </div>
+                        <option value="">Todos Usuários</option>
+                        {users.filter(u => !u.isVago).map(u => <option key={u.id} value={String(u.id)}>{u.username}</option>)}
+                      </select>
 
-                  {/* Stat pills */}
-                  <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-                    {[
-                      { label: 'Clientes Fitrados', value: filteredClientes.length, color: '#EAB308', bg: '#FEFCE8' },
-                      { label: 'Territórios (Global)', value: territories.length, color: '#22C55E', bg: '#F0FDF4' },
-                      { label: 'Estados Visíveis', value: ufEntries.length, color: '#3B82F6', bg: '#EFF6FF' },
-                      { label: 'Pendentes', value: pendingInterests, color: '#F59E0B', bg: '#FFFBEB' },
-                      { label: 'Usuários', value: users.length, color: '#06B6D4', bg: '#ECFEFF' },
-                    ].map(s => (
-                      <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 14px', borderRadius: 20, background: s.bg, border: `1.5px solid ${s.color}22` }}>
-                        <span style={{ fontWeight: 800, fontSize: '0.9rem', color: s.color }}>{s.value}</span>
-                        <span style={{ fontSize: '0.72rem', color: '#666', fontWeight: 500 }}>{s.label}</span>
-                      </div>
-                    ))}
+                      {/* UF dropdown */}
+                      <select
+                        value={dashFilterUF}
+                        onChange={e => setDashFilterUF(e.target.value)}
+                        className="h-9 px-3 rounded-lg text-xs sm:text-[0.8rem] w-24 sm:w-32 border border-border bg-background text-foreground outline-none cursor-pointer hover:bg-secondary/50 transition-colors"
+                      >
+                        <option value="">UF</option>
+                        {allUFs.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                      </select>
+
+                      {/* Clear */}
+                      {hasFilters && (
+                        <button
+                          onClick={clearFilters}
+                          className="h-9 px-3 rounded-lg text-xs font-bold border border-destructive/30 text-destructive bg-destructive/5 hover:bg-destructive/10 cursor-pointer transition-colors shrink-0 flex items-center gap-1.5"
+                        >
+                          <X className="w-3 h-3" /> <span className="hidden sm:inline">Limpar</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 {/* ── 2-COLUMN: Results + Map ── */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 20, flex: 1, minHeight: 0 }}>
+                <div className="flex flex-col lg:grid lg:grid-cols-[1fr_380px] gap-5 lg:flex-1 lg:min-h-0">
 
                   {/* LEFT: Territory result cards */}
-                  <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div className="flex flex-col gap-2.5 lg:overflow-y-auto lg:h-full no-scrollbar order-2 lg:order-1">
                     {ufEntries.length === 0 ? (
-                      <div className="admin-card" style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--muted-foreground))' }}>
-                        <MapPin style={{ width: 32, height: 32, margin: '0 auto 8px', opacity: 0.2 }} />
-                        <p style={{ fontSize: '0.9rem' }}>Nenhum território encontrado</p>
+                      <div className="admin-card p-10 text-center text-muted-foreground">
+                        <MapPin className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                        <p className="text-sm">Nenhum território encontrado</p>
                       </div>
                     ) : ufEntries.map(([uf, terrs]) => {
                       const uniqueUserIds = [...new Set(terrs.map(t => t.userId))];
                       const modos = [...new Set(terrs.map(t => t.modo))];
                       return (
-                        <div key={uf} className="admin-card" style={{ padding: 0, overflow: 'hidden', flexShrink: 0 }}>
+                        <div key={uf} className="admin-card p-0 overflow-hidden shrink-0">
                           {/* UF header */}
-                          <div style={{
-                            display: 'flex', alignItems: 'center', gap: 12,
-                            padding: '12px 18px', background: 'hsl(var(--admin-sidebar-bg) / 0.04)',
-                            borderBottom: '1px solid hsl(var(--admin-card-border))',
-                          }}>
-                            <div style={{
-                              width: 42, height: 42, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              background: 'hsl(var(--admin-sidebar-bg))', color: 'hsl(var(--admin-sidebar-accent))',
-                              fontWeight: 900, fontSize: '0.95rem', letterSpacing: '0.05em', flexShrink: 0,
-                            }}>
-                              {uf}
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 sm:p-[12px_18px] bg-admin-sidebar-bg/4 border-b border-admin-card-border">
+                            <div className="flex items-center gap-3 w-full sm:w-auto">
+                              <div className="w-10 h-10 sm:w-[42px] sm:h-[42px] rounded-lg sm:rounded-[10px] flex items-center justify-center bg-admin-sidebar-bg text-admin-sidebar-accent font-black text-sm sm:text-[0.95rem] tracking-wider shrink-0">
+                                {uf}
+                              </div>
+                              <div className="flex-1 min-w-0 sm:hidden">
+                                <p className="font-bold text-sm">
+                                  {terrs.length} cliente(s)
+                                </p>
+                              </div>
                             </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <p style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 2 }}>
+                            
+                            <div className="flex-1 min-w-0 hidden sm:block">
+                              <p className="font-bold text-[0.9rem] mb-0.5">
                                 {terrs.length} cliente(s) — {uniqueUserIds.length} usuário(s)
                               </p>
-                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                <span style={{
-                                  fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: 10, letterSpacing: '0.03em',
-                                  background: 'hsl(var(--admin-sidebar-accent) / 0.13)',
-                                  color: 'hsl(var(--admin-sidebar-accent))',
-                                  border: '1px solid hsl(var(--admin-sidebar-accent) / 0.25)',
-                                  textTransform: 'uppercase',
-                                }}>
+                              <div className="flex gap-1.5 flex-wrap">
+                                <span className="text-[10px] sm:text-[0.65rem] font-bold px-2 py-0.5 rounded-full bg-admin-sidebar-accent/13 text-admin-sidebar-accent border border-admin-sidebar-accent/25 uppercase">
                                   PRESENÇA ATIVA
                                 </span>
                               </div>
                             </div>
-                            {/* User avatars */}
-                            <div style={{ display: 'flex', gap: -4 }}>
-                              {uniqueUserIds.slice(0, 4).map((id, idx) => {
-                                const user = users.find(u => u.id === id);
-                                const color = user && !user.isVago ? REP_COLOR_PALETTE[user.colorIndex || 0] : 'hsl(0 0% 40%)';
-                                const initials = (user?.full_name || user?.fullName || user?.username || 'SR').substring(0, 2).toUpperCase();
-                                return (
-                                  <div key={id} title={user?.full_name || user?.username || String(id)} style={{
-                                    width: 28, height: 28, borderRadius: '50%', background: color,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    color: '#fff', fontSize: '0.65rem', fontWeight: 800,
-                                    border: '2px solid hsl(var(--admin-card-bg))',
-                                    marginLeft: idx > 0 ? -8 : 0, zIndex: 4 - idx,
-                                    position: 'relative',
-                                  }}>
-                                    {initials}
+
+                            <div className="flex items-center justify-between w-full sm:w-auto gap-4">
+                              {/* User avatars */}
+                              <div className="flex -space-x-2">
+                                {uniqueUserIds.slice(0, 4).map((id, idx) => {
+                                  const user = users.find(u => u.id === id);
+                                  const color = user && !user.isVago ? REP_COLOR_PALETTE[user.colorIndex || 0] : 'hsl(0 0% 40%)';
+                                  const initials = (user?.full_name || user?.fullName || user?.username || 'SR').substring(0, 2).toUpperCase();
+                                  return (
+                                    <div key={id} title={user?.full_name || user?.username || String(id)} className="w-7 h-7 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-white text-[0.65rem] font-black border-2 border-admin-card-bg relative" style={{ background: color, zIndex: 4 - idx }}>
+                                      {initials}
+                                    </div>
+                                  );
+                                })}
+                                {uniqueUserIds.length > 4 && (
+                                  <div className="w-7 h-7 sm:w-7 sm:h-7 rounded-full bg-muted flex items-center justify-center text-muted-foreground text-[0.6rem] font-bold border-2 border-admin-card-bg relative">
+                                    +{uniqueUserIds.length - 4}
                                   </div>
-                                );
-                              })}
-                              {uniqueUserIds.length > 4 && (
-                                <div style={{
-                                  width: 28, height: 28, borderRadius: '50%', background: 'hsl(var(--muted))',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  color: 'hsl(var(--muted-foreground))', fontSize: '0.6rem', fontWeight: 700,
-                                  border: '2px solid hsl(var(--admin-card-bg))', marginLeft: -8, position: 'relative',
-                                }}>
-                                  +{uniqueUserIds.length - 4}
-                                </div>
-                              )}
+                                )}
+                              </div>
+                              <button
+                                onClick={() => { setDashFilterUF(uf === dashFilterUF ? '' : uf); }}
+                                className={`px-3 py-1 sm:px-3 sm:py-1 rounded-full text-[0.72rem] font-bold border-[1.5px] transition-colors ${
+                                  dashFilterUF === uf 
+                                    ? 'bg-admin-sidebar-accent text-white border-admin-sidebar-accent' 
+                                    : 'bg-transparent text-admin-sidebar-accent border-admin-sidebar-accent/40'
+                                }`}
+                              >
+                                {dashFilterUF === uf ? 'Limpar' : 'Filtrar'}
+                              </button>
                             </div>
-                            <button
-                              onClick={() => { setDashFilterUF(uf === dashFilterUF ? '' : uf); }}
-                              style={{
-                                padding: '4px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer',
-                                background: dashFilterUF === uf ? 'hsl(var(--admin-sidebar-accent))' : 'hsl(var(--admin-sidebar-bg))',
-                                color: dashFilterUF === uf ? 'hsl(var(--admin-sidebar-bg))' : 'hsl(var(--admin-sidebar-accent))',
-                                border: '1.5px solid hsl(var(--admin-sidebar-accent) / 0.4)',
-                              }}
-                            >
-                              {dashFilterUF === uf ? 'Limpar' : 'Filtrar'}
-                            </button>
                           </div>
 
-                          {/* Municipality rows (collapsed by default, show top 5) */}
-                          <div>
+                          {/* Municipality rows */}
+                          <div className="divide-y divide-admin-card-border">
                             {terrs.slice(0, 5).map(c => {
                               const user = users.find(u => u.id === c.userId);
                               const color = user && !user.isVago ? REP_COLOR_PALETTE[user.colorIndex || 0] : 'hsl(0 0% 40%)';
                               return (
-                                <div key={c.codigo_cliente || c.id_cliente} style={{
-                                  display: 'flex', alignItems: 'center', gap: 12,
-                                  padding: '9px 18px', borderBottom: '1px solid hsl(var(--admin-card-border))',
-                                }}>
-                                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                                  <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: 500 }} title={c.nome_cliente}>{c.nome_abreviado || c.nome_cliente}</span>
-                                  <span style={{ fontSize: '0.72rem', color: 'hsl(var(--muted-foreground))' }}>{c.cidade}</span>
-                                  <span style={{
-                                    fontSize: '0.65rem', fontWeight: 700, padding: '1px 7px', borderRadius: 8,
-                                    background: 'hsl(43 90% 55% / 0.12)',
-                                    color: 'hsl(43 90% 38%)',
-                                    textTransform: 'uppercase',
-                                    minWidth: 50, textAlign: 'center'
-                                  }}>
+                                <div key={c.codigo_cliente || c.id_cliente} className="flex items-center gap-3 p-2.5 px-4.5">
+                                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                                  <span className="flex-1 text-[0.82rem] font-medium truncate" title={c.nome_cliente}>{c.nome_abreviado || c.nome_cliente}</span>
+                                  <span className="text-[0.72rem] text-muted-foreground hidden sm:block">{c.cidade}</span>
+                                  <span className="text-[0.65rem] font-bold px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-600 uppercase min-w-[50px] text-center">
                                     {user?.username || 'S/ USER'}
                                   </span>
                                 </div>
                               );
                             })}
                             {terrs.length > 5 && (
-                              <div style={{ padding: '8px 18px', fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))', fontStyle: 'italic' }}>
-                                + {terrs.length - 5} cliente(s) não exibido(s) — use filtro para ver todos
+                              <div className="p-2 px-4.5 text-[0.75rem] text-muted-foreground italic">
+                                + {terrs.length - 5} cliente(s) oculto(s) — filtre para ver todos
                               </div>
                             )}
                           </div>
@@ -1805,39 +1794,50 @@ export default function Admin() {
                   </div>
 
                   {/* RIGHT: Mini map + legends */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div className="flex flex-col gap-3.5 order-1 lg:order-2 lg:shrink-0">
                     {/* Map card */}
-                    <div className="admin-card" style={{ padding: 0, overflow: 'hidden' }}>
-                      <div style={{ padding: '12px 16px', borderBottom: '1px solid hsl(var(--admin-card-border))', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Map style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
-                        <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>Mapa de Cobertura</span>
-                        {dashFilterUF && (
-                          <span style={{ marginLeft: 'auto', fontSize: '0.7rem', fontWeight: 700, color: 'hsl(var(--admin-sidebar-accent))' }}>
-                            Filtrado: {dashFilterUF}
-                          </span>
-                        )}
+                    <div className="admin-card p-0 overflow-hidden">
+                      <div className="p-3 px-4 border-b border-admin-card-border flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Map className="w-3.5 h-3.5 text-admin-sidebar-accent" />
+                          <span className="font-bold text-[0.82rem]">Mapa de Cobertura</span>
+                          {dashFilterUF && (
+                            <span className="ml-auto text-[0.7rem] font-bold text-admin-sidebar-accent">
+                              {dashFilterUF}
+                            </span>
+                          )}
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className={`h-7 px-2 text-[10px] font-bold gap-1 md:hidden transition-colors ${isDashMapOpen ? 'bg-primary/10 text-primary' : ''}`}
+                          onClick={() => setIsDashMapOpen(!isDashMapOpen)}
+                        >
+                          {isDashMapOpen ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          {isDashMapOpen ? 'Fechar' : 'Abrir'}
+                        </Button>
                       </div>
-                      <div style={{ padding: '8px 8px 4px', background: 'hsl(var(--admin-sidebar-bg) / 0.03)' }}>
-                        <MiniMapBrasil
-                          territories={territories}
-                          filterUF={dashFilterUF}
-                          onClickUF={uf => setDashFilterUF(prev => prev === uf ? '' : uf)}
-                        />
+                      <div className={`${isDashMapOpen ? 'block' : 'hidden md:block'} p-2 pb-1 bg-admin-sidebar-bg/3 h-[180px] sm:h-auto overflow-hidden animate-in fade-in zoom-in duration-300`}>
+                        <div className="w-full h-full flex items-center justify-center scale-[0.85] sm:scale-100 origin-center transition-transform">
+                          <MiniMapBrasil
+                            territories={territories}
+                            filterUF={dashFilterUF}
+                            onClickUF={uf => setDashFilterUF(prev => prev === uf ? '' : uf)}
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    {/* User legend - Admin only */}
+                    {/* User legend - Desktop only or small scrollable list on mobile */}
                     {role === 'admin' && (
-                      <div className="admin-card" style={{ padding: 0, overflow: 'hidden', flex: 1 }}>
-                        <div style={{ padding: '12px 16px', borderBottom: '1px solid hsl(var(--admin-card-border))', display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <UsersRound style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
-                          <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>Usuários Ativos</span>
+                      <div className="admin-card p-0 overflow-hidden flex-1 hidden md:block">
+                        <div className="p-3 px-4 border-b border-admin-card-border flex items-center gap-2">
+                          <UsersRound className="w-3.5 h-3.5 text-admin-sidebar-accent" />
+                          <span className="font-bold text-[0.82rem]">Usuários Ativos</span>
                         </div>
-                        <div style={{ padding: '8px 0', maxHeight: 200, overflowY: 'auto' }}>
+                        <div className="p-2 max-h-[150px] sm:max-h-[200px] overflow-y-auto">
                           {users.filter(u => !u.isVago).length === 0 ? (
-                            <p style={{ padding: '12px 16px', fontSize: '0.78rem', color: 'hsl(var(--muted-foreground))' }}>
-                              Nenhum usuário cadastrado
-                            </p>
+                            <p className="p-3 text-[0.78rem] text-muted-foreground">Nenhum usuário</p>
                           ) : users.filter(u => !u.isVago).map(user => {
                             const color = REP_COLOR_PALETTE[user.colorIndex || 0] || 'hsl(220 15% 40%)';
                             const count = clientes.filter(c => c.userId === user.id).length;
@@ -1846,20 +1846,13 @@ export default function Admin() {
                               <button
                                 key={user.id}
                                 onClick={() => setDashFilterUser(prev => prev === String(user.id) ? '' : String(user.id))}
-                                style={{
-                                  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                                  padding: '7px 16px', border: 'none', cursor: 'pointer', textAlign: 'left',
-                                  background: isActive ? `${color}18` : 'transparent',
-                                  transition: 'background 0.15s',
-                                  flexShrink: 0,
-                                }}
+                                className={`w-full flex items-center gap-2.5 p-1.5 px-4 border-none cursor-pointer text-left rounded-md transition-colors ${
+                                  isActive ? 'bg-admin-sidebar-accent/10' : 'bg-transparent'
+                                }`}
                               >
-                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0, border: isActive ? `2px solid ${color}` : 'none' }} />
-                                <span style={{ flex: 1, fontSize: '0.78rem', fontWeight: isActive ? 700 : 500 }}>{user.full_name || user.fullName || user.username}</span>
-                                <span style={{
-                                  fontSize: '0.68rem', fontWeight: 700, padding: '1px 8px', borderRadius: 10,
-                                  background: `${color}22`, color,
-                                }}>
+                                <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isActive ? 'ring-2 ring-offset-1 ring-admin-sidebar-accent' : ''}`} style={{ background: color }} />
+                                <span className={`flex-1 text-[0.78rem] truncate ${isActive ? 'font-bold' : 'font-medium'}`}>{user.full_name || user.fullName || user.username}</span>
+                                <span className="text-[0.68rem] font-bold px-2 rounded-full bg-black/5 dark:bg-white/5">
                                   {count}
                                 </span>
                               </button>
@@ -1870,28 +1863,28 @@ export default function Admin() {
                     )}
 
                     {/* Quick stats & Reports */}
-                    <div className="admin-card" style={{ padding: '12px 16px' }}>
-                      <div style={{ paddingBottom: 10, borderBottom: '1px solid hsl(var(--admin-card-border))', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Database style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
-                        <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>Relatórios e Métricas</span>
+                    <div className="admin-card p-3 px-4 md:p-3 md:px-4 border-none md:border md:bg-admin-card-bg shadow-none md:shadow-sm">
+                      <div className="pb-2.5 border-b border-admin-card-border mb-3 hidden md:flex items-center gap-2">
+                        <Database className="w-3.5 h-3.5 text-admin-sidebar-accent" />
+                        <span className="font-bold text-[0.82rem]">Relatórios e Métricas</span>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <div className="flex md:grid md:grid-cols-2 gap-2 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
                         {[
-                          { l: 'Clientes Total', v: clientes.length, t: 'baserotas' as TabId, c: '#EAB308' },
-                          { l: 'Usuários', v: users.length, t: 'users' as TabId, c: '#3B82F6' },
-                          { l: 'Interesses', v: interests.length, t: 'interests' as TabId, c: '#6366F1' },
-                          { l: 'Grupos', v: groups.length, t: 'groups' as TabId, c: '#06B6D4' },
+                          { l: 'Filtrados', v: filteredClientes.length, t: 'baserotas' as TabId, c: '#EAB308' },
+                          { l: 'Territórios', v: territories.length, t: 'territories' as TabId, c: '#22C55E' },
+                          { l: 'Estados', v: ufEntries.length, t: 'baserotas' as TabId, c: '#3B82F6' },
+                          { l: 'Pendentes', v: pendingInterests, t: 'interests' as TabId, c: '#F59E0B' },
+                          { l: 'Usuários', v: users.length, t: 'users' as TabId, c: '#06B6D4' },
+                          { l: 'Grupos', v: groups.length, t: 'groups' as TabId, c: '#6366F1' },
                         ].map(s => (
                           <button
                             key={s.l}
                             onClick={() => setActiveTab(s.t)}
-                            style={{
-                              padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${s.c}22`,
-                              background: `${s.c}0A`, cursor: 'pointer', textAlign: 'left',
-                            }}
+                            className="flex-1 min-w-[100px] md:min-w-0 p-2 md:p-2.5 rounded-xl border border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5 cursor-pointer text-left hover:scale-[1.02] transition-transform"
+                            style={{ borderLeft: `3px solid ${s.c}` }}
                           >
-                            <p style={{ fontWeight: 800, fontSize: '1.2rem', color: s.c }}>{s.v}</p>
-                            <p style={{ fontSize: '0.7rem', color: 'hsl(var(--muted-foreground))', marginTop: 2 }}>{s.l}</p>
+                            <p className="font-black text-sm md:text-lg leading-tight" style={{ color: s.c }}>{s.v}</p>
+                            <p className="text-[10px] md:text-[0.65rem] text-muted-foreground font-bold uppercase tracking-tighter mt-0.5">{s.l}</p>
                           </button>
                         ))}
                       </div>
@@ -1901,7 +1894,6 @@ export default function Admin() {
               </div>
             );
           })()}
-
 
           {/* ━━ USUÁRIOS ━━ */}
           {(activeTab === 'users' || activeTab.startsWith('user_type_')) && (
@@ -2329,7 +2321,6 @@ export default function Admin() {
             const computedTerritories = (() => {
               const map = new globalThis.Map<string, { municipio: string, uf: string, userIds: Set<number>, clientCount: number }>();
               
-              // Process clients
               clientes.forEach(c => {
                 if (!c.cidade || !c.uf) return;
                 const city = c.cidade.trim();
@@ -2342,7 +2333,6 @@ export default function Admin() {
                 if (c.userId) entry.userIds.add(c.userId);
               });
 
-              // Process explicit territories from database
               territories.forEach(t => {
                 if (!t.municipio || !t.uf) return;
                 const city = t.municipio.trim();
@@ -2370,45 +2360,150 @@ export default function Admin() {
               : computedTerritories;
 
             return (
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+              <div className="flex flex-col lg:grid lg:grid-cols-3 gap-5">
                 {/* LISTA */}
-                <div className="xl:col-span-2 space-y-4">
-                  <Card className="border-border/40 flex flex-col h-full">
-                    <CardHeader className="pb-3"><div className="flex items-center justify-between flex-wrap gap-2"><CardTitle className="text-sm flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" />Locais de Atuação</CardTitle><div className="flex gap-2"><div className="relative"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" /><Input placeholder="Filtrar UF..." value={filterUF} onChange={e => setFilterUF(e.target.value.toUpperCase())} className="h-8 text-xs pl-7 w-28 uppercase" maxLength={2} /></div></div></div></CardHeader>
-                    <CardContent className="p-0 flex-1 overflow-auto max-h-[calc(100vh-250px)]">
-                      {filteredTerritories.length === 0 ? (<div className="py-16 text-center text-muted-foreground"><MapPin className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Nenhum território encontrado</p></div>) : (
-                        <Table>
-                          <TableHeader><TableRow className="hover:bg-transparent border-border/40"><TableHead className="pl-4">Município</TableHead><TableHead className="w-12">UF</TableHead><TableHead className="text-center">Clientes</TableHead><TableHead>Usuários Responsáveis</TableHead></TableRow></TableHeader>
-                          <TableBody>{filteredTerritories.map(t => (
-                            <TableRow key={t.id} className="border-border/30 hover:bg-secondary/30">
-                              <TableCell className="text-xs font-medium pl-4">{t.municipio}</TableCell>
-                              <TableCell className="text-xs font-mono text-muted-foreground">{t.uf}</TableCell>
-                              <TableCell className="text-center"><span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">{t.clientCount}</span></TableCell>
-                              <TableCell>
-                                <div className="flex flex-wrap gap-1">
-                                  {t.userIds.length === 0 ? <span className="text-[10px] text-muted-foreground italic">Sem usuário</span> : t.userIds.map(id => {
-                                    const u = users.find(u => u.id === id);
-                                    return <span key={id} className="text-[10px] px-1.5 py-0.5 rounded-md border border-border/50 bg-background/50 flex items-center gap-1">{u ? u.full_name || u.username : `ID: ${id}`}</span>
-                                  })}
+                <div className="lg:col-span-2 space-y-4 order-2 lg:order-1">
+                  <Card className="border-border/40 flex flex-col h-full overflow-hidden">
+                    <CardHeader className={`pb-3 border-b border-border/40 bg-card/50 ${!isDashFiltersOpen ? 'hidden lg:block' : 'block animate-in slide-in-from-top-4 duration-300'}`}>
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-primary" />Locais de Atuação
+                        </CardTitle>
+                        <div className="flex gap-2">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                            <Input 
+                              placeholder="Filtrar UF..." 
+                              value={filterUF} 
+                              onChange={e => setFilterUF(e.target.value.toUpperCase())} 
+                              className="h-8 text-xs pl-7 w-28 uppercase" 
+                              maxLength={2} 
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0 flex-1 overflow-auto max-h-[calc(100vh-250px)] custom-scrollbar">
+                      {filteredTerritories.length === 0 ? (
+                        <div className="py-16 text-center text-muted-foreground">
+                          <MapPin className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                          <p className="text-sm">Nenhum território encontrado</p>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Desktop View */}
+                          <div className="hidden lg:block">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="hover:bg-transparent border-border/40">
+                                  <TableHead className="pl-4">Município</TableHead>
+                                  <TableHead className="w-12">UF</TableHead>
+                                  <TableHead className="text-center">Clientes</TableHead>
+                                  <TableHead>Usuários Responsáveis</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {filteredTerritories.map(t => (
+                                  <TableRow key={t.id} className="border-border/30 hover:bg-secondary/30">
+                                    <TableCell className="text-xs font-medium pl-4">{t.municipio}</TableCell>
+                                    <TableCell className="text-xs font-mono text-muted-foreground">{t.uf}</TableCell>
+                                    <TableCell className="text-center">
+                                      <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                                        {t.clientCount}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex flex-wrap gap-1">
+                                        {t.userIds.length === 0 ? (
+                                          <span className="text-[10px] text-muted-foreground italic">Sem usuário</span>
+                                        ) : t.userIds.map(id => {
+                                          const u = users.find(u => u.id === id);
+                                          return (
+                                            <span key={id} className="text-[10px] px-1.5 py-0.5 rounded-md border border-border/50 bg-background/50 flex items-center gap-1">
+                                              {u ? u.full_name || u.username : `ID: ${id}`}
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+
+                          {/* Mobile View */}
+                          <div className="lg:hidden divide-y divide-border/40">
+                            {filteredTerritories.map(t => (
+                              <div 
+                                key={t.id} 
+                                className="p-4 active:bg-secondary/20 transition-colors flex items-center justify-between gap-4"
+                                onClick={() => {
+                                  setSelectedTerritory(t);
+                                  setIsTerritoryDetailOpen(true);
+                                }}
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-[10px] font-black text-primary bg-primary/10 px-1.5 py-0.5 rounded uppercase">
+                                      {t.uf}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground font-bold">{t.clientCount} Clientes</span>
+                                  </div>
+                                  <h4 className="text-sm font-bold text-foreground truncate">{t.municipio}</h4>
+                                  <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {t.userIds.slice(0, 2).map(id => {
+                                      const u = users.find(u => u.id === id);
+                                      return (
+                                        <span key={id} className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border/40">
+                                          {u ? u.username : `ID: ${id}`}
+                                        </span>
+                                      );
+                                    })}
+                                    {t.userIds.length > 2 && (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border/40">
+                                        +{t.userIds.length - 2}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}</TableBody>
-                        </Table>
+                                <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
+                              </div>
+                            ))}
+                          </div>
+                        </>
                       )}
                     </CardContent>
                   </Card>
                 </div>
                 {/* MAPA */}
-                <div className="xl:col-span-1 space-y-4">
-                  <Card className="border-border/40">
-                    <CardHeader className="pb-3 border-b border-border/10">
-                      <CardTitle className="text-sm flex items-center gap-2"><Map className="w-4 h-4 text-primary" />Mapa de Cobertura</CardTitle>
-                      <CardDescription className="text-xs">Os estados pintados possuem clientes com representantes ativos.</CardDescription>
+                <div className="lg:col-span-1 space-y-4 order-1 lg:order-2">
+                  <Card className="border-border/40 overflow-hidden">
+                    <CardHeader className="pb-3 border-b border-border/10 flex flex-row items-center justify-between">
+                      <div>
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Map className="w-4 h-4 text-primary" />Mapa de Cobertura
+                        </CardTitle>
+                        <CardDescription className="text-xs">Clique no estado para filtrar.</CardDescription>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className={`lg:hidden h-8 px-2 text-[10px] font-bold gap-1 transition-colors ${isTerritoryMapOpen ? 'bg-primary/10 text-primary' : ''}`}
+                        onClick={() => setIsTerritoryMapOpen(!isTerritoryMapOpen)}
+                      >
+                        {isTerritoryMapOpen ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                        {isTerritoryMapOpen ? 'Fechar' : 'Abrir'}
+                      </Button>
                     </CardHeader>
-                    <CardContent className="p-4 bg-primary/5 flex justify-center">
+                    <CardContent className={`${isTerritoryMapOpen ? 'flex' : 'hidden lg:flex'} p-4 bg-primary/5 justify-center animate-in fade-in zoom-in duration-300`}>
                       <div style={{ width: '100%', maxWidth: '350px' }}>
-                        <MiniMapBrasil territories={computedTerritories.flatMap(t => t.userIds.map(id => ({ id: t.id, municipio: t.municipio, uf: t.uf, userId: id, modo: 'atendimento' as const })))} filterUF={filterUF} filterRep="" onClickUF={uf => setFilterUF(prev => prev === uf ? '' : uf)} />
+                        <MiniMapBrasil 
+                          territories={computedTerritories.flatMap(t => t.userIds.map(id => ({ id: t.id, municipio: t.municipio, uf: t.uf, userId: id, modo: 'atendimento' as const })))} 
+                          filterUF={filterUF} 
+                          filterRep="" 
+                          onClickUF={uf => setFilterUF(prev => prev === uf ? '' : uf)} 
+                        />
                       </div>
                     </CardContent>
                   </Card>
@@ -2416,11 +2511,11 @@ export default function Admin() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="admin-card text-center py-4 rounded-xl border border-border/50 bg-card">
                       <p className="text-2xl font-black text-primary">{allUFs.length}</p>
-                      <p className="text-[10px] uppercase font-bold text-muted-foreground mt-1">Estados Atendidos</p>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground mt-1 tracking-tighter">Estados Ativos</p>
                     </div>
                     <div className="admin-card text-center py-4 rounded-xl border border-border/50 bg-card">
                       <p className="text-2xl font-black text-primary">{computedTerritories.length}</p>
-                      <p className="text-[10px] uppercase font-bold text-muted-foreground mt-1">Cidades Atendidas</p>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground mt-1 tracking-tighter">Cidades Ativas</p>
                     </div>
                   </div>
                 </div>
@@ -2683,30 +2778,79 @@ export default function Admin() {
               <Card className="border-border/40">
                 <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><Filter className="w-4 h-4 text-primary" />Filtros</CardTitle></CardHeader>
                 <CardContent>
-                  <div className="flex flex-wrap gap-3 items-center">
-                    <select className="h-9 px-3 bg-background border border-input rounded-md text-sm" value={auditFilterUser} onChange={e => setAuditFilterUser(e.target.value)}><option value="">Todos os Representantes</option>{reps.map(r => <option key={r.id} value={r.code || ''}>{r.code || ''} — {r.full_name || r.fullName || r.username}</option>)}</select>
-                    <select className="h-9 px-3 bg-background border border-input rounded-md text-sm" value={auditFilterUF} onChange={e => setAuditFilterUF(e.target.value)}><option value="">Todos os Estados</option>{UF_DATA.map(u => <option key={u.sigla} value={u.sigla}>{u.sigla}</option>)}</select>
-                    <select className="h-9 px-3 bg-background border border-input rounded-md text-sm" value={auditFilterAction} onChange={e => setAuditFilterAction(e.target.value)}><option value="">Todas as Ações</option>{Object.entries(auditActionLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => { setAuditFilterUser(''); setAuditFilterAction(''); setAuditFilterUF(''); }}><X className="w-3.5 h-3.5" />Limpar</Button>
-                    <span className="ml-auto text-xs text-muted-foreground">{filteredAudit.length} de {auditLogs.length} registros</span>
+                  <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                    <select className="h-9 px-3 bg-background border border-input rounded-md text-sm flex-1" value={auditFilterUser} onChange={e => setAuditFilterUser(e.target.value)}><option value="">Todos os Representantes</option>{reps.map(r => <option key={r.id} value={r.code || ''}>{r.code || ''} — {r.full_name || r.fullName || r.username}</option>)}</select>
+                    <div className="flex gap-2">
+                      <select className="h-9 px-3 bg-background border border-input rounded-md text-sm flex-1" value={auditFilterUF} onChange={e => setAuditFilterUF(e.target.value)}><option value="">Todos os Estados</option>{UF_DATA.map(u => <option key={u.sigla} value={u.sigla}>{u.sigla}</option>)}</select>
+                      <select className="h-9 px-3 bg-background border border-input rounded-md text-sm flex-1" value={auditFilterAction} onChange={e => setAuditFilterAction(e.target.value)}><option value="">Todas as Ações</option>{Object.entries(auditActionLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Button variant="outline" size="sm" className="h-9 gap-1.5 flex-1 sm:flex-none" onClick={() => { setAuditFilterUser(''); setAuditFilterAction(''); setAuditFilterUF(''); }}><X className="w-3.5 h-3.5" />Limpar</Button>
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">{filteredAudit.length} registros</span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
-              <Card className="border-border/40">
+              
+              <Card className="border-border/40 overflow-hidden">
                 <CardContent className="p-0">
-                  {filteredAudit.length === 0 ? (<div className="py-16 text-center text-muted-foreground"><ScrollText className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Nenhum registro encontrado</p></div>) : (
-                    <div className="overflow-auto max-h-[calc(100vh-320px)]"><Table>
-                      <TableHeader><TableRow className="hover:bg-transparent border-border/40"><TableHead className="pl-4">Data/Hora</TableHead><TableHead>Ação</TableHead><TableHead>Entidade</TableHead><TableHead>Detalhes</TableHead><TableHead className="w-20 pr-4">Por</TableHead></TableRow></TableHeader>
-                      <TableBody>{filteredAudit.map(log => (
-                        <TableRow key={log.id} className="border-border/30 hover:bg-secondary/30">
-                          <TableCell className="pl-4 text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">{new Date(log.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</TableCell>
-                          <TableCell><span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium whitespace-nowrap">{auditActionLabel[log.action] || log.action}</span></TableCell>
-                          <TableCell className="text-xs font-medium">{log.entity}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground max-w-[280px] truncate">{log.details}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground pr-4">{log.performedBy}</TableCell>
-                        </TableRow>
-                      ))}</TableBody>
-                    </Table></div>
+                  {filteredAudit.length === 0 ? (
+                    <div className="py-16 text-center text-muted-foreground">
+                      <ScrollText className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                      <p className="text-sm">Nenhum registro encontrado</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Desktop Table View */}
+                      <div className="hidden md:block overflow-auto max-h-[calc(100vh-320px)]">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="hover:bg-transparent border-border/40">
+                              <TableHead className="pl-4">Data/Hora</TableHead>
+                              <TableHead>Ação</TableHead>
+                              <TableHead>Entidade</TableHead>
+                              <TableHead>Detalhes</TableHead>
+                              <TableHead className="w-20 pr-4">Por</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredAudit.map(log => (
+                              <TableRow key={log.id} className="border-border/30 hover:bg-secondary/30">
+                                <TableCell className="pl-4 text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">{new Date(log.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</TableCell>
+                                <TableCell><span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium whitespace-nowrap">{auditActionLabel[log.action] || log.action}</span></TableCell>
+                                <TableCell className="text-xs font-medium">{log.entity}</TableCell>
+                                <TableCell className="text-xs text-muted-foreground max-w-[280px] truncate">{log.details}</TableCell>
+                                <TableCell className="text-xs text-muted-foreground pr-4">{log.performedBy}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* Mobile Card View */}
+                      <div className="md:hidden divide-y divide-border/20 max-h-[calc(100vh-280px)] overflow-y-auto">
+                        {filteredAudit.map(log => (
+                          <div key={log.id} className="p-4 space-y-2 active:bg-secondary/40 transition-colors">
+                            <div className="flex justify-between items-start">
+                              <span className="text-[10px] font-black bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                                {auditActionLabel[log.action] || log.action}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                {new Date(log.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-foreground">{log.entity}</p>
+                              <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{log.details}</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 pt-1">
+                              <User className="w-3 h-3 text-primary/40" />
+                              <span className="text-[10px] font-medium text-muted-foreground uppercase">{log.performedBy}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </CardContent>
               </Card>
@@ -2722,39 +2866,106 @@ export default function Admin() {
                   { key: 'accepted', label: 'Aceitas', icon: CheckCircle2, color: 'text-emerald-400', badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', items: interests.filter(i => i.status === 'accepted') },
                   { key: 'rejected', label: 'Recusadas', icon: XCircle, color: 'text-destructive', badge: 'bg-destructive/10 text-destructive border-destructive/30', items: interests.filter(i => i.status === 'rejected') },
                 ].filter(g => g.items.length > 0);
-                return (<div className="space-y-6">{iGroups.map(({ key, label, icon: Icon, color, badge, items }) => (
-                  <div key={key}>
-                    <div className="flex items-center gap-2 mb-3"><Icon className={`w-4 h-4 ${color}`} /><h3 className="text-sm font-semibold">{label}</h3><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge}`}>{items.length}</span></div>
-                    <Card className="border-border/40 overflow-hidden"><Table>
-                      <TableHeader><TableRow className="hover:bg-transparent border-border/40">
-                        <TableHead className="pl-4">Solicitante</TableHead><TableHead>Área</TableHead><TableHead className="w-20">Modo</TableHead><TableHead className="w-28">Data</TableHead>
-                        {key === 'pending' && <TableHead className="w-36 pr-4">Ação</TableHead>}
-                      </TableRow></TableHeader>
-                      <TableBody>{items.map(req => (
-                        <TableRow key={req.id} className="border-border/30 hover:bg-secondary/30">
-                          <TableCell className="pl-4">
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-bold">{req.nome}</p>
-                              {req.userId && <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono font-bold tracking-tight">ID: {req.userId}</span>}
-                            </div>
-                            <div className="flex flex-wrap gap-x-3 mt-0.5">
-                              {req.empresa && <span className="text-[10px] text-muted-foreground">{req.empresa}</span>}
-                              {req.email && <span className="text-[10px] text-primary/80">{req.email}</span>}
-                            </div>
-                            {req.observacoes && <p className="text-[10px] text-muted-foreground italic mt-1.5 border-l-2 border-primary/20 pl-2">“{req.observacoes}”</p>}
-                          </TableCell>
-                          <TableCell><div className="flex items-center gap-1.5"><MapPin className="w-3 h-3 text-primary shrink-0" /><div><p className="text-xs font-semibold">{req.municipio}</p><p className="text-[10px] text-muted-foreground font-mono">{req.uf}</p></div></div></TableCell>
-                          <TableCell>{req.modo && <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${req.modo === 'planejamento' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>{req.modo === 'planejamento' ? 'Plan.' : 'Atend.'}</span>}</TableCell>
-                          <TableCell className="text-[10px] text-muted-foreground tabular-nums">{new Date(req.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</TableCell>
-                          {key === 'pending' && (<TableCell className="pr-4"><div className="flex gap-1.5">
-                            <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white border-0" onClick={() => handleInterestStatus(req.id, 'accepted')}><CheckCircle2 className="w-3 h-3" />Aceitar</Button>
-                            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-destructive hover:bg-destructive/10" onClick={() => handleInterestStatus(req.id, 'rejected')}><XCircle className="w-3 h-3" />Recusar</Button>
-                          </div></TableCell>)}
-                        </TableRow>
-                      ))}</TableBody>
-                    </Table></Card>
+                return (
+                  <div className="space-y-6">
+                    {iGroups.map(({ key, label, icon: Icon, color, badge, items }) => (
+                      <div key={key}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Icon className={`w-4 h-4 ${color}`} />
+                          <h3 className="text-sm font-semibold">{label}</h3>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge}`}>{items.length}</span>
+                        </div>
+                        
+                        <Card className="border-border/40 overflow-hidden">
+                          {/* Desktop Table View */}
+                          <div className="hidden md:block">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="hover:bg-transparent border-border/40">
+                                  <TableHead className="pl-4">Solicitante</TableHead>
+                                  <TableHead>Área</TableHead>
+                                  <TableHead className="w-20">Modo</TableHead>
+                                  <TableHead className="w-28">Data</TableHead>
+                                  {key === 'pending' && <TableHead className="w-36 pr-4">Ação</TableHead>}
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {items.map(req => (
+                                  <TableRow key={req.id} className="border-border/30 hover:bg-secondary/30">
+                                    <TableCell className="pl-4">
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-sm font-bold">{req.nome}</p>
+                                        {req.userId && <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono font-bold tracking-tight">ID: {req.userId}</span>}
+                                      </div>
+                                      <div className="flex flex-wrap gap-x-3 mt-0.5">
+                                        {req.empresa && <span className="text-[10px] text-muted-foreground">{req.empresa}</span>}
+                                        {req.email && <span className="text-[10px] text-primary/80">{req.email}</span>}
+                                      </div>
+                                      {req.observacoes && <p className="text-[10px] text-muted-foreground italic mt-1.5 border-l-2 border-primary/20 pl-2">“{req.observacoes}”</p>}
+                                    </TableCell>
+                                    <TableCell><div className="flex items-center gap-1.5"><MapPin className="w-3 h-3 text-primary shrink-0" /><div><p className="text-xs font-semibold">{req.municipio}</p><p className="text-[10px] text-muted-foreground font-mono">{req.uf}</p></div></div></TableCell>
+                                    <TableCell>{req.modo && <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${req.modo === 'planejamento' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>{req.modo === 'planejamento' ? 'Plan.' : 'Atend.'}</span>}</TableCell>
+                                    <TableCell className="text-[10px] text-muted-foreground tabular-nums">{new Date(req.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</TableCell>
+                                    {key === 'pending' && (
+                                      <TableCell className="pr-4">
+                                        <div className="flex gap-1.5">
+                                          <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white border-0" onClick={() => handleInterestStatus(req.id, 'accepted')}><CheckCircle2 className="w-3 h-3" />Aceitar</Button>
+                                          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-destructive hover:bg-destructive/10" onClick={() => handleInterestStatus(req.id, 'rejected')}><XCircle className="w-3 h-3" />Recusar</Button>
+                                        </div>
+                                      </TableCell>
+                                    )}
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+
+                          {/* Mobile Card View */}
+                          <div className="md:hidden divide-y divide-border/20">
+                            {items.map(req => (
+                              <div key={req.id} className="p-4 space-y-3 active:bg-secondary/40 transition-colors">
+                                <div className="flex justify-between items-start gap-2">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-foreground truncate">{req.nome}</p>
+                                    <p className="text-[10px] text-muted-foreground truncate">{req.empresa || req.email}</p>
+                                  </div>
+                                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-tighter ${req.modo === 'planejamento' ? 'bg-blue-500/10 text-blue-500' : 'bg-purple-500/10 text-purple-500'}`}>
+                                    {req.modo === 'planejamento' ? 'Planejamento' : 'Atendimento'}
+                                  </span>
+                                </div>
+                                
+                                <div className="flex items-center justify-between text-[11px] bg-secondary/30 p-2 rounded-lg border border-border/40">
+                                  <div className="flex items-center gap-1.5">
+                                    <MapPin className="w-3 h-3 text-primary" />
+                                    <span className="font-bold">{req.municipio} - {req.uf}</span>
+                                  </div>
+                                  <span className="text-muted-foreground font-mono">{new Date(req.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                                </div>
+
+                                {req.observacoes && (
+                                  <p className="text-[11px] text-muted-foreground italic bg-primary/5 p-2 rounded border-l-2 border-primary/30">
+                                    "{req.observacoes}"
+                                  </p>
+                                )}
+
+                                {key === 'pending' && (
+                                  <div className="flex gap-2 pt-1">
+                                    <Button className="flex-1 h-9 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-lg shadow-emerald-600/10" onClick={() => handleInterestStatus(req.id, 'accepted')}>
+                                      <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Aceitar
+                                    </Button>
+                                    <Button variant="outline" className="flex-1 h-9 text-xs font-bold text-destructive hover:bg-destructive/10 border-destructive/20" onClick={() => handleInterestStatus(req.id, 'rejected')}>
+                                      <XCircle className="w-3.5 h-3.5 mr-1.5" /> Recusar
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </Card>
+                      </div>
+                    ))}
                   </div>
-                ))}</div>);
+                );
               })()}
             </div>
           )}
@@ -2828,6 +3039,7 @@ export default function Admin() {
             <BaseClientePanel 
               onSwitchToReps={() => setActiveTab('reps')} 
               canCreate={role === 'admin' || canEdit('settings') || (myPermissions.find(p => p.moduleId === 'clientes')?.canEdit || false)}
+              isMobileFilterOpen={isDashFiltersOpen}
             />
           )}
 
@@ -3106,6 +3318,88 @@ export default function Admin() {
                       <Button type="submit" className="w-48 gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"><Save className="w-4 h-4" /> Cadastrar Usuário</Button>
                     </div>
                   </form>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Modal de Detalhes do Território (Mobile) */}
+          <Dialog open={isTerritoryDetailOpen} onOpenChange={setIsTerritoryDetailOpen}>
+            <DialogContent className="max-w-md p-0 overflow-hidden">
+              {selectedTerritory && (
+                <>
+                  <DialogHeader className="p-6 bg-primary/5 border-b border-border/40">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-1 rounded uppercase tracking-widest">
+                        {selectedTerritory.uf}
+                      </span>
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold bg-primary/10 text-primary">
+                        <MapPin className="w-3 h-3" />
+                        TERRITÓRIO ATIVO
+                      </div>
+                    </div>
+                    <DialogTitle className="text-xl font-black leading-tight">{selectedTerritory.municipio}</DialogTitle>
+                    <DialogDescription className="text-xs font-bold text-muted-foreground uppercase tracking-tight">
+                      Informações da região de atuação
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                    {/* Estatísticas Rápidas */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 rounded-xl border border-border/50 bg-secondary/20 text-center">
+                        <p className="text-2xl font-black text-primary">{selectedTerritory.clientCount}</p>
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase mt-1">Clientes</p>
+                      </div>
+                      <div className="p-4 rounded-xl border border-border/50 bg-secondary/20 text-center">
+                        <p className="text-2xl font-black text-primary">{selectedTerritory.userIds.length}</p>
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase mt-1">Usuários</p>
+                      </div>
+                    </div>
+
+                    {/* Lista de Usuários Responsáveis */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 border-b border-border/40 pb-2">
+                        <Users2 className="w-4 h-4 text-primary" />
+                        <span className="text-xs font-bold uppercase tracking-widest">Responsáveis com Clientes</span>
+                      </div>
+                      <div className="space-y-2">
+                        {selectedTerritory.userIds.length === 0 ? (
+                          <p className="text-xs text-muted-foreground italic text-center py-2">Nenhum usuário vinculado</p>
+                        ) : selectedTerritory.userIds.map(id => {
+                          const u = users.find(u => u.id === id);
+                          const userClients = clientes.filter(c => c.userId === id && c.cidade === selectedTerritory.municipio && c.uf === selectedTerritory.uf);
+                          return (
+                            <div key={id} className="flex items-center justify-between p-3 rounded-lg border border-border/30 bg-background/50">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                                  <User className="w-4 h-4 text-primary" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-bold truncate">{u ? u.full_name || u.fullName || u.username : `ID: ${id}`}</p>
+                                  <p className="text-[10px] text-muted-foreground uppercase font-medium">{u?.code || 'S/ COD'}</p>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-xs font-black text-primary">{userClients.length}</p>
+                                <p className="text-[9px] text-muted-foreground font-bold uppercase">Cli.</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-secondary/20 border-t border-border/40">
+                    <Button 
+                      className="w-full font-bold text-xs h-10" 
+                      variant="outline"
+                      onClick={() => setIsTerritoryDetailOpen(false)}
+                    >
+                      Fechar Detalhes
+                    </Button>
+                  </div>
                 </>
               )}
             </DialogContent>

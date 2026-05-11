@@ -125,11 +125,11 @@ export default function MapHeader({
   }, [showNotifications, myNotifications]);
 
   return (
-    <header className="bg-card/95 backdrop-blur-sm border-b border-border px-4 py-2.5 flex items-center gap-3 md:gap-6 sticky top-0 z-[1000] shadow-sm">
+    <header className="bg-card/95 backdrop-blur-sm border-b border-border px-2 md:px-4 py-2 flex items-center justify-between gap-2 md:gap-6 sticky top-0 z-[1000] shadow-sm overflow-hidden">
       {/* Logo / Brand */}
-      <div className="flex items-center gap-4 shrink-0 cursor-pointer group" onClick={() => navigate('/mapa')}>
+      <div className="flex items-center gap-2 shrink-0 cursor-pointer group" onClick={() => navigate('/mapa')}>
         <div className="relative">
-          <img src="/Logo.png" alt="Logo" className="h-10 w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
+          <img src="/Logo.png" alt="Logo" className="h-7 sm:h-10 w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
           <div className="absolute inset-0 bg-primary/10 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
         </div>
       </div>
@@ -139,11 +139,11 @@ export default function MapHeader({
       {/* UF Selector & Search */}
       {!minimal && (
         <>
-          <div className="relative">
+          <div className="relative shrink-0 hidden sm:block">
             <select
               value={selectedUF || ""}
               onChange={(e) => onSelectUF?.(e.target.value || null)}
-              className="appearance-none bg-secondary text-foreground text-sm pl-3 pr-8 py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
+              className="appearance-none bg-secondary text-foreground text-[10px] sm:text-sm pl-2 sm:pl-3 pr-6 sm:pr-8 py-1.5 sm:py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
             >
               <option value="">Todos os Estados</option>
               {UF_DATA.sort((a, b) => a.sigla.localeCompare(b.sigla)).map((uf) => (
@@ -152,7 +152,7 @@ export default function MapHeader({
                 </option>
               ))}
             </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <ChevronDown className="absolute right-1.5 sm:right-2 top-1/2 -translate-y-1/2 w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground pointer-events-none" />
           </div>
 
           {/* General Search Bar */}
@@ -202,26 +202,26 @@ export default function MapHeader({
                 variant={showClientes ? "default" : "ghost"}
                 size="sm"
                 onClick={onToggleClientes}
-                className={`h-8 gap-2 px-3 ${showClientes ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background'}`}
+                className={`h-8 gap-1.5 sm:gap-2 px-2 sm:px-3 ${showClientes ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background'}`}
               >
-                <Users className="w-4 h-4" />
+                <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 <span className="hidden md:inline text-xs font-semibold">Clientes</span>
               </Button>
               <Button
                 variant={showHeatmap ? "default" : "ghost"}
                 size="sm"
                 onClick={onToggleHeatmap}
-                className={`h-8 gap-2 px-3 ${showHeatmap ? 'bg-orange-500 text-white shadow-sm hover:bg-orange-600' : 'text-muted-foreground hover:bg-background'}`}
+                className={`h-8 gap-1.5 sm:gap-2 px-2 sm:px-3 ${showHeatmap ? 'bg-orange-500 text-white shadow-sm hover:bg-orange-600' : 'text-muted-foreground hover:bg-background'}`}
               >
-                <Flame className="w-4 h-4" />
+                <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 <span className="hidden md:inline text-xs font-semibold">Calor</span>
               </Button>
               <div className="w-[1px] h-4 bg-border/40 mx-0.5" />
 
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className={`h-8 gap-2 px-2 hover:bg-background ${filtroUsuario ? 'text-primary' : 'text-muted-foreground'}`}>
-                    <Filter className="w-4 h-4" />
+                  <Button variant="ghost" size="sm" className={`h-8 gap-1.5 sm:gap-2 px-1.5 sm:px-2 hover:bg-background ${filtroUsuario ? 'text-primary' : 'text-muted-foreground'}`}>
+                    <Filter className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     {filtroUsuario && <Badge variant="secondary" className="h-4 px-1 text-[10px] bg-primary/20 text-primary border-0">Filtrado</Badge>}
                   </Button>
                 </PopoverTrigger>
@@ -235,6 +235,26 @@ export default function MapHeader({
                       {filtroUsuario && (
                         <Button variant="ghost" size="sm" onClick={() => onFilterUser?.(null)} className="h-6 text-[10px] text-destructive p-0">Limpar</Button>
                       )}
+                    </div>
+
+                    {/* Mobile UF Selector */}
+                    <div className="space-y-2 sm:hidden">
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Estado (UF)</label>
+                      <div className="relative">
+                        <select
+                          value={selectedUF || ""}
+                          onChange={(e) => onSelectUF?.(e.target.value || null)}
+                          className="w-full appearance-none bg-secondary text-foreground text-xs pl-3 pr-8 py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
+                        >
+                          <option value="">Todos os Estados</option>
+                          {UF_DATA.sort((a, b) => a.sigla.localeCompare(b.sigla)).map((uf) => (
+                            <option key={uf.sigla} value={uf.sigla}>
+                              {uf.sigla} - {uf.nome}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                      </div>
                     </div>
 
                     {/* User Multi-Select Filter (Admin/Supervisor Only) */}
@@ -384,7 +404,7 @@ export default function MapHeader({
       )}
 
       {/* Auth / Admin */}
-      <div className="flex items-center gap-2 ml-auto lg:ml-0">
+      <div className="flex items-center gap-2 lg:ml-0">
         {!isAuthenticated ? (
           <Button variant="outline" size="sm" onClick={() => navigate('/login')} className="gap-2 border-primary/20">
             <LogIn className="w-4 h-4" /> Entrar
@@ -434,19 +454,19 @@ export default function MapHeader({
 
             <Popover open={showUserMenu} onOpenChange={setShowUserMenu}>
               <PopoverTrigger asChild>
-                <button className="hidden sm:flex items-center gap-2.5 px-2.5 py-1.5 bg-secondary/60 rounded-xl border border-border/40 hover:bg-secondary/80 transition-colors min-w-[165px] text-left">
-                  <div className="w-8 h-8 rounded-full overflow-hidden bg-primary/20 flex items-center justify-center shrink-0 border border-primary/20">
+                <button className="flex items-center gap-2 px-1 sm:px-2.5 py-1 sm:py-1.5 bg-secondary/60 rounded-full sm:rounded-xl border border-border/40 hover:bg-secondary/80 transition-colors sm:min-w-[165px] text-left">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden bg-primary/20 flex items-center justify-center shrink-0 border border-primary/20">
                     {userPhoto ? (
                       <img src={userPhoto} alt={fullUserName} className="w-full h-full object-cover" />
                     ) : (
                       <User className="w-4 h-4 text-primary" />
                     )}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 hidden sm:block">
                     <p className="text-[11px] font-bold text-foreground leading-tight truncate">{fullUserName}</p>
                     <p className="text-[10px] text-muted-foreground leading-tight capitalize truncate">{String(userCargo).toLowerCase()}</p>
                   </div>
-                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-auto shrink-0" />
+                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-auto shrink-0 hidden sm:block" />
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-44 p-1.5 bg-card border-border shadow-2xl z-[3000]" align="end">
