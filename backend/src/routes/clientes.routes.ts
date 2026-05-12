@@ -29,59 +29,78 @@ router.get('/', async (req, res) => {
     const where: any = {};
     
     // Cada um no seu quadrado: 
-    // - Admin vê tudo (a menos que gerencie usuários específicos).
-    // - Usuários comuns (Representantes) só vêem os seus próprios clientes e os de seus subordinados.
     const user = (req as any).user;
     const hasSettingsPerm = user.permissions?.some((p: any) => p.module?.id === 'settings' && p.canEdit);
     const isAdmin = user.role === 'admin' || hasSettingsPerm;
 
     if (isAdmin) {
-      // Se for admin/settings mas gerencia usuários específicos, filtra por eles
       if (user.subordinateIds && user.subordinateIds.length > 0) {
         where.userId = { in: [user.id, ...user.subordinateIds] };
       }
-      // Se não gerencia ninguém, where continua {} (vê tudo)
-
-      // Override se houver query param userId explícito
       if (userId) {
         const ids = String(userId).split(',').map(id => Number(id.trim())).filter(id => !isNaN(id));
-        if (ids.length > 1) {
-          where.userId = { in: ids };
-        } else if (ids.length === 1) {
-          where.userId = ids[0];
-        }
+        if (ids.length > 1) where.userId = { in: ids };
+        else if (ids.length === 1) where.userId = ids[0];
       }
     } else if (user && (user.role === 'user' || user.role === 'supervisor')) {
       const subordinateIds = user.subordinateIds || [];
       where.userId = { in: [user.id, ...subordinateIds] };
     }
 
-    const clientes = await prisma.cliente.findMany({
-      where,
-      orderBy: { nome_cliente: 'asc' },
-      include: {
-        user: {
-          select: {
-            id: true,
-            full_name: true,
-            username: true
-          }
+    let clientes: any[] = [];
+    try {
+      // Tenta Prisma com timeout de 10 segundos
+      const prismaPromise = prisma.cliente.findMany({
+        where,
+        orderBy: { nome_cliente: 'asc' },
+        select: {
+          id_cliente: true,
+          codigo_cliente: true,
+          nome_cliente: true,
+          nome_abreviado: true,
+          uf: true,
+          cidade: true,
+          bairro: true,
+          latitude: true,
+          longitude: true,
+          userId: true,
+          status_ativo: true,
+          semana: true,
+          prioridade: true,
+          user: { select: { id: true, full_name: true, username: true } }
         }
+      });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 10000));
+      clientes = await Promise.race([prismaPromise, timeoutPromise]) as any[];
+      console.log(`[CLIENTES] Encontrados ${clientes.length} clientes via Prisma`);
+    } catch (e) {
+      console.warn(`[CLIENTES] Prisma falhou ou deu timeout, tentando via Supabase HTTP...`);
+      // Fallback para Supabase HTTP
+      let query = (req as any).supabaseAdmin.from('clientes').select('*, user:users(id, full_name, username)');
+      
+      // Mapear filtros 'where' para o formato Supabase
+      if (where.userId) {
+        if (where.userId.in) query = query.in('userId', where.userId.in);
+        else query = query.eq('userId', where.userId);
       }
-    });
-
-    console.log(`[CLIENTES] Encontrados ${clientes.length} clientes para o filtro:`, JSON.stringify(where));
+      
+      const { data, error } = await query.order('nome_cliente', { ascending: true });
+      if (error) throw error;
+      clientes = data || [];
+      console.log(`[CLIENTES] Encontrados ${clientes.length} clientes via HTTP Fallback`);
+    }
 
     // Anotando no caderninho quem andou bisbilhotando os clientes
-    if (user) await logUserActivity(user.id, 'query', 'Usuário consultou a base de clientes', req, 'Cliente');
+    if (user) {
+      logUserActivity(user.id, 'query', 'Usuário consultou a base de clientes', req, 'Cliente').catch(() => {});
+    }
 
     res.json(clientes);
   } catch (error: any) {
-    console.error('Deu ruim ao buscar clientes, mó zebra:', error);
+    console.error('Deu ruim ao buscar clientes:', error);
     res.status(500).json({ 
-      message: 'Erro ao buscar clientes no banco de dados',
-      details: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      message: 'Erro ao buscar clientes',
+      details: error.message
     });
   }
 });

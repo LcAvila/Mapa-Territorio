@@ -34,22 +34,27 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
       // Automatic Single Session Enforcement: 
       // Incrementing token_version on every fresh login (only if Prisma is UP)
       try {
-        await prisma.user.update({
+        const updatePromise = prisma.user.update({
           where: { id: userId },
           data: { token_version: { increment: 1 } }
         });
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 3000));
+        await Promise.race([updatePromise, timeoutPromise]);
+        
         console.log(`[AUTH] User ${userId} logged in. Incrementing token_version to enforce single session.`);
       } catch (e) {
-        console.warn(`[AUTH] Could not increment token_version (Prisma Down). Skipping session enforcement.`);
+        console.warn(`[AUTH] Could not increment token_version (Prisma Down/Timeout). Skipping session enforcement.`);
       }
     }
 
     let user = null;
     if (!req.isHttpFallback) {
         try {
-            user = await prisma.user.findUnique({ where: { id: userId }, select: PUBLIC_USER_FIELDS });
+            const findPromise = prisma.user.findUnique({ where: { id: userId }, select: PUBLIC_USER_FIELDS });
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 3000));
+            user = await Promise.race([findPromise, timeoutPromise]);
         } catch (e) {
-            console.warn(`[AUTH] Prisma failed to fetch PUBLIC_USER_FIELDS. Falling back to HTTP.`);
+            console.warn(`[AUTH] Prisma failed or timed out fetching PUBLIC_USER_FIELDS. Falling back to HTTP.`);
         }
     }
 

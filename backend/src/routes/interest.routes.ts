@@ -57,18 +57,32 @@ router.get('/', authenticate, requirePermission('interests', 'view'), async (req
     const where: any = {};
 
     // Restrição por hierarquia:
-    // - Admin: Vê tudo.
-    // - Supervisor/User: Vê apenas os seus próprios interesses e os de seus subordinados.
     if (user && user.role !== 'admin') {
       const subordinateIds = user.subordinateIds || [];
       where.userId = { in: [user.id, ...subordinateIds] };
     }
 
-    const ints = await prisma.interestRequest.findMany({ 
-      where,
-      orderBy: { created_at: 'desc' }
-    });
-    res.json(ints);
+    try {
+      const fetchPromise = prisma.interestRequest.findMany({ 
+        where,
+        orderBy: { created_at: 'desc' }
+      });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+      const ints = await Promise.race([fetchPromise, timeoutPromise]) as any[];
+      res.json(ints);
+    } catch (e) {
+      console.warn('[INTEREST] Prisma failed or timed out. Falling back to HTTP.');
+      let query = (req as any).supabaseAdmin.from('interest_requests').select('*').order('created_at', { ascending: false });
+      
+      if (user && user.role !== 'admin') {
+        const subordinateIds = user.subordinateIds || [];
+        query = query.in('userId', [user.id, ...subordinateIds]);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      res.json(data || []);
+    }
   } catch (error) {
     console.error('[INTEREST] Error fetching interests:', error);
     res.status(500).json({ message: 'Erro ao buscar interesses' });

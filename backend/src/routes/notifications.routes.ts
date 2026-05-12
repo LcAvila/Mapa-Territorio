@@ -9,13 +9,28 @@ const router = Router();
 router.get('/', authenticate, requirePermission('notifications', 'view'), async (req: AuthRequest, res) => {
   try {
     console.log(`[NOTIF] User ${req.user?.id} requesting notifications history`);
-    // Usando queryRaw para evitar problemas com o Prisma Client desatualizado no node_modules
-    const allNotifications: any[] = await prisma.$queryRawUnsafe(`
-      SELECT "id", "title", "message", "targetAll", "targetUserIds", "senderName", "createdAt"
-      FROM "notifications"
-      ORDER BY "createdAt" DESC
-      LIMIT 80
-    `);
+    
+    let allNotifications: any[] = [];
+    try {
+      const queryPromise = prisma.$queryRawUnsafe(`
+        SELECT "id", "title", "message", "targetAll", "targetUserIds", "senderName", "createdAt"
+        FROM "notifications"
+        ORDER BY "createdAt" DESC
+        LIMIT 80
+      `);
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+      allNotifications = await Promise.race([queryPromise, timeoutPromise]) as any[];
+    } catch (e) {
+      console.warn('[NOTIF] Prisma failed or timed out. Falling back to HTTP.');
+      const { data, error } = await (req as any).supabaseAdmin
+        .from('notifications')
+        .select('*')
+        .order('createdAt', { ascending: false })
+        .limit(80);
+      
+      if (error) throw error;
+      allNotifications = data || [];
+    }
     
     const currentUserId = Number(req.user?.id || 0);
     const isAdminLike = req.user?.role === 'admin' || req.user?.role === 'supervisor';
@@ -27,7 +42,7 @@ router.get('/', authenticate, requirePermission('notifications', 'view'), async 
           const raw = n.targetUserIds;
           if (!raw || !currentUserId) return false;
           
-          // Trata JSONB do Postgres
+          // Trata JSONB do Postgres ou Array do JS
           const targetIds = Array.isArray(raw) ? raw : [];
           return targetIds.map((id: any) => Number(id)).includes(currentUserId);
         });

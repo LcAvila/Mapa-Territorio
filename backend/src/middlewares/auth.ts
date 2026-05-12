@@ -1,17 +1,37 @@
 import { Request as ExRequest, Response as ExResponse, NextFunction as ExNextFunction } from 'express';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseAdmin } from '../lib/supabase';
 import { prisma } from '../prisma';
 
 export interface AuthRequest extends ExRequest {
   user?: any;
   isHttpFallback?: boolean;
+  supabaseAdmin?: any;
 }
+
+// Simple in-memory cache for auth sessions to reduce Supabase/DB load
+// Key: token, Value: { user, expiresAt }
+const authCache = new Map<string, { user: any; expiresAt: number }>();
+const CACHE_TTL = 1000 * 60 * 5; // 5 minutes cache
 
 export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
-  console.log(`[AUTH] Request received: ${req.method} ${req.originalUrl}. Token present: ${!!token}`);
+  
+  // Attach supabaseAdmin to request for easier fallback in routes
+  req.supabaseAdmin = supabaseAdmin;
+  
   if (!token) {
+    console.log(`[AUTH] Access denied: No token provided for ${req.method} ${req.originalUrl}`);
     return res.status(401).json({ message: 'Acesso negado' });
+  }
+
+  // Check cache first
+  const cached = authCache.get(token);
+  if (cached && cached.expiresAt > Date.now()) {
+    // console.log(`[AUTH] Cache hit for token. User: ${cached.user.username}`);
+    req.user = cached.user;
+    // Update last_active in background without awaiting - only if DB is likely up
+    // To avoid pool exhaustion, we skip this if we are in fallback mode
+    return next();
   }
 
   try {
@@ -19,59 +39,38 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
     const { data: { user: sbUser }, error: sbError } = await supabase.auth.getUser(token);
     
     if (sbError || !sbUser) {
-      console.error('[AUTH] Supabase error:', sbError?.message);
+      console.error('[AUTH] Supabase Auth error:', sbError?.message);
       return res.status(401).json({ message: 'Sessão inválida ou expirada' });
     }
 
-    // Step 2: Extract our custom user from Prisma
+    // Step 2: Extract our custom user from Prisma or Supabase HTTP
     const accessCode = sbUser.email?.split('@')[0];
     let user: any = null;
 
     try {
-      console.log(`[AUTH] Attempting to match user in Prisma. ID: ${sbUser.id}, Email: ${sbUser.email}`);
-      
-      const queryOptions: any = {
+      // Set a timeout for Prisma to avoid hanging
+      const prismaUserPromise = (prisma.user as any).findFirst({
         where: {
           OR: [
             { supabase_id: sbUser.id },
             sbUser.email ? { email: { equals: sbUser.email, mode: 'insensitive' } } : null,
             accessCode ? { code: accessCode } : null,
             accessCode ? { username: accessCode } : null,
-            // Fallback for admin specifically if email matches but username/code is different
             sbUser.email === 'avila.estudohtml@gmail.com' ? { username: 'admin' } : null
           ].filter(Boolean) as any
         },
         include: {
-          permissions: {
-            include: { module: true }
-          }
+          permissions: { include: { module: true } },
+          managedUsers: { select: { id: true } }
         }
-      };
+      });
 
-      // Try to include managedUsers only if it exists in the schema (avoid crash during sync)
-      try {
-        user = await (prisma.user as any).findFirst({
-          ...queryOptions,
-          include: {
-            ...queryOptions.include,
-            managedUsers: { select: { id: true } }
-          }
-        });
-      } catch (e) {
-        console.warn('[AUTH] managedUsers relation not found in Prisma yet, falling back...');
-        user = await (prisma.user as any).findFirst(queryOptions);
-      }
-
-      // Se encontramos por código/username mas o supabase_id estava errado ou nulo, sincronizamos agora
-      if (user && user.supabase_id !== sbUser.id) {
-        console.log(`[AUTH] Syncing supabase_id for user ${user.username} (ID: ${user.id}) -> ${sbUser.id}`);
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { supabase_id: sbUser.id }
-        }).catch(e => console.error('[AUTH] Failed to auto-sync supabase_id:', e));
-      }
-    } catch (prismaError) {
-      console.warn(`[AUTH] Prisma connection failed. Attempting HTTP Fallback via Supabase API (Port 443)...`);
+      // Simple race for timeout (5 seconds)
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+      user = await Promise.race([prismaUserPromise, timeoutPromise]);
+      
+    } catch (err) {
+      console.warn(`[AUTH] Prisma failed or timed out. Using Supabase HTTP Fallback...`);
       
       const { data: httpUser, error: httpError } = await supabase
         .from('users')
@@ -84,10 +83,13 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
         return res.status(401).json({ message: 'Perfil não encontrado (Modo Offline)' });
       }
 
-      console.log(`[AUTH] Perfil recuperado com sucesso via HTTP Fallback!`);
       user = {
         ...httpUser,
-        managedUsers: httpUser.managedUsers?.map((m: any) => ({ id: m.managed_user_id })) || []
+        permissions: (httpUser.permissions || []).map((p: any) => ({
+            ...p,
+            module: p.module || p.modules
+        })),
+        managedUsers: httpUser.managedUsers?.map((m: any) => ({ id: m.managed_user_id || m.id })) || []
       };
       req.isHttpFallback = true;
     }
@@ -114,6 +116,12 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
       tipo: user.tipo,
       subordinateIds: user.managedUsers?.map((s: any) => s.id) || []
     };
+
+    // Store in cache
+    authCache.set(token, {
+      user: req.user,
+      expiresAt: Date.now() + CACHE_TTL
+    });
 
     // Update last_active in background (if possible)
     if (!req.isHttpFallback) {
@@ -172,12 +180,14 @@ export const requirePermission = (moduleId: string, level: 'view' | 'edit' = 'vi
     }
 
     try {
-      // Usando queryRaw para garantir que pegamos as permissões mesmo se o Prisma Client estiver "preso"
-      const perms: any[] = await prisma.$queryRawUnsafe(
+      // Usando queryRaw com timeout para evitar travamento
+      const queryPromise = prisma.$queryRawUnsafe(
         'SELECT "canView", "canEdit" FROM "user_permissions" WHERE "userId" = $1 AND "moduleId" = $2',
         req.user.id, moduleId
       );
-
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 3000));
+      
+      const perms = await Promise.race([queryPromise, timeoutPromise]) as any[];
       const permission = perms[0];
 
       if (!permission) {
@@ -198,8 +208,18 @@ export const requirePermission = (moduleId: string, level: 'view' | 'edit' = 'vi
       console.log(`[PERMS] Access granted for module: ${moduleId}`);
       next();
     } catch (error) {
-      console.error('Permission check error:', error);
-      res.status(500).json({ message: 'Erro ao verificar permissões' });
+      console.error(`[PERMS] Prisma failed for permissions of module ${moduleId}. Using user.permissions from session...`);
+      
+      // Fallback: Check permissions already attached to user object in authenticate()
+      const userPerm = req.user.permissions?.find((p: any) => p.moduleId === moduleId || p.module?.id === moduleId);
+      
+      if (userPerm) {
+        if (level === 'view' && userPerm.canView) return next();
+        if (level === 'edit' && userPerm.canEdit) return next();
+      }
+
+      console.warn(`[PERMS] Fallback failed for module: ${moduleId}`);
+      res.status(403).json({ message: 'Acesso negado (Erro de Permissão)' });
     }
   };
 };

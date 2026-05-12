@@ -177,6 +177,7 @@ model Cliente {
   historicos        HistoricoVisitas[]
   planejamentos     PlanejamentoVisitas[]
 
+  @@index([userId])
   @@map("clientes")
 }
 

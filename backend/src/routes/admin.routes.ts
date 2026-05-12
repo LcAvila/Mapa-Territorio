@@ -12,12 +12,19 @@ router.use(authenticate);
 // Get all user types
 router.get('/user-types', authenticate, async (req, res) => {
   try {
-    // @ts-ignore
-    const types = await prisma.$queryRawUnsafe(`SELECT * FROM "user_types" ORDER BY "name" ASC`);
+    const fetchPromise = prisma.$queryRawUnsafe(`SELECT * FROM "user_types" ORDER BY "name" ASC`);
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+    const types = await Promise.race([fetchPromise, timeoutPromise]);
     res.json(types);
   } catch (error) {
-    console.error('Error fetching user types:', error);
-    res.status(500).json({ message: 'Erro ao buscar tipos de usuário' });
+    console.warn('[ADMIN] Prisma failed or timed out to fetch user types. Falling back to HTTP.');
+    const { data, error: httpError } = await supabaseAdmin
+        .from('user_types')
+        .select('*')
+        .order('name', { ascending: true });
+    
+    if (httpError) return res.status(500).json({ message: 'Erro ao buscar tipos de usuário' });
+    res.json(data || []);
   }
 });
 
@@ -173,20 +180,33 @@ router.post('/users/:id/kick', requireAdmin, async (req: any, res) => {
 
 router.get('/users', requirePermission('users', 'view'), async (req, res) => {
   try {
-    const users = await prisma.user.findMany({ select: PUBLIC_USER_FIELDS, orderBy: { id: 'asc' } });
+    const findPromise = prisma.user.findMany({ select: PUBLIC_USER_FIELDS, orderBy: { id: 'asc' } });
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+    const users = await Promise.race([findPromise, timeoutPromise]) as any[];
     res.json(users);
   } catch (error) {
-    console.warn('[ADMIN] Prisma failed to fetch users list. Attempting HTTP Fallback...');
+    console.warn('[ADMIN] Prisma failed or timed out to fetch users list. Attempting HTTP Fallback...');
     const { data, error: httpError } = await supabaseAdmin
       .from('users')
-      .select('*')
+      .select('*, permissions:user_permissions(*, module:modules(*))')
       .order('id', { ascending: true });
     
     if (httpError) {
       console.error('[ADMIN] HTTP Fallback failed for users:', httpError.message);
       return res.status(500).json({ message: 'Erro ao listar usuários (Modo Offline)' });
     }
-    res.json(data);
+    
+    // Adapt data to match PUBLIC_USER_FIELDS structure
+    const mappedUsers = (data || []).map((u: any) => ({
+      ...u,
+      permissions: (u.permissions || []).map((p: any) => ({
+        ...p,
+        module: p.module || p.modules // Supabase might return modules or module
+      })),
+      managedUsers: [] // Managed users join is complex via HTTP, returning empty to avoid crash
+    }));
+    
+    res.json(mappedUsers);
   }
 });
 
@@ -498,10 +518,12 @@ router.get('/territories', requirePermission('territories', 'view'), async (req,
   }
 
   try {
-    const ter = await prisma.territory.findMany({ where, orderBy: [{ uf: 'asc' }, { municipio: 'asc' }] });
+    const fetchPromise = prisma.territory.findMany({ where, orderBy: [{ uf: 'asc' }, { municipio: 'asc' }] });
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+    const ter = await Promise.race([fetchPromise, timeoutPromise]) as any[];
     res.json(ter);
   } catch (error) {
-    console.warn('[ADMIN] Prisma failed to fetch territories. Falling back to HTTP.');
+    console.warn('[ADMIN] Prisma failed or timed out to fetch territories. Falling back to HTTP.');
     let query = supabaseAdmin
         .from('territories')
         .select('*')
@@ -549,16 +571,27 @@ router.post('/bairros/import', requireAdmin, async (req, res) => {
 
 // --- MODULES & PERMISSIONS ---
 router.get('/modules', async (req, res) => {
-  const modules = await (prisma as any).module.findMany({ orderBy: { name: 'asc' } });
-  res.json(modules);
+  try {
+    const fetchPromise = (prisma as any).module.findMany({ orderBy: { name: 'asc' } });
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+    const modules = await Promise.race([fetchPromise, timeoutPromise]);
+    res.json(modules);
+  } catch (e) {
+    console.warn('[ADMIN] Prisma failed or timed out to fetch modules. Falling back to HTTP.');
+    const { data, error } = await supabaseAdmin.from('modules').select('*').order('name', { ascending: true });
+    if (error) return res.status(500).json({ message: 'Erro ao listar módulos' });
+    res.json(data || []);
+  }
 });
 
 router.get('/groups', async (req, res) => {
   try {
-    const groups = await prisma.group.findMany({ orderBy: { name: 'asc' } });
+    const fetchPromise = prisma.group.findMany({ orderBy: { name: 'asc' } });
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+    const groups = await Promise.race([fetchPromise, timeoutPromise]);
     res.json(groups);
   } catch (error) {
-    console.warn('[ADMIN] Prisma failed to fetch groups. Falling back to HTTP.');
+    console.warn('[ADMIN] Prisma failed or timed out to fetch groups. Falling back to HTTP.');
     const { data, error: httpError } = await supabaseAdmin
         .from('groups')
         .select('*')

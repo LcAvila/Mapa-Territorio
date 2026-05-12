@@ -38,8 +38,8 @@ export function useApiUsers(enabled: boolean) {
       });
       return res.ok ? res.json() : [];
     },
-    staleTime: 5_000,
-    refetchInterval: (token && isAdminLike) ? 10_000 : false,
+    staleTime: 30_000,
+    refetchInterval: (token && isAdminLike) ? 60_000 : false,
     enabled: enabled && !!token && isAdminLike
   });
 }
@@ -66,8 +66,8 @@ export function useApiTerritories(enabled: boolean) {
       });
       return res.ok ? res.json() : [];
     },
-    staleTime: 5_000,
-    refetchInterval: token ? 10_000 : false,
+    staleTime: 30_000,
+    refetchInterval: token ? 60_000 : false,
     enabled: true  // always enabled; token check inside queryFn
   });
 }
