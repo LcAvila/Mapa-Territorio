@@ -581,7 +581,7 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false, isMobileFi
               <p className="text-xs mt-1">Sincronize ou clique em "Cadastrar Cliente" para adicionar.</p>
             </div>
           ) : (
-            <div className="overflow-auto max-h-[calc(100vh-280px)] custom-scrollbar">
+            <div className="overflow-auto custom-scrollbar">
               {/* Desktop Table View */}
               <div className="hidden lg:block">
                 <Table>

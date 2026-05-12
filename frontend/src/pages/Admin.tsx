@@ -1635,7 +1635,7 @@ export default function Admin() {
             const hasFilters = dashFilterUser || dashFilterUF || dashSearch;
 
             return (
-              <div className="flex flex-col gap-5 lg:h-full overflow-y-auto lg:overflow-hidden no-scrollbar pb-10 sm:pb-0">
+              <div className="flex flex-col gap-5 no-scrollbar pb-10 sm:pb-0">
                 <div className="admin-card lg:shrink-0" style={{ padding: '14px 20px', borderLeft: '3px solid hsl(var(--admin-sidebar-accent))' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <MessageSquare style={{ width: 14, height: 14, color: 'hsl(var(--admin-sidebar-accent))' }} />
@@ -1695,10 +1695,10 @@ export default function Admin() {
                 </div>
 
                 {/* ── 2-COLUMN: Results + Map ── */}
-                <div className="flex flex-col lg:grid lg:grid-cols-[1fr_380px] gap-5 lg:flex-1 lg:min-h-0">
+                <div className="flex flex-col lg:grid lg:grid-cols-[1fr_380px] gap-5">
 
                   {/* LEFT: Territory result cards */}
-                  <div className="flex flex-col gap-2.5 lg:overflow-y-auto lg:h-full no-scrollbar order-2 lg:order-1">
+                  <div className="flex flex-col gap-2.5 no-scrollbar order-2 lg:order-1">
                     {ufEntries.length === 0 ? (
                       <div className="admin-card p-10 text-center text-muted-foreground">
                         <MapPin className="w-8 h-8 mx-auto mb-2 opacity-20" />
@@ -2464,7 +2464,7 @@ export default function Admin() {
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="p-0 flex-1 overflow-auto max-h-[calc(100vh-250px)] custom-scrollbar">
+                    <CardContent className="p-0 flex-1">
                       {filteredTerritories.length === 0 ? (
                         <div className="py-16 text-center text-muted-foreground">
                           <MapPin className="w-10 h-10 mx-auto mb-3 opacity-20" />
@@ -2883,7 +2883,7 @@ export default function Admin() {
                   ) : (
                     <>
                       {/* Desktop Table View */}
-                      <div className="hidden md:block overflow-auto max-h-[calc(100vh-320px)]">
+                      <div className="hidden md:block overflow-auto">
                         <Table>
                           <TableHeader>
                             <TableRow className="hover:bg-transparent border-border/40">
@@ -2909,7 +2909,7 @@ export default function Admin() {
                       </div>
 
                       {/* Mobile Card View */}
-                      <div className="md:hidden divide-y divide-border/20 max-h-[calc(100vh-280px)] overflow-y-auto">
+                      <div className="md:hidden divide-y divide-border/20 overflow-y-auto">
                         {filteredAudit.map(log => (
                           <div key={log.id} className="p-4 space-y-2 active:bg-secondary/40 transition-colors">
                             <div className="flex justify-between items-start">
