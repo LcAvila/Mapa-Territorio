@@ -63,6 +63,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -1347,7 +1348,7 @@ export default function Admin() {
 
     const isCurrentTabRestricted = !navItems.some(item => {
       if (item.id === activeTab) return true;
-      if (item.subItems?.some(s => s.id === activeTab)) return true;
+      if (item.subItems?.some((s: any) => s.id === activeTab)) return true;
       return false;
     });
 
@@ -1370,11 +1371,9 @@ export default function Admin() {
   };
   const activeNavInfo = findActiveLabel();
 
-  if (loading) return (
-    <div className="admin-layout items-center justify-center">
-      <Loader />
-    </div>
-  );
+  // Se estiver carregando, mostramos o layout mas sem bloquear com Loader gigante
+  // O Loader agora só aparece se o loading demorar mais que o esperado (opcional)
+  // ou dentro de componentes específicos.
 
   return (<>
     <ConfirmDialog open={confirmDialog.open} title={confirmDialog.title} description={confirmDialog.description} confirmLabel="Confirmar" onConfirm={confirmDialog.onConfirm} onCancel={closeConfirm} />
@@ -1706,87 +1705,169 @@ export default function Admin() {
                         <p className="text-sm">Nenhum território encontrado</p>
                       </div>
                     ) : ufEntries.map(([uf, terrs]) => {
-                      const uniqueUserIds = [...new Set(terrs.map(t => t.userId))];
-                      const modos = [...new Set(terrs.map(t => t.modo))];
+                      // Filtramos IDs inválidos ou nulos para evitar os "círculos fantasmas"
+                      const uniqueUserIds = [...new Set(terrs.map(t => t.userId).filter(id => id !== null && id !== undefined))];
+                      const topMunicipalities = [...new Set(terrs.map(t => t.cidade))].slice(0, 3);
+                      
                       return (
-                        <div key={uf} className="admin-card p-0 overflow-hidden shrink-0">
-                          {/* UF header */}
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 sm:p-[12px_18px] bg-admin-sidebar-bg/4 border-b border-admin-card-border">
-                            <div className="flex items-center gap-3 w-full sm:w-auto">
-                              <div className="w-10 h-10 sm:w-[42px] sm:h-[42px] rounded-lg sm:rounded-[10px] flex items-center justify-center bg-admin-sidebar-bg text-admin-sidebar-accent font-black text-sm sm:text-[0.95rem] tracking-wider shrink-0">
-                                {uf}
+                        <div key={uf} className="admin-card p-0 overflow-hidden shrink-0 group hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 border-l-4 border-l-primary">
+                          {/* UF header - Refined Designer Style */}
+                          <div className="p-4 sm:p-5 bg-gradient-to-r from-secondary/30 to-transparent">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                              {/* UF Badge */}
+                              <div className="relative">
+                                <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-primary text-primary-foreground font-black text-lg tracking-tighter shadow-lg shadow-primary/20 rotate-3 group-hover:rotate-0 transition-transform duration-500">
+                                  {uf}
+                                </div>
+                                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-background rounded-full border-2 border-primary flex items-center justify-center">
+                                  <MapPin className="w-2.5 h-2.5 text-primary" />
+                                </div>
                               </div>
-                              <div className="flex-1 min-w-0 sm:hidden">
-                                <p className="font-bold text-sm">
-                                  {terrs.length} cliente(s)
-                                </p>
-                              </div>
-                            </div>
-                            
-                            <div className="flex-1 min-w-0 hidden sm:block">
-                              <p className="font-bold text-[0.9rem] mb-0.5">
-                                {terrs.length} cliente(s) — {uniqueUserIds.length} usuário(s)
-                              </p>
-                              <div className="flex gap-1.5 flex-wrap">
-                                <span className="text-[10px] sm:text-[0.65rem] font-bold px-2 py-0.5 rounded-full bg-admin-sidebar-accent/13 text-admin-sidebar-accent border border-admin-sidebar-accent/25 uppercase">
-                                  PRESENÇA ATIVA
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between w-full sm:w-auto gap-4">
-                              {/* User avatars */}
-                              <div className="flex -space-x-2">
-                                {uniqueUserIds.slice(0, 4).map((id, idx) => {
-                                  const user = users.find(u => u.id === id);
-                                  const color = user && !user.isVago ? REP_COLOR_PALETTE[user.colorIndex || 0] : 'hsl(0 0% 40%)';
-                                  const initials = (user?.full_name || user?.fullName || user?.username || 'SR').substring(0, 2).toUpperCase();
-                                  return (
-                                    <div key={id} title={user?.full_name || user?.username || String(id)} className="w-7 h-7 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-white text-[0.65rem] font-black border-2 border-admin-card-bg relative" style={{ background: color, zIndex: 4 - idx }}>
-                                      {initials}
-                                    </div>
-                                  );
-                                })}
-                                {uniqueUserIds.length > 4 && (
-                                  <div className="w-7 h-7 sm:w-7 sm:h-7 rounded-full bg-muted flex items-center justify-center text-muted-foreground text-[0.6rem] font-bold border-2 border-admin-card-bg relative">
-                                    +{uniqueUserIds.length - 4}
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h3 className="font-black text-base sm:text-lg tracking-tight">
+                                    {uf === 'Sem UF' ? 'Território Indefinido' : `Estado de ${uf}`}
+                                  </h3>
+                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 uppercase tracking-widest animate-pulse">
+                                    Ativo
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3 text-muted-foreground">
+                                  <div className="flex items-center gap-1">
+                                    <UsersRound className="w-3 h-3" />
+                                    <span className="text-xs font-bold">{uniqueUserIds.length} Repr.</span>
                                   </div>
-                                )}
+                                  <div className="w-1 h-1 rounded-full bg-border" />
+                                  <div className="flex items-center gap-1">
+                                    <Database className="w-3 h-3" />
+                                    <span className="text-xs font-bold">{terrs.length} Clientes</span>
+                                  </div>
+                                </div>
                               </div>
-                              <button
-                                onClick={() => { setDashFilterUF(uf === dashFilterUF ? '' : uf); }}
-                                className={`px-3 py-1 sm:px-3 sm:py-1 rounded-full text-[0.72rem] font-bold border-[1.5px] transition-colors ${
-                                  dashFilterUF === uf 
-                                    ? 'bg-admin-sidebar-accent text-white border-admin-sidebar-accent' 
-                                    : 'bg-transparent text-admin-sidebar-accent border-admin-sidebar-accent/40'
-                                }`}
-                              >
-                                {dashFilterUF === uf ? 'Limpar' : 'Filtrar'}
-                              </button>
+
+                              <div className="flex flex-col items-end gap-3 w-full sm:w-auto self-stretch justify-between">
+                                {/* User avatars stacked */}
+                                <div className="flex -space-x-2 self-end">
+                                  {uniqueUserIds.slice(0, 5).map((id, idx) => {
+                                    const user = users.find(u => u.id === id);
+                                    const bgColor = (user && !user.isVago && user.colorIndex) ? (REP_COLOR_PALETTE[user.colorIndex] || '#6b7280') : '#6b7280';
+                                    
+                                    // Função local simples para contraste de texto (Branco ou Preto)
+                                    // Suporta Hex (#ffffff) e HSL (hsl(0, 0%, 100%))
+                                    const getContrast = (color: string) => {
+                                      if (!color || typeof color !== 'string') return '#ffffff';
+                                      
+                                      // Se for HSL, pegamos o valor de Lightness (L)
+                                      if (color.startsWith('hsl')) {
+                                        try {
+                                          const parts = color.split(',');
+                                          if (parts.length < 3) return '#ffffff';
+                                          const lightnessPart = parts[2].trim(); // ex: "55%)"
+                                          const lightness = parseInt(lightnessPart, 10);
+                                          return lightness >= 60 ? '#000000' : '#ffffff';
+                                        } catch (e) {
+                                          return '#ffffff';
+                                        }
+                                      }
+
+                                      // Se for Hex
+                                      if (color.startsWith('#')) {
+                                        try {
+                                          const hex = color.replace('#', '');
+                                          const r = parseInt(hex.substring(0, 2), 16);
+                                          const g = parseInt(hex.substring(2, 4), 16);
+                                          const b = parseInt(hex.substring(4, 6), 16);
+                                          const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+                                          return yiq >= 128 ? '#000000' : '#ffffff';
+                                        } catch (e) {
+                                          return '#ffffff';
+                                        }
+                                      }
+
+                                      return '#ffffff';
+                                    };
+                                    const textColor = getContrast(bgColor);
+
+                                    const initials = (user?.full_name || user?.fullName || user?.username || 'SR').substring(0, 2).toUpperCase();
+                                    return (
+                                      <Tooltip key={id}>
+                                        <TooltipTrigger asChild>
+                                          <div 
+                                            className="w-8 h-8 rounded-full flex items-center justify-center text-[0.7rem] font-black border-2 border-white dark:border-gray-800 shadow-md transition-all hover:-translate-y-1 hover:z-20 cursor-help" 
+                                            style={{ 
+                                              backgroundColor: bgColor, 
+                                              color: textColor,
+                                              zIndex: 10 - idx,
+                                              marginLeft: idx === 0 ? 0 : '-0.5rem' // Espaçamento controlado
+                                            }}
+                                          >
+                                            {initials}
+                                          </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="text-[10px] font-bold">
+                                          {user?.full_name || user?.username}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    );
+                                  })}
+                                  {uniqueUserIds.length > 5 && (
+                                    <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 border-2 border-white dark:border-gray-800 flex items-center justify-center text-gray-600 dark:text-gray-300 text-[0.6rem] font-black z-0">
+                                      +{uniqueUserIds.length - 5}
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                <button
+                                  onClick={() => { setDashFilterUF(uf === dashFilterUF ? '' : uf); }}
+                                  className={`w-full sm:w-auto px-4 py-1.5 rounded-xl text-[0.75rem] font-black transition-all duration-300 shadow-sm ${
+                                    dashFilterUF === uf 
+                                      ? 'bg-destructive text-destructive-foreground shadow-destructive/20' 
+                                      : 'bg-primary text-primary-foreground shadow-primary/20 hover:scale-105 active:scale-95'
+                                  }`}
+                                >
+                                  {dashFilterUF === uf ? 'REMOVER FILTRO' : 'EXPLORAR REGIÃO'}
+                                </button>
+                              </div>
                             </div>
                           </div>
 
-                          {/* Municipality rows */}
-                          <div className="divide-y divide-admin-card-border">
-                            {terrs.slice(0, 5).map(c => {
-                              const user = users.find(u => u.id === c.userId);
-                              const color = user && !user.isVago ? REP_COLOR_PALETTE[user.colorIndex || 0] : 'hsl(0 0% 40%)';
-                              return (
-                                <div key={c.codigo_cliente || c.id_cliente} className="flex items-center gap-3 p-2.5 px-4.5">
-                                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-                                  <span className="flex-1 text-[0.82rem] font-medium truncate" title={c.nome_cliente}>{c.nome_abreviado || c.nome_cliente}</span>
-                                  <span className="text-[0.72rem] text-muted-foreground hidden sm:block">{c.cidade}</span>
-                                  <span className="text-[0.65rem] font-bold px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-600 uppercase min-w-[50px] text-center">
-                                    {user?.username || 'S/ USER'}
-                                  </span>
+                          {/* List of main municipalities/clients */}
+                          <div className="p-2 pt-0">
+                            <div className="rounded-xl overflow-hidden border border-border/40 bg-background/40 divide-y divide-border/20">
+                              {terrs.slice(0, 4).map(c => {
+                                const user = users.find(u => u.id === c.userId);
+                                const color = user && !user.isVago ? REP_COLOR_PALETTE[user.colorIndex || 0] : 'hsl(0 0% 40%)';
+                                return (
+                                  <div key={c.codigo_cliente || c.id_cliente} className="group/row flex items-center gap-4 p-3 hover:bg-primary/[0.03] transition-colors">
+                                    <div className="w-1.5 h-6 rounded-full shrink-0 group-hover/row:scale-y-125 transition-transform" style={{ background: color }} />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-[0.85rem] font-bold truncate tracking-tight uppercase">{c.nome_cliente}</p>
+                                      <p className="text-[0.7rem] text-muted-foreground font-medium uppercase">{c.cidade}</p>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-1">
+                                      <span className="text-[0.65rem] font-black px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground border border-border uppercase tracking-tighter">
+                                        {user?.username || 'S/ USER'}
+                                      </span>
+                                      <span className="text-[0.6rem] text-muted-foreground/60 font-mono">#{c.codigo_cliente || '000'}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              
+                              <div className="p-3 bg-secondary/10 flex items-center justify-between">
+                                <p className="text-[0.7rem] text-muted-foreground font-bold italic">
+                                  {terrs.length > 4 ? `+ ${terrs.length - 4} outros registros nesta região` : 'Todos os registros exibidos'}
+                                </p>
+                                <div className="flex gap-1">
+                                  {topMunicipalities.map(m => (
+                                    <span key={m} className="text-[9px] font-black px-1.5 py-0.5 rounded bg-background/50 border border-border/40 uppercase opacity-60">
+                                      {m}
+                                    </span>
+                                  ))}
                                 </div>
-                              );
-                            })}
-                            {terrs.length > 5 && (
-                              <div className="p-2 px-4.5 text-[0.75rem] text-muted-foreground italic">
-                                + {terrs.length - 5} cliente(s) oculto(s) — filtre para ver todos
                               </div>
-                            )}
+                            </div>
                           </div>
                         </div>
                       );

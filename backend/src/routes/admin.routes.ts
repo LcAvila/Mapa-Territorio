@@ -604,11 +604,35 @@ router.get('/groups', async (req, res) => {
 
 router.get('/users/:id/permissions', async (req, res) => {
   const userId = Number(req.params.id);
-  const permissions = await (prisma as any).userPermission.findMany({
-    where: { userId },
-    include: { module: true }
-  });
-  res.json(permissions);
+  try {
+    const fetchPromise = (prisma as any).userPermission.findMany({
+      where: { userId },
+      include: { module: true }
+    });
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+    const permissions = await Promise.race([fetchPromise, timeoutPromise]);
+    res.json(permissions);
+  } catch (error) {
+    console.warn(`[ADMIN] Prisma failed or timed out for user ${userId} permissions. Falling back to HTTP.`);
+    const { data, error: httpError } = await supabaseAdmin
+      .from('user_permissions')
+      .select('*')
+      .eq('userId', userId);
+    
+    if (httpError) {
+      console.error('[ADMIN] HTTP Fallback failed for permissions:', httpError.message);
+      return res.status(500).json({ message: 'Erro ao buscar permissões' });
+    }
+
+    // Se precisamos dos módulos, buscamos separadamente para evitar erro de join no Supabase
+    const { data: modules } = await supabaseAdmin.from('modules').select('*');
+    const mapped = (data || []).map(p => ({
+      ...p,
+      module: modules?.find(m => m.id === p.moduleId)
+    }));
+
+    res.json(mapped);
+  }
 });
 
 // Save user permissions and handle auto-promotion
