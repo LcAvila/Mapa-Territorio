@@ -1282,7 +1282,7 @@ export default function Admin() {
       ]
     },
     { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor', 'user'] },
-    { id: 'territories' as const, label: 'Territórios', icon: MapPin, count: territories.length, restrict: ['admin', 'supervisor'] },
+    { id: 'territories' as const, label: 'Territórios', icon: MapPin, restrict: ['admin', 'supervisor'] },
     {
       id: 'rotas_menu' as const, label: 'Planejamento de Áreas', icon: Truck, restrict: ['admin'], subItems: [
         { id: 'leituraplanilha' as const, label: 'Leitura Excel', icon: FileSpreadsheet },
@@ -1295,12 +1295,12 @@ export default function Admin() {
         { id: 'densidade' as const, label: 'Densidade', icon: Activity },
       ]
     },
-    { id: 'interests' as const, label: 'Interesses', icon: HandHeart, count: pendingInterests, badge: pendingInterests > 0, restrict: ['admin'] },
-    { id: 'notifications' as const, label: 'Enviar Alerta', icon: Bell, count: unreadCount, badge: unreadCount > 0, restrict: ['admin'] },
+    { id: 'interests' as const, label: 'Interesses', icon: HandHeart, count: pendingInterests > 0 ? pendingInterests : undefined, badge: pendingInterests > 0, restrict: ['admin'] },
+    { id: 'notifications' as const, label: 'Enviar Alerta', icon: Bell, restrict: ['admin'] },
     {
       id: 'settings' as const, label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
         { id: 'system' as const, label: 'Editar sistema', icon: Settings },
-        { id: 'audit' as const, label: 'Auditoria', icon: ScrollText, count: auditLogs.length },
+        { id: 'audit' as const, label: 'Auditoria', icon: ScrollText },
       ]
     }
   ].filter(item => {
