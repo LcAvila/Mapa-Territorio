@@ -1,8 +1,7 @@
 import path from 'path';
 import dotenv from 'dotenv';
-// Força o carregamento do .env do diretório atual
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -84,9 +83,9 @@ app.use(hpp());
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/geocode', geocodeRoutes); 
+app.use('/api/geocode', geocodeRoutes);
 app.use('/api/interest', interestRoutes);
-app.use('/api/location', locationRoutes); 
+app.use('/api/location', locationRoutes);
 app.use('/api/planilha', planilhaRoutes); // Mounted specifically at /api/planilha
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/feed', feedRoutes);
@@ -96,45 +95,45 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/route-planning', routePlanningRoutes);
 
 async function bootstrap() {
-    // Inicia o servidor PRIMEIRO, independente do banco
-    app.listen(PORT, () => {
-        console.log(pc.cyan("──────────────────────────────────────────────────"));
-        console.log(pc.bold(pc.magenta("🚀 MAPA TERRITÓRIO - BACKEND")));
-        console.log(pc.cyan("──────────────────────────────────────────────────"));
-        console.log(`${pc.blue("📡 Status:")} ${pc.green("Online")}`);
-        console.log(`${pc.blue("🔗 URL Local:")} ${pc.underline(pc.white(`http://localhost:${PORT}`))}`);
-        console.log(`${pc.blue("📂 Ambiente:")} ${pc.yellow(process.env.NODE_ENV || 'development')}`);
-        console.log(`${pc.blue("🗄️ Database:")} ${pc.green("Prisma ORM")}`);
-        console.log(`${pc.blue("☁️ Supabase URL:")} ${process.env.SUPABASE_URL ? pc.green("Conectado") : pc.red("FALTANDO")}`);
-        console.log(`${pc.blue("☁️ Supabase Key:")} ${process.env.SUPABASE_ANON_KEY ? pc.green("Presente") : pc.red("FALTANDO")}`);
-        console.log(pc.cyan("──────────────────────────────────────────────────"));
-        console.log(pc.gray("Aguardando requisições...\n"));
-    });
+  // Inicia o servidor PRIMEIRO, independente do banco
+  app.listen(PORT, () => {
+    console.log(pc.cyan("──────────────────────────────────────────────────"));
+    console.log(pc.bold(pc.magenta("🚀 MAPA TERRITÓRIO - BACKEND")));
+    console.log(pc.cyan("──────────────────────────────────────────────────"));
+    console.log(`${pc.blue("📡 Status:")} ${pc.green("Online")}`);
+    console.log(`${pc.blue("🔗 URL Local:")} ${pc.underline(pc.white(`http://localhost:${PORT}`))}`);
+    console.log(`${pc.blue("📂 Ambiente:")} ${pc.yellow(process.env.NODE_ENV || 'development')}`);
+    console.log(`${pc.blue("🗄️ Database:")} ${pc.green("Prisma ORM")}`);
+    console.log(`${pc.blue("☁️ Supabase URL:")} ${process.env.SUPABASE_URL ? pc.green("Conectado") : pc.red("FALTANDO")}`);
+    console.log(`${pc.blue("☁️ Supabase Key:")} ${process.env.SUPABASE_ANON_KEY ? pc.green("Presente") : pc.red("FALTANDO")}`);
+    console.log(pc.cyan("──────────────────────────────────────────────────"));
+    console.log(pc.gray("Aguardando requisições...\n"));
+  });
 
-    // Seed do admin em background — não bloqueia o servidor
-    try {
-        const adminExists = await prisma.user.findUnique({ where: { username: 'admin' } });
-        if (!adminExists) {
-            const bcrypt = require('bcryptjs');
-            const adminPassword = await bcrypt.hash('admin123', 10);
-            await prisma.user.create({
-                data: {
-                    username: 'admin',
-                    password: adminPassword,
-                    role: 'admin',
-                    tipo: 'admin',
-                    full_name: 'Administrador'
-                }
-            });
-            console.log(pc.green("✅ Admin master criado com sucesso."));
-        } else {
-            console.log(pc.green("✅ Banco de dados conectado com sucesso."));
+  // Seed do admin em background — não bloqueia o servidor
+  try {
+    const adminExists = await prisma.user.findUnique({ where: { username: 'admin' } });
+    if (!adminExists) {
+      const bcrypt = require('bcryptjs');
+      const adminPassword = await bcrypt.hash('admin123', 10);
+      await prisma.user.create({
+        data: {
+          username: 'admin',
+          password: adminPassword,
+          role: 'admin',
+          tipo: 'admin',
+          full_name: 'Administrador'
         }
-    } catch (e) {
-        console.warn(pc.yellow("⚠️  Não foi possível conectar ao banco de dados na inicialização."));
-        console.warn(pc.yellow("   O servidor está online, mas as rotas que dependem do banco podem falhar."));
-        console.warn(pc.gray("   Verifique a conexão com o Supabase e reinicie o servidor."));
+      });
+      console.log(pc.green("✅ Admin master criado com sucesso."));
+    } else {
+      console.log(pc.green("✅ Banco de dados conectado com sucesso."));
     }
+  } catch (e) {
+    console.warn(pc.yellow("⚠️  Não foi possível conectar ao banco de dados na inicialização."));
+    console.warn(pc.yellow("   O servidor está online, mas as rotas que dependem do banco podem falhar."));
+    console.warn(pc.gray("   Verifique a conexão com o Supabase e reinicie o servidor."));
+  }
 }
 
 bootstrap()
