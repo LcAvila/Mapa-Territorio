@@ -25,6 +25,7 @@ import feedRoutes from './routes/feed.routes';
 import birthdaysRoutes from './routes/birthdays.routes';
 import routingRoutes from './routes/routing.routes';
 import notificationsRoutes from './routes/notifications.routes';
+import routePlanningRoutes from './routes/route-planning.routes';
 import { prisma } from './prisma';
 
 const app = express();
@@ -92,6 +93,7 @@ app.use('/api/feed', feedRoutes);
 app.use('/api/birthdays', birthdaysRoutes);
 app.use('/api/routing', routingRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/route-planning', routePlanningRoutes);
 
 async function bootstrap() {
     // Inicia o servidor PRIMEIRO, independente do banco

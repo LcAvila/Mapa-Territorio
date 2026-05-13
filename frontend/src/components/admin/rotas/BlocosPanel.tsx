@@ -40,9 +40,9 @@ export function BlocosPanel() {
             value={selectedUserId || ''}
             onChange={e => setSelectedUserId(e.target.value ? Number(e.target.value) : null)}
           >
-            <option value="">-- Selecione um Representante --</option>
+            <option value="">-- Selecione um Usuário --</option>
             {reps.map(r => (
-              <option key={r.id} value={r.id}>{r.code || 'S/ COD'} — {r.full_name || r.fullName || r.username}</option>
+              <option key={r.id} value={r.id}>{r.code ? `${r.code} — ` : ''}{r.full_name || r.fullName || r.username}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
@@ -53,7 +53,7 @@ export function BlocosPanel() {
         <Card className="border-border/40">
           <CardContent className="py-20 text-center text-muted-foreground">
             <Grid3X3 className="w-12 h-12 mx-auto mb-4 opacity-20" />
-            <p className="text-sm font-medium">Selecione um representante para ver a distribuição de blocos.</p>
+            <p className="text-sm font-medium">Selecione um usuário para ver a distribuição de blocos.</p>
             <p className="text-xs mt-1">Cada bloco = 1 semana de trabalho.</p>
           </CardContent>
         </Card>

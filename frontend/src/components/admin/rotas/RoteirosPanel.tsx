@@ -89,7 +89,7 @@ export function RoteirosPanel() {
           <Card className="border-border/40">
             <CardHeader className="pb-3 border-b border-border/40">
               <CardTitle className="text-sm flex items-center justify-between">
-                <span>Representante</span>
+                <span>Usuário</span>
                 {loadingReps && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
               </CardTitle>
             </CardHeader>
@@ -100,9 +100,9 @@ export function RoteirosPanel() {
                     value={selectedUserId || ''}
                     onChange={handleSelectRep}
                   >
-                    <option value="">-- Selecione um Representante --</option>
+                    <option value="">-- Selecione um Usuário --</option>
                     {reps.map(r => (
-                      <option key={r.id} value={r.id}>{r.code || 'S/ COD'} — {r.full_name || r.fullName || r.username}</option>
+                      <option key={r.id} value={r.id}>{r.code ? `${r.code} — ` : ''}{r.full_name || r.fullName || r.username}</option>
                     ))}
                   </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />

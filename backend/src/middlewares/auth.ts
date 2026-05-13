@@ -48,22 +48,54 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
     let user: any = null;
 
     try {
-      // Set a timeout for Prisma to avoid hanging
-      const prismaUserPromise = (prisma.user as any).findFirst({
-        where: {
-          OR: [
-            { supabase_id: sbUser.id },
-            sbUser.email ? { email: { equals: sbUser.email, mode: 'insensitive' } } : null,
-            accessCode ? { code: accessCode } : null,
-            accessCode ? { username: accessCode } : null,
-            sbUser.email === 'avila.estudohtml@gmail.com' ? { username: 'admin' } : null
-          ].filter(Boolean) as any
+      console.log(`[AUTH] Attempting to match user in Prisma. ID: ${sbUser.id}, Email: ${sbUser.email}`);
+      
+      const includeOptions = {
+        permissions: {
+          include: { module: true }
         },
-        include: {
-          permissions: { include: { module: true } },
-          managedUsers: { select: { id: true } }
+        managedUsers: { select: { id: true } }
+      };
+
+      // Set a timeout for Prisma to avoid hanging
+      const prismaUserPromise = (async () => {
+        // 1. First attempt: Find by unique supabase_id (Fastest)
+        let foundUser = await prisma.user.findUnique({
+          where: { supabase_id: sbUser.id },
+          include: includeOptions
+        }).catch(e => {
+          console.warn('[AUTH] findUnique by supabase_id failed, might be schema sync issue:', e.message);
+          return null;
+        });
+
+        // 2. Second attempt: Find by other fields if not found by supabase_id
+        if (!foundUser) {
+          console.log(`[AUTH] User not found by supabase_id, trying fallbacks...`);
+          const queryOptions: any = {
+            where: {
+              OR: [
+                sbUser.email ? { email: { equals: sbUser.email, mode: 'insensitive' } } : null,
+                accessCode ? { code: accessCode } : null,
+                accessCode ? { username: accessCode } : null,
+                sbUser.email === 'avila.estudohtml@gmail.com' ? { username: 'admin' } : null
+              ].filter(Boolean) as any
+            },
+            include: includeOptions
+          };
+
+          foundUser = await prisma.user.findFirst(queryOptions) as any;
+
+          // Se encontramos por código/username mas o supabase_id estava errado ou nulo, sincronizamos agora
+          if (foundUser && foundUser.supabase_id !== sbUser.id) {
+            console.log(`[AUTH] Syncing supabase_id for user ${foundUser.username} (ID: ${foundUser.id}) -> ${sbUser.id}`);
+            await prisma.user.update({
+              where: { id: foundUser.id },
+              data: { supabase_id: sbUser.id }
+            }).catch(e => console.error('[AUTH] Failed to auto-sync supabase_id:', e));
+          }
         }
-      });
+        return foundUser;
+      })();
 
       // Simple race for timeout (5 seconds)
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
@@ -123,12 +155,17 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
       expiresAt: Date.now() + CACHE_TTL
     });
 
-    // Update last_active in background (if possible)
-    if (!req.isHttpFallback) {
-        prisma.user.update({
-          where: { id: user.id },
-          data: { last_active: new Date() }
-        }).catch(e => console.error('Error updating last_active:', e));
+    // Update last_active in background (if possible), throttled to every 1 minute
+    if (!req.isHttpFallback && user.id) {
+        const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
+        const lastActive = new Date(user.last_active);
+        
+        if (lastActive < oneMinuteAgo) {
+            prisma.user.update({
+              where: { id: user.id },
+              data: { last_active: new Date() }
+            }).catch(e => console.error('Error updating last_active:', e));
+        }
     }
 
     next();

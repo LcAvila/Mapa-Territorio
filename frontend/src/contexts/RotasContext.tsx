@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Cliente } from '@/hooks/use-api-data';
 import { RouteResult } from '@/hooks/use-routing';
+import { RouteCycle, RouteCycleWeek, RouteSequence } from '@/types/routes';
 
 interface RouteResultEntry {
   userId: number;
@@ -11,6 +12,15 @@ interface RouteResultEntry {
 }
 
 interface RotasContextData {
+  // Novo sistema de ciclos
+  currentCycle: RouteCycle | null;
+  setCurrentCycle: (cycle: RouteCycle | null) => void;
+  currentWeeks: RouteCycleWeek[];
+  setCurrentWeeks: (weeks: RouteCycleWeek[]) => void;
+  currentSequence: RouteSequence | null;
+  setCurrentSequence: (sequence: RouteSequence | null) => void;
+  
+  // Legado e utilitários
   planilhaData: Record<string, unknown>[];
   setPlanilhaData: (data: Record<string, unknown>[]) => void;
   planilhaSummary: { totalRows: number; columns: string[] } | null;
@@ -27,6 +37,10 @@ interface RotasContextData {
 const RotasContext = createContext<RotasContextData | undefined>(undefined);
 
 export function RotasProvider({ children }: { children: React.ReactNode }) {
+  const [currentCycle, setCurrentCycle] = useState<RouteCycle | null>(null);
+  const [currentWeeks, setCurrentWeeks] = useState<RouteCycleWeek[]>([]);
+  const [currentSequence, setCurrentSequence] = useState<RouteSequence | null>(null);
+
   const [planilhaData, setPlanilhaData] = useState<Record<string, unknown>[]>([]);
   const [planilhaSummary, setPlanilhaSummary] = useState<{ totalRows: number; columns: string[] } | null>(null);
   
@@ -45,6 +59,9 @@ export function RotasProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <RotasContext.Provider value={{
+      currentCycle, setCurrentCycle,
+      currentWeeks, setCurrentWeeks,
+      currentSequence, setCurrentSequence,
       planilhaData, setPlanilhaData,
       planilhaSummary, setPlanilhaSummary,
       selectedUserId, setSelectedUserId,

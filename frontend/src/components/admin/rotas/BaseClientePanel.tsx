@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { AddressMapPicker } from './AddressMapPicker';
 import { API_BASE_URL } from '@/lib/api-base';
@@ -50,10 +51,34 @@ interface Cliente {
   status_ativo: boolean;
 }
 
-export function BaseClientePanel({ onSwitchToReps, canCreate = false, isMobileFilterOpen = false }: { onSwitchToReps?: () => void, canCreate?: boolean, isMobileFilterOpen?: boolean }) {
+export function BaseClientePanel({ 
+  onSwitchToReps, 
+  canCreate = false, 
+  isMobileFilterOpen = false,
+  initialData = [],
+  loading: externalLoading = false,
+  onRefresh
+}: { 
+  onSwitchToReps?: () => void, 
+  canCreate?: boolean, 
+  isMobileFilterOpen?: boolean,
+  initialData?: Cliente[],
+  loading?: boolean,
+  onRefresh?: () => Promise<void>
+}) {
   const { role: currentUserRole, userId: currentUserId } = useAuth();
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [clientes, setClientes] = useState<Cliente[]>(initialData);
+  const [internalLoading, setInternalLoading] = useState(initialData.length === 0);
+  const loading = externalLoading || internalLoading;
+
+  // Sincronizar com dados externos se fornecidos
+  useEffect(() => {
+    if (initialData.length > 0) {
+      setClientes(initialData);
+      setInternalLoading(false);
+    }
+  }, [initialData]);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -189,7 +214,7 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false, isMobileFi
 
   const fetchClientes = async () => {
     try {
-      setLoading(true);
+      setInternalLoading(true);
       const token = localStorage.getItem('token');
       const tokenVersion = localStorage.getItem('tokenVersion') || '0';
       const res = await fetch(API_URL, {
@@ -205,7 +230,7 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false, isMobileFi
       console.error(error);
       toast.error('Não foi possível carregar a lista de clientes.');
     } finally {
-      setLoading(false);
+      setInternalLoading(false);
     }
   };
 
@@ -223,8 +248,15 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false, isMobileFi
     } catch (e) { console.error('Erro ao buscar usuários', e); }
   };
 
+  const handleRefresh = async () => {
+    if (onRefresh) await onRefresh();
+    else await fetchClientes();
+  };
+
   useEffect(() => {
-    fetchClientes();
+    if (initialData.length === 0) {
+      fetchClientes();
+    }
     fetchSystemUsers();
   }, []);
 
@@ -340,8 +372,8 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false, isMobileFi
   const filteredClientes = clientes.filter(c => {
     if (filterStatus === 'Ativos' && !c.status_ativo) return false;
     if (filterStatus === 'Inativos' && c.status_ativo) return false;
-    if (filterUF && c.uf !== filterUF) return false;
-    if (filterUser && c.userId?.toString() !== filterUser) return false;
+    if (filterUF && filterUF !== 'all' && c.uf !== filterUF) return false;
+    if (filterUser && filterUser !== 'all' && c.userId?.toString() !== filterUser) return false;
     const q = searchTerm.toLowerCase();
     if (q) return (
       c.nome_cliente?.toLowerCase().includes(q) || 
@@ -506,65 +538,93 @@ export function BaseClientePanel({ onSwitchToReps, canCreate = false, isMobileFi
         </div>
       </div>
       
-      <Card className="border-border/40 shadow-sm overflow-hidden">
-        <CardHeader className={`pb-3 border-b border-border/40 bg-card/50 space-y-3 ${!isMobileFilterOpen ? 'hidden lg:block' : 'block animate-in slide-in-from-top-4 duration-300'}`}>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-medium">Lista de Clientes ({filteredClientes.length} / {clientes.length})</CardTitle>
-          </div>
-          <div className="flex flex-col gap-3">
-            <div className="relative w-full">
+      <Card className="border-border/40 shadow-xl overflow-hidden bg-card/30 backdrop-blur-md">
+        <CardHeader className={`pb-4 border-b border-border/40 bg-muted/20 space-y-4 ${!isMobileFilterOpen ? 'hidden lg:block' : 'block animate-in slide-in-from-top-4 duration-300'}`}>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Database className="w-4 h-4 text-primary" />
+                Base de Clientes
+              </CardTitle>
+              <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">
+                Total de {clientes.length} registros encontrados
+              </p>
+            </div>
+            
+            <div className="relative w-full md:max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
                 placeholder="Buscar por nome, código ou CNPJ..." 
-                className="pl-9 h-9 w-full text-sm bg-background/50 focus:bg-background transition-colors" 
+                className="pl-9 h-10 w-full text-sm bg-background/50 border-border/40 focus:ring-primary/20 transition-all shadow-inner" 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-              <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              <div className="flex items-center gap-2">
-                {(['Todos', 'Ativos', 'Inativos'] as const).map(f => (
-                  <Button
-                    key={f}
-                    variant={filterStatus === f ? 'default' : 'outline'}
-                    size="sm"
-                    className="h-8 px-3 text-[10px] font-bold uppercase tracking-wider shrink-0"
-                    onClick={() => setFilterStatus(f)}
-                  >
-                    {f}
-                  </Button>
-                ))}
-              </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={filterUF}
-                  onChange={e => setFilterUF(e.target.value)}
-                  className="h-8 px-2 rounded-md text-[10px] font-bold border border-input bg-background/50 text-foreground shrink-0 outline-none"
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <div className="flex items-center bg-background/50 border border-border/40 p-1 rounded-lg shadow-sm">
+              {(['Todos', 'Ativos', 'Inativos'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFilterStatus(f)}
+                  className={`h-8 px-4 text-[10px] font-black uppercase tracking-tighter rounded-md transition-all ${
+                    filterStatus === f 
+                    ? 'bg-primary text-primary-foreground shadow-lg scale-105' 
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  }`}
                 >
-                  <option value="">UF</option>
+                  {f}
+                </button>
+              ))}
+            </div>
+
+            <div className="h-8 w-px bg-border/40 mx-1 hidden sm:block" />
+
+            <div className="flex flex-wrap items-center gap-2 flex-1">
+              <Select value={filterUF} onValueChange={setFilterUF}>
+                <SelectTrigger className="h-9 w-[110px] text-[10px] font-bold uppercase bg-background/50 border-border/40">
+                  <SelectValue placeholder="Todas UFs" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as UFs</SelectItem>
                   {[...new Set(clientes.map(c => c.uf).filter(Boolean))].sort().map(uf => (
-                    <option key={uf} value={uf!}>{uf}</option>
+                    <SelectItem key={uf} value={uf || 'empty'}>{uf}</SelectItem>
                   ))}
-                </select>
-                {currentUserRole === 'admin' && (
-                  <select
-                    value={filterUser}
-                    onChange={e => setFilterUser(e.target.value)}
-                    className="h-8 px-2 rounded-md text-[10px] font-bold border border-input bg-background/50 text-foreground max-w-[120px] shrink-0 outline-none"
-                  >
-                    <option value="">USUÁRIO</option>
+                </SelectContent>
+              </Select>
+
+              {currentUserRole === 'admin' && ( 
+                <Select value={filterUser} onValueChange={setFilterUser}>
+                  <SelectTrigger className="h-9 w-[160px] text-[10px] font-bold uppercase bg-background/50 border-border/40">
+                    <SelectValue placeholder="Todos Usuários" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos Usuários</SelectItem>
                     {systemUsers.map(u => (
-                      <option key={u.id} value={u.id.toString()}>{u.username}</option>
+                      <SelectItem key={u.id} value={u.id.toString()}>{u.full_name || u.username}</SelectItem>
                     ))}
-                  </select>
-                )}
-                {(searchTerm || filterStatus !== 'Todos' || filterUF || filterUser) && (
-                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => { setSearchTerm(''); setFilterStatus('Todos'); setFilterUF(''); setFilterUser(''); }}>
-                    <X className="w-3.5 h-3.5" />
-                  </Button>
-                )}
-              </div>
+                  </SelectContent>
+                </Select>
+              )}
+
+              {(searchTerm || (filterStatus !== 'Todos') || (filterUF && filterUF !== 'all') || (filterUser && filterUser !== 'all')) && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-9 px-3 text-[10px] font-bold uppercase gap-2 hover:bg-destructive/10 hover:text-destructive transition-colors" 
+                  onClick={() => { setSearchTerm(''); setFilterStatus('Todos'); setFilterUF('all'); setFilterUser('all'); }}
+                >
+                  <X className="w-3" />
+                  Limpar
+                </Button>
+              )}
+            </div>
+            
+            <div className="ml-auto hidden xl:block">
+              <span className="text-[10px] font-bold text-muted-foreground bg-muted/40 px-2 py-1 rounded-full border border-border/20">
+                {filteredClientes.length} resultados
+              </span>
             </div>
           </div>
         </CardHeader>

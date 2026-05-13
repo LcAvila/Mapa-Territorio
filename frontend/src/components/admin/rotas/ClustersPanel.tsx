@@ -59,7 +59,7 @@ export function ClustersPanel() {
                   ) : (
                     <>
                       <Search className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                      <p className="text-sm font-medium">Selecione um representante no painel de Roteiros primeiro.</p>
+                      <p className="text-sm font-medium">Selecione um usuário no painel de Roteiros primeiro.</p>
                     </>
                   )}
                </div>

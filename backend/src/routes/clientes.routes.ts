@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
     
     // Cada um no seu quadrado: 
     const user = (req as any).user;
-    const hasSettingsPerm = user.permissions?.some((p: any) => p.module?.id === 'settings' && p.canEdit);
+    const hasSettingsPerm = user.permissions?.some((p: any) => (p.moduleId === 'settings' || p.module?.id === 'settings') && p.canEdit);
     const isAdmin = user.role === 'admin' || hasSettingsPerm;
 
     if (isAdmin) {

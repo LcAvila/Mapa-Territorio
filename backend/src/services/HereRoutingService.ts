@@ -9,12 +9,67 @@
 import axios from 'axios';
 
 const HERE_ROUTER_URL = 'https://router.hereapi.com/v8/routes';
+const HERE_OPTIMIZE_URL = 'https://wse.ls.hereapi.com/2/findsequence.json';
 const API_KEY = process.env.HERE_API_KEY;
 
 export interface Waypoint {
   lat: number;
   lng: number;
   label?: string; // nome do cliente / referência
+}
+
+/**
+ * Otimiza a sequência de visitas usando a HERE Waypoints Sequence API.
+ * 
+ * @param startPoint Ponto de partida (base)
+ * @param waypoints Pontos a serem visitados
+ * @param endPoint Ponto final (opcional, se não informado volta para a base)
+ */
+export async function optimizeSequence(
+  startPoint: Waypoint,
+  waypoints: Waypoint[],
+  endPoint?: Waypoint
+): Promise<{ orderedIndices: number[]; raw: any }> {
+  if (!API_KEY) throw new Error('HERE_API_KEY não configurada');
+
+  const params: any = {
+    apiKey: API_KEY,
+    start: `${startPoint.lat},${startPoint.lng}`,
+    mode: 'fastest;car;traffic:disabled',
+  };
+
+  if (endPoint) {
+    params.end = `${endPoint.lat},${endPoint.lng}`;
+  }
+
+  waypoints.forEach((wp, idx) => {
+    params[`destination${idx + 1}`] = `${wp.lat},${wp.lng}`;
+  });
+
+  try {
+    const response = await axios.get(HERE_OPTIMIZE_URL, { params });
+    const results = response.data?.results;
+
+    if (!results || results.length === 0) {
+      throw new Error('Nenhuma sequência otimizada encontrada.');
+    }
+
+    // A HERE retorna a sequência de 'waypoints' (paradas)
+    // Precisamos extrair a ordem baseada nos índices originais
+    const waypointsOrder = results[0].waypoints;
+    // O primeiro é o start, o último é o end. Os intermediários são os destinos.
+    const orderedIndices = waypointsOrder
+      .filter((w: any) => w.id.startsWith('destination'))
+      .map((w: any) => parseInt(w.id.replace('destination', '')) - 1);
+
+    return {
+      orderedIndices,
+      raw: response.data
+    };
+  } catch (error: any) {
+    console.error('[HereRoutingService] Erro na Otimização:', error.response?.data || error.message);
+    throw error;
+  }
 }
 
 export interface RouteSection {

@@ -151,7 +151,7 @@ export default function RoutingPanel({
         {/* ── Origin ── */}
         <div className="px-3 py-2 border-t border-border/50">
           <p className="text-[10px] text-muted-foreground mb-1.5 font-semibold uppercase tracking-wide">
-            Ponto de origem (representante)
+            Ponto de origem (usuário)
           </p>
           <div className="flex items-center gap-2 mb-2">
             <input

@@ -8,19 +8,23 @@ const SEMANAS = ['Semana 1', 'Semana 2', 'Semana 3', 'Semana 4'];
 const DIAS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
 
 export function AgendaPanel() {
-  const { selectedUserId, setSelectedUserId } = useRotas();
+  const { currentCycle, currentWeeks } = useRotas();
   const { data: reps = [] } = useApiRepresentatives(true);
-  const { data: clientes = [], isLoading } = useApiClientes(selectedUserId || null);
+  const { data: clientes = [], isLoading } = useApiClientes(currentCycle?.supervisor_user_id || null);
 
   // Distribui clientes: 4 semanas × 5 dias úteis
   const agenda = useMemo(() => {
-    const grid: Record<string, Record<string, typeof clientes>> = {};
+    const grid: Record<string, Record<string, any[]>> = {};
     SEMANAS.forEach(s => {
       grid[s] = {};
       DIAS.forEach(d => { grid[s][d] = []; });
     });
 
+    if (clientes.length === 0) return grid;
+
     clientes.forEach((c, idx) => {
+      // Se houver ciclo ativo e semanas, poderíamos usar a atribuição real
+      // Por enquanto mantemos a lógica visual para demonstração
       const semanaIdx = Math.floor(idx / (DIAS.length * Math.ceil(clientes.length / 20)));
       const semana = SEMANAS[Math.min(semanaIdx, 3)];
       const diaIdx = idx % DIAS.length;
@@ -47,31 +51,17 @@ export function AgendaPanel() {
         <div>
           <h2 className="text-lg font-semibold text-foreground">Agenda de Visitas</h2>
           <p className="text-sm text-muted-foreground">
-            Programação semanal e cronograma de atendimento por representante.
+            Programação semanal e cronograma de atendimento.
+            {currentCycle && <span className="text-primary font-bold ml-1">Ciclo: {currentCycle.name}</span>}
           </p>
-        </div>
-
-        <div className="relative min-w-[250px]">
-          <select
-            className="w-full h-10 px-3 bg-background border border-input rounded-md text-sm appearance-none pr-10"
-            value={selectedUserId || ''}
-            onChange={e => setSelectedUserId(e.target.value ? Number(e.target.value) : null)}
-          >
-            <option value="">-- Selecione um Representante --</option>
-            {reps.map(r => (
-              <option key={r.id} value={r.id}>{r.code || 'S/ COD'} — {r.full_name || r.fullName || r.username}</option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
         </div>
       </div>
 
-      {!selectedUserId ? (
-        <Card className="border-border/40">
+      {!currentCycle ? (
+        <Card className="border-border/40 border-dashed border-2">
           <CardContent className="py-20 text-center text-muted-foreground">
             <Calendar className="w-12 h-12 mx-auto mb-4 opacity-20" />
-            <p className="text-sm font-medium">Selecione um representante para gerar a agenda de visitas.</p>
-            <p className="text-xs mt-1">A distribuição é feita automaticamente baseada nos clientes da carteira.</p>
+            <p className="text-sm font-medium">Crie ou selecione um Ciclo de Planejamento para visualizar a agenda.</p>
           </CardContent>
         </Card>
       ) : isLoading ? (

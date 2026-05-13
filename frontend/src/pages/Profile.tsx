@@ -36,7 +36,7 @@ interface UserProfile {
 const TIPO_LABELS: Record<string, string> = {
     admin: 'Administrador',
     promotor: 'Promotor',
-    representante: 'Representante',
+    representante: 'Usuário',
 };
 
 const TIPO_COLORS: Record<string, string> = {

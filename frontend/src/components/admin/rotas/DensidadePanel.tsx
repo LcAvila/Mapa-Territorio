@@ -53,9 +53,9 @@ export function DensidadePanel() {
             value={selectedUserId || ''}
             onChange={e => setSelectedUserId(e.target.value ? Number(e.target.value) : null)}
           >
-            <option value="">-- Todos os Representantes --</option>
+            <option value="">-- Todos os Usuários --</option>
             {reps.map(r => (
-              <option key={r.id} value={r.id}>{r.code || 'S/ COD'} — {r.full_name || r.fullName || r.username}</option>
+              <option key={r.id} value={r.id}>{r.code ? `${r.code} — ` : ''}{r.full_name || r.fullName || r.username}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
@@ -127,7 +127,7 @@ export function DensidadePanel() {
             ) : stats.topBairros.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground text-sm">
                 <BarChart3 className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                Selecione um representante para ver a distribuição.
+                Selecione um usuário para ver a distribuição.
               </div>
             ) : (
               stats.topBairros.map(([bairro, count]) => {

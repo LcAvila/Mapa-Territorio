@@ -178,6 +178,55 @@ router.post('/users/:id/kick', requireAdmin, async (req: any, res) => {
   }
 });
 
+// ── AUDIT LOGS ─────────────────────────────────────────────────────────────
+
+// Get all audit logs
+router.get('/audit', requirePermission('audit', 'view'), async (req, res) => {
+  try {
+    const logs = await prisma.userActivity.findMany({
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            full_name: true
+          }
+        }
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 500
+    });
+    
+    // Map to frontend structure
+    const mappedLogs = logs.map(log => ({
+      id: String(log.id),
+      action: log.action,
+      entity: log.entity || 'Sistema',
+      entityId: log.entityId || '',
+      details: log.details,
+      performedBy: log.user?.full_name || log.user?.username || 'Sistema',
+      timestamp: log.timestamp.toISOString(),
+      ipAddress: log.ipAddress
+    }));
+
+    res.json(mappedLogs);
+  } catch (error) {
+    console.error('Error fetching audit logs:', error);
+    res.status(500).json({ message: 'Erro ao buscar logs de auditoria' });
+  }
+});
+
+// Clear audit logs (Admin only)
+router.delete('/audit/clear', requireAdmin, async (req: any, res) => {
+  try {
+    await prisma.userActivity.deleteMany({});
+    await logUserActivity(req.user.id, 'clear_audit', 'Administrador limpou o histórico de auditoria', req, 'Audit');
+    res.json({ message: 'Histórico de auditoria removido com sucesso' });
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao limpar auditoria' });
+  }
+});
+
 router.get('/users', requirePermission('users', 'view'), async (req, res) => {
   try {
     const findPromise = prisma.user.findMany({ select: PUBLIC_USER_FIELDS, orderBy: { id: 'asc' } });

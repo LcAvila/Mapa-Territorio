@@ -59,7 +59,16 @@ import {
   Users2,
   Menu
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -77,9 +86,9 @@ import { BlocosPanel } from '../components/admin/rotas/BlocosPanel';
 import { RoteirosPanel } from '../components/admin/rotas/RoteirosPanel';
 import { AgendaPanel } from '../components/admin/rotas/AgendaPanel';
 import { DensidadePanel } from '../components/admin/rotas/DensidadePanel';
-import { LeituraPlanilhaPanel } from '../components/admin/rotas/LeituraPlanilhaPanel';
 import { RotaSequencialPanel } from '../components/admin/rotas/RotaSequencialPanel';
 import { ResumoRoteiroPanel } from '../components/admin/rotas/ResumoRoteiroPanel';
+import { PlanningDashboard } from '../components/admin/rotas/PlanningDashboard';
 import { RotasProvider } from '../contexts/RotasContext';
 import MiniMapBrasil from '../components/admin/MiniMapBrasil';
 import UserProfileManager from '../components/admin/users/UserProfileManager';
@@ -104,10 +113,10 @@ interface UserType {
 
 interface Group { id: string; name: string; userIds: number[]; createdAt: string; }
 interface SystemNotification { id: number; title: string; message: string; createdAt: string; targetAll?: boolean; targetUserIds?: number[]; }
-interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; }
+interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; ipAddress?: string; }
 interface ModulePermission { userId: number; moduleId: string; canView: boolean; canEdit: boolean; }
 
-type TabId = 'dashboard' | 'users' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'leituraplanilha' | 'roteiro_seq' | 'resumo_roteiro' | 'user_types' | 'system' | 'reps' | `user_type_${number}`;
+type TabId = 'dashboard' | 'users' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'cycles' | 'roteiro_seq' | 'resumo_roteiro' | 'user_types' | 'system' | 'reps' | `user_type_${number}`;
 
 interface NavItem {
   id: TabId | 'settings' | 'rotas_menu' | 'users_menu';
@@ -348,8 +357,46 @@ export default function Admin() {
   const [userTypes, setUserTypes] = useState<UserType[]>([]);
   const [interests, setInterests] = useState<InterestRequest[]>([]);
   const [clientes, setClientes] = useState<ClienteData[]>([]);
+  const [loadingClientes, setLoadingClientes] = useState(false);
   const [loading, setLoading] = useState(true);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // ── Computed Territories ──────────────────────────────────────────────────
+  const computedTerritories = useMemo(() => {
+    const map = new globalThis.Map<string, { municipio: string, uf: string, userIds: Set<number>, clientCount: number }>();
+    
+    clientes.forEach(c => {
+      if (!c.cidade || !c.uf) return;
+      const city = c.cidade.trim();
+      const uf = c.uf.trim().toUpperCase();
+      const key = `${city}-${uf}`;
+
+      if (!map.has(key)) map.set(key, { municipio: city, uf, userIds: new Set(), clientCount: 0 });
+      const entry = map.get(key)!;
+      entry.clientCount++;
+      if (c.userId) entry.userIds.add(c.userId);
+    });
+
+    territories.forEach(t => {
+      if (!t.municipio || !t.uf) return;
+      const city = t.municipio.trim();
+      const uf = t.uf.trim().toUpperCase();
+      const key = `${city}-${uf}`;
+      
+      if (!map.has(key)) {
+        map.set(key, { municipio: city, uf, userIds: new Set(), clientCount: 0 });
+      }
+    });
+
+    return Array.from(map.values()).map((t, idx) => ({
+      id: idx,
+      municipio: t.municipio,
+      uf: t.uf,
+      userIds: Array.from(t.userIds),
+      clientCount: t.clientCount
+    })).sort((a, b) => a.uf.localeCompare(b.uf) || a.municipio.localeCompare(b.municipio));
+  }, [clientes, territories]);
+
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
 
@@ -426,7 +473,8 @@ export default function Admin() {
     LS.set(key, updated);
   }, [notifications, seenNotifications, userId]);
 
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => LS.get('admin_audit', []));
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [loadingAudit, setLoadingAudit] = useState(false);
 
   // ── Auth & Permissions ──────────────────────────────────────────────────
   const authHeaders = useMemo(() => ({
@@ -434,6 +482,27 @@ export default function Admin() {
     'Authorization': `Bearer ${token}`,
     'x-user-token-version': String(tokenVersion || 0)
   }), [token, tokenVersion]);
+
+  const [myPermissions, setMyPermissions] = useState<ModulePermission[]>([]);
+  const fetchMyPermissions = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API}/api/admin/users/${userId}/permissions`, { headers: authHeaders });
+      if (res.ok) setMyPermissions(await res.json());
+    } catch (error) { console.error('Error fetching permissions', error); }
+  }, [userId, authHeaders]);
+
+  const canAccess = useCallback((moduleId: string) => {
+    if (role === 'admin') return true;
+    const p = myPermissions.find(p => p.moduleId === moduleId);
+    return p?.canView || false;
+  }, [role, myPermissions]);
+
+  const canEdit = useCallback((moduleId: string) => {
+    if (role === 'admin') return true;
+    const p = myPermissions.find(p => p.moduleId === moduleId);
+    return p?.canEdit || false;
+  }, [role, myPermissions]);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -447,40 +516,33 @@ export default function Admin() {
     }
   }, [authHeaders]);
 
-  const saveGroups = (g: Group[]) => { setGroups(g); LS.set('admin_groups', g); };
-  const saveAuditLogs = (a: AuditLog[]) => { setAuditLogs(a); LS.set('admin_audit', a); };
-
-  const [myPermissions, setMyPermissions] = useState<ModulePermission[]>([]);
-  const fetchMyPermissions = useCallback(async () => {
-    if (!userId) return;
+  const fetchAuditLogs = useCallback(async () => {
+    if (!canAccess('audit')) return;
     try {
-      const res = await fetch(`${API}/api/admin/users/${userId}/permissions`, { headers: authHeaders });
-      if (res.ok) setMyPermissions(await res.json());
-    } catch (error) { console.error('Error fetching permissions', error); }
-  }, [userId, authHeaders]);
+      setLoadingAudit(true);
+      const res = await fetch(`${API}/api/admin/audit`, { headers: authHeaders });
+      if (res.ok) setAuditLogs(await res.json());
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
+    } finally {
+      setLoadingAudit(false);
+    }
+  }, [authHeaders, canAccess]);
 
-  const canAccess = (moduleId: string) => {
-    if (role === 'admin') return true;
-    const p = myPermissions.find(p => p.moduleId === moduleId);
-    return p?.canView || false;
-  };
-
-  const canEdit = (moduleId: string) => {
-    if (role === 'admin') return true;
-    const p = myPermissions.find(p => p.moduleId === moduleId);
-    return p?.canEdit || false;
-  };
+  const saveGroups = (g: Group[]) => { setGroups(g); LS.set('admin_groups', g); };
 
   // ── Dashboard filters ─────────────────────────────────────────────────────
-  const [dashFilterUser, setDashFilterUser] = useState('');
-  const [dashFilterUF, setDashFilterUF] = useState('');
+  const [dashFilterUser, setDashFilterUser] = useState('all');
+  const [dashFilterUF, setDashFilterUF] = useState('all');
   const [dashSearch, setDashSearch] = useState('');
 
-  const addAudit = useCallback((action: string, entity: string, entityId: string, details: string, extra?: Partial<AuditLog>) => {
-    const entry: AuditLog = { id: Date.now().toString(), action, entity, entityId, details, performedBy: 'admin', timestamp: new Date().toISOString(), ...extra };
-    const updated = [entry, ...LS.get<AuditLog[]>('admin_audit', [])].slice(0, 200);
-    saveAuditLogs(updated);
-  }, []);
+  const addAudit = useCallback(async (action: string, entity: string, entityId: string, details: string) => {
+    // Audit is now handled by the backend automatically when performing actions.
+    // This frontend helper can be used for actions that don't have a dedicated backend log yet,
+    // though it's better to log on the backend for security and accuracy.
+    console.log(`[AUDIT] Action: ${action}, Entity: ${entity}, ID: ${entityId}, Details: ${details}`);
+    fetchAuditLogs(); // Refresh the list
+  }, [fetchAuditLogs]);
 
   // ── Confirm dialog ─────────────────────────────────────────────────────────
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; onConfirm: () => void }>({ open: false, title: '', description: '', onConfirm: () => { } });
@@ -694,7 +756,8 @@ export default function Admin() {
   const [loadingMunicipios, setLoadingMunicipios] = useState(false);
   const [loadingSubdistritos, setLoadingSubdistritos] = useState(false);
   const [staged, setStaged] = useState<Array<{ municipio: string; uf: string; bairro?: string; userId: number; modo: string }>>([]);
-  const [filterUF, setFilterUF] = useState('');
+  const [filterUF, setFilterUF] = useState('all');
+  const [filterMunicipio, setFilterMunicipio] = useState('');
   const [filterUserForTerritory, setFilterUserForTerritory] = useState('');
 
   // ── Groups form ────────────────────────────────────────────────────────────
@@ -710,15 +773,15 @@ export default function Admin() {
   const [notifUserSearch, setNotifUserSearch] = useState('');
 
   // ── Audit filters ──────────────────────────────────────────────────────────
-  const [auditFilterUser, setAuditFilterUser] = useState('');
-  const [auditFilterAction, setAuditFilterAction] = useState('');
-  const [auditFilterUF, setAuditFilterUF] = useState('');
+  const [auditFilterUser, setAuditFilterUser] = useState('all');
+  const [auditFilterAction, setAuditFilterAction] = useState('all');
+  const [auditFilterUF, setAuditFilterUF] = useState('all');
 
   const filteredAudit = useMemo(() => {
     return auditLogs.filter(log => {
-      if (auditFilterUser && (log.details).includes(auditFilterUser)) return false;
-      if (auditFilterUF && (log.uf || log.details).includes(auditFilterUF)) return false;
-      if (auditFilterAction && log.action !== auditFilterAction) return false;
+      if (auditFilterUser && auditFilterUser !== 'all' && (log.details).includes(auditFilterUser)) return false;
+      if (auditFilterUF && auditFilterUF !== 'all' && (log.uf || log.details).includes(auditFilterUF)) return false;
+      if (auditFilterAction && auditFilterAction !== 'all' && log.action !== auditFilterAction) return false;
       return true;
     });
   }, [auditLogs, auditFilterUser, auditFilterUF, auditFilterAction]);
@@ -751,18 +814,29 @@ export default function Admin() {
     } catch (error) { console.error('Error fetching user types:', error); }
   }, [authHeaders]);
 
+  const fetchClientes = useCallback(async () => {
+    try {
+      setLoadingClientes(true);
+      const res = await fetch(`${API}/api/clientes`, { headers: authHeaders });
+      if (res.ok) setClientes(await res.json());
+    } catch (error) {
+      console.error('Error fetching clientes:', error);
+    } finally {
+      setLoadingClientes(false);
+    }
+  }, [authHeaders]);
+
   const fetchAll = useCallback(async () => {
     if (!initialLoadDone) setLoading(true);
     try {
-      const [tR, uR, iR, cR, utR] = await Promise.all([
+      const [tR, uR, iR, utR] = await Promise.all([
         fetch(`${API}/api/admin/territories`, { headers: authHeaders }),
         fetch(`${API}/api/admin/users`, { headers: authHeaders }),
         fetch(`${API}/api/interest`, { headers: authHeaders }),
-        fetch(`${API}/api/clientes`, { headers: authHeaders }),
         fetch(`${API}/api/admin/user-types`, { headers: authHeaders }),
       ]);
 
-      const responses = [tR, uR, iR, cR, utR];
+      const responses = [tR, uR, iR, utR];
       const unauth = responses.find(r => r.status === 401);
       if (unauth) {
         toast.error('Sessão encerrada ou inválida. Faça login novamente.');
@@ -770,22 +844,27 @@ export default function Admin() {
         return;
       }
 
-      if (tR.ok && uR.ok && iR.ok && cR.ok && utR.ok) {
+      if (tR.ok && uR.ok && iR.ok && utR.ok) {
         setTerritories(await tR.json());
         setUsers(await uR.json());
         setInterests(await iR.json());
-        setClientes(await cR.json());
         setUserTypes(await utR.json());
       }
       // Also fetch groups
       await fetchGroups();
+
+      // Lazy load clientes only if needed or after initial UI is ready
+      if (!initialLoadDone) {
+        fetchClientes();
+        fetchAuditLogs();
+      }
     } catch (error) {
       console.error('Fetch error:', error);
     } finally { 
       setLoading(false); 
       setInitialLoadDone(true);
     }
-  }, [authHeaders, logout, fetchGroups, initialLoadDone]);
+  }, [authHeaders, logout, fetchGroups, initialLoadDone, fetchClientes, fetchAuditLogs]);
 
   const handleDownloadLogisticsPlan = async () => {
     try {
@@ -812,10 +891,12 @@ export default function Admin() {
   };
 
   useEffect(() => {
-    fetchAll();
-    fetchMyPermissions();
-    fetchNotifications();
-  }, [fetchAll, fetchMyPermissions, fetchNotifications]);
+    if (!initialLoadDone) {
+      fetchAll();
+      fetchMyPermissions();
+      fetchNotifications();
+    }
+  }, [initialLoadDone, fetchAll, fetchMyPermissions, fetchNotifications]);
 
 
   useEffect(() => {
@@ -883,8 +964,8 @@ export default function Admin() {
       })
     });
     if (res.ok) {
-      toast.success(`Representante ${newRep.code} cadastrado!`);
-      addAudit('create_rep', 'Representante', newRep.code, `Criou rep ${newRep.code} — ${newRep.name}`);
+      toast.success(`Usuário ${newRep.code} cadastrado!`);
+      addAudit('create_rep', 'Usuário', newRep.code, `Criou usuário ${newRep.code} — ${newRep.name}`);
       setNewRep({
         userId: '', code: '', name: '', fullName: '', isVago: 0, colorIndex: 1, email: '', contato: '',
         endereco: '', bairro: '', cidade: '', uf: '', cep: '', comissao: ''
@@ -896,10 +977,10 @@ export default function Admin() {
   };
 
   const handleDeleteRep = (code: string, name: string) => {
-    openConfirm('Remover representante', `"${name}" e todos os seus territórios serão removidos.`, async () => {
+    openConfirm('Remover usuário', `"${name}" e todos os seus territórios serão removidos.`, async () => {
       closeConfirm();
       const res = await fetch(`${API}/api/admin/reps/${code}`, { method: 'DELETE', headers: authHeaders });
-      if (res.ok) { toast.success('Removido!'); addAudit('delete_rep', 'Representante', code, `Removeu rep ${code} — ${name}`); fetchAll(); }
+      if (res.ok) { toast.success('Removido!'); addAudit('delete_rep', 'Usuário', code, `Removeu usuário ${code} — ${name}`); fetchAll(); }
       else toast.error('Erro ao remover');
     });
   };
@@ -916,7 +997,7 @@ export default function Admin() {
     });
     if (res.ok) {
       toast.success('Atualizado!');
-      addAudit('update_rep', 'Representante', code, `Editou rep ${code}`);
+      addAudit('update_rep', 'Usuário', code, `Editou usuário ${code}`);
       setEditingCode(null);
       fetchAll();
     }
@@ -937,7 +1018,7 @@ export default function Admin() {
     let ok = 0, fail = 0;
     for (const item of staged) {
       const res = await fetch(`${API}/api/admin/territories`, { method: 'POST', headers: authHeaders, body: JSON.stringify({ municipio: item.municipio, uf: item.uf, userId: item.userId, modo: item.modo }) });
-      if (res.ok) { ok++; addAudit('assign_territory', 'Território', item.municipio, `Atribuiu ${item.municipio}/${item.uf} → ${item.userId}`, { uf: item.uf, municipio: item.municipio }); }
+      if (res.ok) { ok++; addAudit('assign_territory', 'Território', item.municipio, `Atribuiu ${item.municipio}/${item.uf} → ${item.userId}`); }
       else fail++;
     }
     if (ok) toast.success(`${ok} território(s) atribuído(s)!`);
@@ -947,7 +1028,7 @@ export default function Admin() {
 
   const handleDeleteTerritory = async (id: number, municipio: string, userId: number, uf: string) => {
     const res = await fetch(`${API}/api/admin/territories/${id}`, { method: 'DELETE', headers: authHeaders });
-    if (res.ok) { toast.success(`${municipio} removido!`); addAudit('delete_territory', 'Território', String(id), `Removeu ${municipio}/${uf}`, { uf, municipio }); fetchAll(); }
+    if (res.ok) { toast.success(`${municipio} removido!`); addAudit('delete_territory', 'Território', String(id), `Removeu ${municipio}/${uf}`); fetchAll(); }
     else toast.error('Erro');
   };
 
@@ -1265,8 +1346,9 @@ export default function Admin() {
   const displayPhoto = currentUser?.photo || '';
   const displayCargo = currentUser?.cargo || role || 'usuário';
 
-  const navItems: NavItem[] = [
+  const navItems: NavItem[] = useMemo(() => [
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor', 'user'] },
     {
       id: 'users_menu' as const, label: 'Usuários', icon: UsersRound, restrict: ['admin'], subItems: [
         { id: 'users' as const, label: 'Todos os Usuários', icon: UserPlus, count: users.length },
@@ -1282,11 +1364,9 @@ export default function Admin() {
         { id: 'groups' as const, label: 'Grupos', icon: UsersRound, count: groups.length },
       ]
     },
-    { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor', 'user'] },
-    { id: 'territories' as const, label: 'Territórios', icon: MapPin, restrict: ['admin', 'supervisor'] },
     {
       id: 'rotas_menu' as const, label: 'Planejamento de Áreas', icon: Truck, restrict: ['admin'], subItems: [
-        { id: 'leituraplanilha' as const, label: 'Leitura Excel', icon: FileSpreadsheet },
+        { id: 'cycles' as const, label: 'Ciclos', icon: Settings },
         { id: 'roteiro_seq' as const, label: 'Roteiro Sequencial', icon: Route },
         { id: 'resumo_roteiro' as const, label: 'Resumo Roteiro', icon: BarChart2 },
         { id: 'clusters' as const, label: 'Clusters', icon: Layers },
@@ -1296,6 +1376,7 @@ export default function Admin() {
         { id: 'densidade' as const, label: 'Densidade', icon: Activity },
       ]
     },
+    { id: 'territories' as const, label: 'Territórios', icon: MapPin, count: computedTerritories.length, restrict: ['admin', 'supervisor'] },
     { id: 'interests' as const, label: 'Interesses', icon: HandHeart, count: pendingInterests > 0 ? pendingInterests : undefined, badge: pendingInterests > 0, restrict: ['admin'] },
     { id: 'notifications' as const, label: 'Enviar Alerta', icon: Bell, restrict: ['admin'] },
     {
@@ -1340,7 +1421,7 @@ export default function Admin() {
     if (item.restrict && !item.restrict.includes(role || '')) return false;
 
     return true;
-  });
+  }), [users, userTypes, groups, computedTerritories, pendingInterests, unreadCount, auditLogs, role, myPermissions]);
 
   // Update activeTab if current one is restricted after permissions load
   useEffect(() => {
@@ -1605,8 +1686,8 @@ export default function Admin() {
           {activeTab === 'dashboard' && (() => {
             // ── Derived / filtered data ──────────────────────────────────────
             const filteredClientes = clientes.filter(c => {
-              if (dashFilterUser && String(c.userId) !== dashFilterUser) return false;
-              if (dashFilterUF && c.uf !== dashFilterUF) return false;
+              if (dashFilterUser && dashFilterUser !== 'all' && String(c.userId) !== dashFilterUser) return false;
+              if (dashFilterUF && dashFilterUF !== 'all' && c.uf !== dashFilterUF) return false;
               if (dashSearch) {
                 const q = dashSearch.toLowerCase();
                 const userName = users.find(u => u.id === c.userId)?.full_name?.toLowerCase() || '';
@@ -1631,8 +1712,8 @@ export default function Admin() {
             ].filter(Boolean))].sort();
             const activeUsers = users.filter(u => !u.isVago);
 
-            const clearFilters = () => { setDashFilterUser(''); setDashFilterUF(''); setDashSearch(''); };
-            const hasFilters = dashFilterUser || dashFilterUF || dashSearch;
+            const clearFilters = () => { setDashFilterUser('all'); setDashFilterUF('all'); setDashSearch(''); };
+            const hasFilters = (dashFilterUser && dashFilterUser !== 'all') || (dashFilterUF && dashFilterUF !== 'all') || dashSearch;
 
             return (
               <div className="flex flex-col gap-5 no-scrollbar pb-10 sm:pb-0">
@@ -1662,24 +1743,30 @@ export default function Admin() {
 
                     <div className="flex items-center gap-2">
                       {/* User dropdown */}
-                      <select
-                        value={dashFilterUser}
-                        onChange={e => setDashFilterUser(e.target.value)}
-                        className="h-9 px-3 rounded-lg text-xs sm:text-[0.8rem] flex-1 sm:flex-none sm:w-40 border border-border bg-background text-foreground outline-none cursor-pointer hover:bg-secondary/50 transition-colors"
-                      >
-                        <option value="">Todos Usuários</option>
-                        {users.filter(u => !u.isVago).map(u => <option key={u.id} value={String(u.id)}>{u.username}</option>)}
-                      </select>
+                      <Select value={dashFilterUser} onValueChange={setDashFilterUser}>
+                        <SelectTrigger className="h-9 w-40 text-[10px] font-bold uppercase bg-background border-border/40">
+                          <SelectValue placeholder="Todos Usuários" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos Usuários</SelectItem>
+                          {users.filter(u => !u.isVago).map(u => (
+                            <SelectItem key={u.id} value={String(u.id)}>{u.username}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
 
                       {/* UF dropdown */}
-                      <select
-                        value={dashFilterUF}
-                        onChange={e => setDashFilterUF(e.target.value)}
-                        className="h-9 px-3 rounded-lg text-xs sm:text-[0.8rem] w-24 sm:w-32 border border-border bg-background text-foreground outline-none cursor-pointer hover:bg-secondary/50 transition-colors"
-                      >
-                        <option value="">UF</option>
-                        {allUFs.map(uf => <option key={uf} value={uf}>{uf}</option>)}
-                      </select>
+                      <Select value={dashFilterUF} onValueChange={setDashFilterUF}>
+                        <SelectTrigger className="h-9 w-24 sm:w-32 text-[10px] font-bold uppercase bg-background border-border/40">
+                          <SelectValue placeholder="UF" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todas as UFs</SelectItem>
+                          {allUFs.map(uf => (
+                            <SelectItem key={uf} value={uf || 'empty'}>{uf}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
 
                       {/* Clear */}
                       {hasFilters && (
@@ -1819,7 +1906,7 @@ export default function Admin() {
                                 </div>
                                 
                                 <button
-                                  onClick={() => { setDashFilterUF(uf === dashFilterUF ? '' : uf); }}
+                                  onClick={() => { setDashFilterUF(uf === dashFilterUF ? 'all' : uf); }}
                                   className={`w-full sm:w-auto px-4 py-1.5 rounded-xl text-[0.75rem] font-black transition-all duration-300 shadow-sm ${
                                     dashFilterUF === uf 
                                       ? 'bg-destructive text-destructive-foreground shadow-destructive/20' 
@@ -1882,7 +1969,7 @@ export default function Admin() {
                         <div className="flex items-center gap-2">
                           <Map className="w-3.5 h-3.5 text-admin-sidebar-accent" />
                           <span className="font-bold text-[0.82rem]">Mapa de Cobertura</span>
-                          {dashFilterUF && (
+                          {dashFilterUF && dashFilterUF !== 'all' && (
                             <span className="ml-auto text-[0.7rem] font-bold text-admin-sidebar-accent">
                               {dashFilterUF}
                             </span>
@@ -1902,8 +1989,8 @@ export default function Admin() {
                         <div className="w-full h-full flex items-center justify-center scale-[0.85] sm:scale-100 origin-center transition-transform">
                           <MiniMapBrasil
                             territories={territories}
-                            filterUF={dashFilterUF}
-                            onClickUF={uf => setDashFilterUF(prev => prev === uf ? '' : uf)}
+                            filterUF={dashFilterUF === 'all' ? '' : dashFilterUF}
+                            onClickUF={uf => setDashFilterUF(prev => prev === uf ? 'all' : uf)}
                           />
                         </div>
                       </div>
@@ -1919,26 +2006,49 @@ export default function Admin() {
                         <div className="p-2 max-h-[150px] sm:max-h-[200px] overflow-y-auto">
                           {users.filter(u => !u.isVago).length === 0 ? (
                             <p className="p-3 text-[0.78rem] text-muted-foreground">Nenhum usuário</p>
-                          ) : users.filter(u => !u.isVago).map(user => {
-                            const color = REP_COLOR_PALETTE[user.colorIndex || 0] || 'hsl(220 15% 40%)';
-                            const count = clientes.filter(c => c.userId === user.id).length;
-                            const isActive = dashFilterUser === String(user.id);
-                            return (
-                              <button
-                                key={user.id}
-                                onClick={() => setDashFilterUser(prev => prev === String(user.id) ? '' : String(user.id))}
-                                className={`w-full flex items-center gap-2.5 p-1.5 px-4 border-none cursor-pointer text-left rounded-md transition-colors ${
-                                  isActive ? 'bg-admin-sidebar-accent/10' : 'bg-transparent'
-                                }`}
-                              >
-                                <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isActive ? 'ring-2 ring-offset-1 ring-admin-sidebar-accent' : ''}`} style={{ background: color }} />
-                                <span className={`flex-1 text-[0.78rem] truncate ${isActive ? 'font-bold' : 'font-medium'}`}>{user.full_name || user.fullName || user.username}</span>
-                                <span className="text-[0.68rem] font-bold px-2 rounded-full bg-black/5 dark:bg-white/5">
-                                  {count}
-                                </span>
-                              </button>
-                            );
-                          })}
+                          ) : users
+                            .filter(u => !u.isVago)
+                            .map(user => {
+                              const rawLastActive = user.last_active || (user as any).lastActive;
+                              const lastDate = rawLastActive ? new Date(rawLastActive) : null;
+                              const hasEverLoggedIn = lastDate !== null && !isNaN(lastDate.getTime()) && lastDate.getFullYear() > 1970;
+                              const isUserOnline = hasEverLoggedIn && ((user.id === userId) || (Date.now() - lastDate!.getTime() < 300000));
+                              
+                              return { ...user, isUserOnline };
+                            })
+                            .sort((a, b) => (b.isUserOnline ? 1 : 0) - (a.isUserOnline ? 1 : 0))
+                            .map(user => {
+                              const repColor = REP_COLOR_PALETTE[user.colorIndex || 0] || 'hsl(220 15% 40%)';
+                              const count = clientes.filter(c => c.userId === user.id).length;
+                              const isFilterSelected = dashFilterUser === String(user.id);
+                              
+                              return (
+                                <button
+                                  key={user.id}
+                                  onClick={() => setDashFilterUser(prev => prev === String(user.id) ? 'all' : String(user.id))}
+                                  className={`w-full flex items-center gap-2.5 p-1.5 px-4 border-none cursor-pointer text-left rounded-md transition-colors ${
+                                    isFilterSelected ? 'bg-admin-sidebar-accent/10' : 'hover:bg-black/5 dark:hover:bg-white/5'
+                                  }`}
+                                  title={user.isUserOnline ? 'Online agora' : 'Offline'}
+                                >
+                                  <div className="relative shrink-0">
+                                    <div 
+                                      className={`w-2.5 h-2.5 rounded-full ${user.isUserOnline ? 'bg-emerald-500 animate-pulse ring-2 ring-emerald-500/20' : 'bg-muted-foreground/30'}`} 
+                                    />
+                                    <div 
+                                      className="absolute -top-0.5 -left-0.5 w-3.5 h-3.5 rounded-full border border-current opacity-20" 
+                                      style={{ color: repColor }}
+                                    />
+                                  </div>
+                                  <span className={`flex-1 text-[0.78rem] truncate ${isFilterSelected ? 'font-black text-primary' : 'font-medium'}`}>
+                                    {user.full_name || user.fullName || user.username}
+                                  </span>
+                                  <span className="text-[0.68rem] font-black px-2 py-0.5 rounded-full bg-black/5 dark:bg-white/5 opacity-60">
+                                    {count}
+                                  </span>
+                                </button>
+                              );
+                            })}
                         </div>
                       </div>
                     )}
@@ -1989,24 +2099,24 @@ export default function Admin() {
                   </h2>
                   <p className="text-sm text-muted-foreground">Controle de acesso e permissões.</p>
                 </div>
-                <div className="flex w-full md:w-auto items-center gap-3">
+                <div className="flex w-full md:w-auto items-center gap-2 sm:gap-3">
                   <div className="relative flex-1 md:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Search className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
                     <Input
-                      placeholder="Buscar por nome ou email..."
-                      className="pl-9 bg-background/50 border-border/40"
+                      placeholder={window.innerWidth < 640 ? "Buscar..." : "Buscar por nome ou email..."}
+                      className="pl-8 sm:pl-9 h-9 sm:h-10 bg-background/50 border-border/40 text-xs sm:text-sm"
                       value={userSearch}
                       onChange={(e) => setUserSearch(e.target.value)}
                     />
                   </div>
 
                   {/* Filtro de Ordenação Estilizado */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
                     <Popover>
                       <PopoverTrigger asChild>
-                        <button className="flex items-center gap-2.5 bg-secondary/40 px-4 py-2 rounded-lg border border-border/40 hover:bg-secondary/60 transition-all group">
+                        <button className="flex items-center gap-1.5 sm:gap-2.5 bg-secondary/40 px-2 sm:px-4 py-2 rounded-lg border border-border/40 hover:bg-secondary/60 transition-all group">
                           <Filter className="w-3.5 h-3.5 text-primary group-hover:scale-110 transition-transform" />
-                          <div className="flex flex-col items-start leading-none">
+                          <div className="hidden sm:flex flex-col items-start leading-none">
                             <span className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter opacity-70">ORDENAR POR</span>
                             <span className="text-xs font-bold text-foreground">
                               {userSortBy === 'name' ? 'Nome' : 
@@ -2014,7 +2124,7 @@ export default function Admin() {
                                userSortBy === 'role' ? 'Tipo de Usuário' : 'Data de Criação'}
                             </span>
                           </div>
-                          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-1" />
+                          <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground ml-0 sm:ml-1" />
                         </button>
                       </PopoverTrigger>
                       <PopoverContent className="w-56 p-1.5 shadow-2xl border-primary/10" align="end">
@@ -2044,14 +2154,14 @@ export default function Admin() {
 
                   <Button
                     variant={userFilterOnline ? "default" : "outline"}
-                    className={`gap-2 ${userFilterOnline ? 'bg-emerald-500 hover:bg-emerald-600 border-emerald-500 text-white' : ''}`}
+                    className={`h-9 sm:h-10 px-2 sm:px-4 gap-1 sm:gap-2 ${userFilterOnline ? 'bg-emerald-500 hover:bg-emerald-600 border-emerald-500 text-white' : ''}`}
                     onClick={() => setUserFilterOnline(!userFilterOnline)}
                   >
-                    <Activity className={`w-4 h-4 ${userFilterOnline ? 'animate-pulse' : ''}`} />
-                    Online
-                    {userFilterOnline && <X className="w-3 h-3 ml-1" />}
+                    <Activity className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${userFilterOnline ? 'animate-pulse' : ''}`} />
+                    <span className="hidden sm:inline">Online</span>
+                    {userFilterOnline && <X className="w-3 h-3 ml-0 sm:ml-1" />}
                   </Button>
-                  <Button className="gap-2 shadow-lg shadow-primary/20" onClick={() => {
+                  <Button className="h-9 sm:h-10 px-2 sm:px-4 gap-1 sm:gap-2 shadow-lg shadow-primary/20" onClick={() => {
                     setEditingUserId(null);
                     setNewUser({
                       fullName: '', email: '', password: '', confirmPassword: '',
@@ -2074,7 +2184,7 @@ export default function Admin() {
                   <Users className="w-12 h-12 opacity-10 mb-4" /> <p>Nenhum usuário</p>
                 </Card>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
                   {filteredUsers.map(u => {
                     const rawLastActive = u.last_active || (u as SystemUser & { lastActive?: string }).lastActive;
                     const lastDate = rawLastActive ? new Date(rawLastActive) : null;
@@ -2086,10 +2196,6 @@ export default function Admin() {
                     const hasSettingsPerm = u.permissions?.some(p => p.moduleId === 'settings' && p.canEdit);
                     const isAdminType = userType?.isAdmin || u.role === 'admin' || hasSettingsPerm;
                     
-                    // Prioridade de cor:
-                    // 1. Se for Admin (tipo ou role), usa amarelo
-                    // 2. Se tiver um tipo personalizado com cor definida, usa a cor do tipo
-                    // 3. Padrão: Azul
                     const cardColor = isAdminType ? '#fbbf24' : (userType?.color || '#3b82f6');
                     
                     const TypeIcon = userType?.icon && ICON_LIST[userType.icon as keyof typeof ICON_LIST] 
@@ -2099,40 +2205,40 @@ export default function Admin() {
                     return (
                       <Card key={u.id} className="group relative overflow-hidden border-border/40 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 transform hover:-translate-y-1">
                         <div className="h-1.5 w-full absolute top-0 left-0" style={{ backgroundColor: cardColor }} />
-                        <CardContent className="p-5">
-                          <div className="flex flex-col items-center text-center space-y-3">
+                        <CardContent className="p-4 sm:p-5">
+                          <div className="flex flex-col items-center text-center space-y-2.5 sm:space-y-3">
                             <div className="relative">
-                              <div className="w-16 h-16 rounded-2xl bg-secondary border border-border/50 flex items-center justify-center overflow-hidden transition-transform group-hover:scale-105 duration-300">
-                                {u.photo ? <img src={u.photo} alt="Avatar" className="w-full h-full object-cover" /> : <User className="w-8 h-8 text-muted-foreground/30" />}
+                              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-secondary border border-border/50 flex items-center justify-center overflow-hidden transition-transform group-hover:scale-105 duration-300">
+                                {u.photo ? <img src={u.photo} alt="Avatar" className="w-full h-full object-cover" /> : <User className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground/30" />}
                               </div>
-                              <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg flex items-center justify-center border-2 border-card shadow-sm text-white" style={{ backgroundColor: cardColor }}>
-                                <TypeIcon className="w-3" />
+                              <div className="absolute -bottom-1 -right-1 w-5 h-5 sm:w-6 sm:h-6 rounded-lg flex items-center justify-center border-2 border-card shadow-sm text-white" style={{ backgroundColor: cardColor }}>
+                                <TypeIcon className="w-2.5 sm:w-3" />
                               </div>
-                              <div className={`absolute -top-1 -left-1 w-3.5 h-3.5 rounded-full border-2 border-card shadow-sm ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40'}`} title={isOnline ? 'Online' : 'Offline'} />
+                              <div className={`absolute -top-1 -left-1 w-3 sm:w-3.5 h-3 sm:h-3.5 rounded-full border-2 border-card shadow-sm ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40'}`} title={isOnline ? 'Online' : 'Offline'} />
                             </div>
-                            <div className="space-y-0.5 w-full">
-                              <h3 className="font-bold text-sm truncate" title={u.full_name || u.fullName || u.username}>{u.full_name || u.fullName || u.username}</h3>
-                              <p className="text-[10px] text-muted-foreground truncate">{u.username}</p>
+                            <div className="space-y-0.5 w-full overflow-hidden">
+                              <h3 className="font-bold text-xs sm:text-sm truncate px-1" title={u.full_name || u.fullName || u.username}>{u.full_name || u.fullName || u.username}</h3>
+                              <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate">{u.username}</p>
                               
                               <div className="flex flex-col gap-0.5 mt-1">
                                 {u.created_at || u.createdAt ? (
-                                  <p className="text-[9px] text-muted-foreground/60 flex items-center justify-center gap-1">
+                                  <p className="text-[8px] sm:text-[9px] text-muted-foreground/60 flex items-center justify-center gap-1">
                                     <Calendar className="w-2.5 h-2.5" />
-                                    Criado em: {new Date(u.created_at || u.createdAt || 0).toLocaleDateString('pt-BR')}
+                                    {new Date(u.created_at || u.createdAt || 0).toLocaleDateString('pt-BR')}
                                   </p>
                                 ) : null}
 
                                 {!isOnline && lastActive && (
-                                  <p className="text-[9px] text-muted-foreground/60 italic">Visto em {lastActive.toLocaleDateString('pt-BR')} às {lastActive.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                                  <p className="hidden sm:block text-[9px] text-muted-foreground/60 italic">Visto em {lastActive.toLocaleDateString('pt-BR')} às {lastActive.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
                                 )}
                               </div>
                             </div>
-                            <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
-                              <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase" style={{ backgroundColor: `${cardColor}20`, color: cardColor }}>{userType?.name || u.role}</span>
+                            <div className="flex flex-wrap items-center justify-center gap-1.5 pt-0.5">
+                              <span className="text-[8px] sm:text-[9px] px-2 py-0.5 rounded-full font-bold uppercase truncate max-w-full" style={{ backgroundColor: `${cardColor}20`, color: cardColor }}>{userType?.name || u.role}</span>
                             </div>
                           </div>
-                          <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-border/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary" onClick={() => {
+                          <div className="flex items-center justify-center gap-1.5 sm:gap-2 mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-border/30 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-300">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-primary/10 hover:text-primary" onClick={() => {
                               setEditingUserId(u.id);
                               setEditUserForm({
                                 username: u.username,
@@ -2152,11 +2258,11 @@ export default function Admin() {
                                 managedUserIds: u.managedUsers?.map(m => m.id) || []
                               });
                               setIsUserModalOpen(true);
-                            }}><Pencil className="w-4 h-4" /></Button>
+                            }}><Pencil className="w-3.5 sm:w-4 h-3.5 sm:h-4" /></Button>
                             {(role === 'admin' || canEdit('settings')) && u.id !== userId && (
-                              <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-orange-500/10 hover:text-orange-500" title="Derrubar Sessão" onClick={() => handleKickUser(u)}><LogOut className="w-4 h-4" /></Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-orange-500/10 hover:text-orange-500" title="Derrubar Sessão" onClick={() => handleKickUser(u)}><LogOut className="w-3.5 sm:w-4 h-3.5 sm:h-4" /></Button>
                             )}
-                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteUser(u.id, u.username)}><Trash2 className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteUser(u.id, u.username)}><Trash2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" /></Button>
                           </div>
                         </CardContent>
                       </Card>
@@ -2399,46 +2505,16 @@ export default function Admin() {
 
           {/* ━━ TERRITÓRIOS ━━ */}
           {activeTab === 'territories' && (() => {
-            const computedTerritories = (() => {
-              const map = new globalThis.Map<string, { municipio: string, uf: string, userIds: Set<number>, clientCount: number }>();
-              
-              clientes.forEach(c => {
-                if (!c.cidade || !c.uf) return;
-                const city = c.cidade.trim();
-                const uf = c.uf.trim().toUpperCase();
-                const key = `${city}-${uf}`;
-
-                if (!map.has(key)) map.set(key, { municipio: city, uf, userIds: new Set(), clientCount: 0 });
-                const entry = map.get(key)!;
-                entry.clientCount++;
-                if (c.userId) entry.userIds.add(c.userId);
-              });
-
-              territories.forEach(t => {
-                if (!t.municipio || !t.uf) return;
-                const city = t.municipio.trim();
-                const uf = t.uf.trim().toUpperCase();
-                const key = `${city}-${uf}`;
-                
-                if (!map.has(key)) {
-                  map.set(key, { municipio: city, uf, userIds: new Set(), clientCount: 0 });
-                }
-              });
-
-              return Array.from(map.values()).map((t, idx) => ({
-                id: idx,
-                municipio: t.municipio,
-                uf: t.uf,
-                userIds: Array.from(t.userIds),
-                clientCount: t.clientCount
-              })).sort((a, b) => a.uf.localeCompare(b.uf) || a.municipio.localeCompare(b.municipio));
-            })();
-
             const allUFs = [...new Set(computedTerritories.map(t => t.uf))].sort();
 
-            const filteredTerritories = filterUF
-              ? computedTerritories.filter(t => t.uf === filterUF)
-              : computedTerritories;
+            const filteredTerritories = computedTerritories.filter(t => {
+              if (filterUF && filterUF !== 'all' && t.uf !== filterUF) return false;
+              if (filterMunicipio) {
+                const q = filterMunicipio.toLowerCase();
+                if (!t.municipio.toLowerCase().includes(q)) return false;
+              }
+              return true;
+            });
 
             return (
               <div className="flex flex-col lg:grid lg:grid-cols-3 gap-5">
@@ -2454,13 +2530,35 @@ export default function Admin() {
                           <div className="relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
                             <Input 
-                              placeholder="Filtrar UF..." 
-                              value={filterUF} 
-                              onChange={e => setFilterUF(e.target.value.toUpperCase())} 
-                              className="h-8 text-xs pl-7 w-28 uppercase" 
-                              maxLength={2} 
+                              placeholder="Buscar cidade..." 
+                              value={filterMunicipio} 
+                              onChange={e => setFilterMunicipio(e.target.value)} 
+                              className="h-8 text-xs pl-7 w-32 sm:w-44" 
                             />
                           </div>
+                          
+                          <Select value={filterUF} onValueChange={setFilterUF}>
+                            <SelectTrigger className="h-8 w-24 text-[10px] font-bold uppercase bg-background border-border/40">
+                              <SelectValue placeholder="UF" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todas UFs</SelectItem>
+                              {allUFs.map(uf => (
+                                <SelectItem key={uf} value={uf || 'empty'}>{uf}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          {(filterUF !== 'all' || filterMunicipio) && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 px-2 text-[10px] font-bold uppercase text-destructive hover:bg-destructive/10"
+                              onClick={() => { setFilterUF('all'); setFilterMunicipio(''); }}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </CardHeader>
@@ -2581,9 +2679,9 @@ export default function Admin() {
                       <div style={{ width: '100%', maxWidth: '350px' }}>
                         <MiniMapBrasil 
                           territories={computedTerritories.flatMap(t => t.userIds.map(id => ({ id: t.id, municipio: t.municipio, uf: t.uf, userId: id, modo: 'atendimento' as const })))} 
-                          filterUF={filterUF} 
+                          filterUF={filterUF === 'all' ? '' : filterUF} 
                           filterRep="" 
-                          onClickUF={uf => setFilterUF(prev => prev === uf ? '' : uf)} 
+                          onClickUF={uf => setFilterUF(prev => prev === uf ? 'all' : uf)} 
                         />
                       </div>
                     </CardContent>
@@ -2606,42 +2704,153 @@ export default function Admin() {
 
           {/* ━━ GRUPOS ━━ */}
           {activeTab === 'groups' && (
-            <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
+            <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 sm:gap-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
               <div className="xl:col-span-1">
-                <Card className="border-border/40">
-                  <CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-sm"><div className="w-7 h-7 bg-primary/15 rounded-md flex items-center justify-center"><UsersRound className="w-3.5 h-3.5 text-primary" /></div>Novo Grupo</CardTitle><CardDescription className="text-xs">Agrupe representantes por região ou critério</CardDescription></CardHeader>
-                  <CardContent><form onSubmit={handleCreateGroup} className="space-y-3"><div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Nome do Grupo *</label><Input placeholder="Ex: Rio de Janeiro" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} required /></div><Button className="w-full gap-2" type="submit"><Plus className="w-4 h-4" />Criar Grupo</Button></form></CardContent>
+                <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl">
+                  <CardHeader className="p-4 sm:pb-4">
+                    <CardTitle className="flex items-center gap-2 text-xs sm:text-sm uppercase tracking-widest font-black">
+                      <div className="w-8 h-8 bg-primary/15 rounded-lg flex items-center justify-center">
+                        <UsersRound className="w-4 h-4 text-primary" />
+                      </div>
+                      Novo Grupo
+                    </CardTitle>
+                    <CardDescription className="text-[10px] sm:text-xs">Organize sua equipe por regiões.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 sm:pt-0">
+                    <form onSubmit={handleCreateGroup} className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Nome do Grupo *</label>
+                        <Input 
+                          placeholder="Ex: Nordeste, São Paulo..." 
+                          value={newGroupName} 
+                          onChange={e => setNewGroupName(e.target.value)} 
+                          className="h-10 text-sm font-semibold"
+                          required 
+                        />
+                      </div>
+                      <Button className="w-full gap-2 h-10 font-bold shadow-lg shadow-primary/20" type="submit">
+                        <Plus className="w-4 h-4" /> Criar Grupo
+                      </Button>
+                    </form>
+                  </CardContent>
                 </Card>
               </div>
+
               <div className="xl:col-span-4">
-                <Card className="border-border/40">
-                  <CardHeader className="pb-3"><div className="flex items-center justify-between"><CardTitle className="text-sm flex items-center gap-2"><UsersRound className="w-4 h-4 text-primary" />Grupos Criados</CardTitle><span className="text-xs text-muted-foreground bg-secondary/50 px-2.5 py-1 rounded-full">{groups.length} total</span></div></CardHeader>
+                <Card className="border-border/40 bg-card/30 backdrop-blur-sm shadow-xl">
+                  <CardHeader className="p-4 sm:pb-3 border-b border-border/10">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-xs sm:text-sm flex items-center gap-2 uppercase tracking-widest font-black">
+                        <UsersRound className="w-4 h-4 text-primary" />
+                        Grupos Criados
+                      </CardTitle>
+                      <span className="text-[10px] font-bold text-muted-foreground bg-secondary/50 px-2.5 py-1 rounded-full border border-border/40">
+                        {groups.length} total
+                      </span>
+                    </div>
+                  </CardHeader>
                   <CardContent className="p-0">
-                    {groups.length === 0 ? (<div className="py-16 text-center text-muted-foreground"><UsersRound className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Nenhum grupo criado</p></div>) : (
-                      <div className="divide-y divide-border/30">{groups.map(g => (
-                        <div key={g.id} className="px-4 py-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3"><div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center"><UsersRound className="w-4 h-4 text-primary" /></div>
-                              <div><p className="text-sm font-semibold">{g.name}</p><p className="text-[10px] text-muted-foreground">{g.userIds.length} usuário(s) • {new Date(g.createdAt).toLocaleDateString('pt-BR')}</p></div>
+                    {groups.length === 0 ? (
+                      <div className="py-24 text-center text-muted-foreground">
+                        <UsersRound className="w-12 h-12 mx-auto mb-4 opacity-10" />
+                        <p className="text-sm font-medium">Nenhum grupo cadastrado</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-border/10">
+                        {groups.map(g => (
+                          <div key={g.id} className="p-4 sm:px-6 sm:py-4 hover:bg-primary/5 transition-colors">
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center shrink-0 border border-primary/20 shadow-inner">
+                                  <UsersRound className="w-5 h-5 text-primary" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm sm:text-base font-bold text-foreground/90 truncate">{g.name}</p>
+                                  <p className="text-[10px] sm:text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+                                    <User className="w-3 h-3 opacity-40" /> {g.userIds.length} usuários
+                                    <span className="opacity-20">•</span>
+                                    <Calendar className="w-3 h-3 opacity-40" /> {new Date(g.createdAt).toLocaleDateString('pt-BR')}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-1 sm:gap-2 shrink-0">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className={`h-9 w-9 rounded-lg transition-all ${expandedGroup === g.id ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'hover:bg-primary/10 hover:text-primary'}`}
+                                  onClick={() => { setExpandedGroup(expandedGroup === g.id ? null : g.id); setGroupAddUsers(g.userIds); }}
+                                >
+                                  <ChevronRight className={`w-4 h-4 transition-transform duration-300 ${expandedGroup === g.id ? 'rotate-90' : ''}`} />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-9 w-9 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                  onClick={() => handleDeleteGroup(g)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
                             </div>
-                            <div className="flex gap-1">
-                              <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-primary/10 hover:text-primary" onClick={() => { setExpandedGroup(expandedGroup === g.id ? null : g.id); setGroupAddUsers(g.userIds); }}><ChevronRight className={`w-3.5 h-3.5 transition-transform ${expandedGroup === g.id ? 'rotate-90' : ''}`} /></Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteGroup(g)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                            </div>
+
+                            {expandedGroup === g.id && (
+                              <div className="mt-5 ml-0 sm:ml-13 space-y-4 animate-in slide-in-from-top-2 duration-300">
+                                <div className="flex items-center justify-between border-b border-border/10 pb-2">
+                                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Gerenciar Membros</p>
+                                  <span className="text-[10px] font-bold text-primary">{groupAddUsers.length} selecionados</span>
+                                </div>
+                                
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto custom-scrollbar p-1">
+                                  {users.map(u => (
+                                    <label 
+                                      key={u.id} 
+                                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all cursor-pointer group ${groupAddUsers.includes(u.id) ? 'bg-primary/10 border-primary/40 shadow-sm' : 'bg-background/40 border-border/40 hover:border-primary/30'}`}
+                                    >
+                                      <input 
+                                        type="checkbox" 
+                                        className="w-4 h-4 rounded border-border text-primary focus:ring-primary accent-primary" 
+                                        checked={groupAddUsers.includes(u.id)} 
+                                        onChange={() => setGroupAddUsers(prev => prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id])} 
+                                      />
+                                      <div className="flex flex-col min-w-0">
+                                        <span className="text-xs font-bold truncate">{u.full_name || u.fullName || u.username}</span>
+                                        <span className="text-[10px] text-muted-foreground opacity-60 font-mono">{u.username}</span>
+                                      </div>
+                                    </label>
+                                  ))}
+                                </div>
+
+                                <div className="flex gap-2 pt-2">
+                                  <Button size="sm" className="gap-1.5 h-9 px-4 font-bold shadow-lg shadow-primary/20" onClick={() => handleSaveGroupUsers(g.id)}>
+                                    <Save className="w-3.5 h-3.5" /> Salvar Alterações
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-9 px-4 font-bold" onClick={() => setExpandedGroup(null)}>
+                                    Cancelar
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+
+                            {g.userIds.length > 0 && expandedGroup !== g.id && (
+                              <div className="mt-3 ml-0 sm:ml-13 flex flex-wrap gap-1.5">
+                                {g.userIds.slice(0, 10).map(id => { 
+                                  const u = users.find(u => u.id === id); 
+                                  return u ? (
+                                    <span key={id} className="text-[9px] bg-secondary/50 text-muted-foreground px-2 py-0.5 rounded-full border border-border/40 font-bold uppercase truncate max-w-[120px]">
+                                      {u.username}
+                                    </span>
+                                  ) : null; 
+                                })}
+                                {g.userIds.length > 10 && (
+                                  <span className="text-[9px] bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20 font-bold">
+                                    +{g.userIds.length - 10} mais
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          {expandedGroup === g.id && (<div className="mt-3 ml-11 space-y-3"><p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Selecione os usuários</p>
-                            <div className="border border-border rounded-md max-h-44 overflow-y-auto">
-                              {users.map(u => (
-                                <label key={u.id} className="flex items-center gap-3 px-3 py-2 hover:bg-secondary/40 cursor-pointer">
-                                  <input type="checkbox" className="rounded" checked={groupAddUsers.includes(u.id)} onChange={() => setGroupAddUsers(prev => prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id])} />
-                                  <span className="text-sm">{u.username} — {u.full_name || u.fullName}</span>
-                                </label>
-                              ))}
-                            </div>
-                            <div className="flex gap-2"><Button size="sm" className="gap-1.5 h-7 text-xs" onClick={() => handleSaveGroupUsers(g.id)}><Save className="w-3 h-3" />Salvar</Button><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setExpandedGroup(null)}>Cancelar</Button></div></div>)}
-                          {g.userIds.length > 0 && expandedGroup !== g.id && (<div className="mt-2 ml-11 flex flex-wrap gap-1">{g.userIds.map(id => { const u = users.find(u => u.id === id); return u ? (<span key={id} className="text-[10px] bg-secondary px-2 py-0.5 rounded-full font-medium text-muted-foreground">{u.username} — {u.full_name || u.fullName}</span>) : null; })}</div>)}
-                        </div>
-                      ))}</div>
+                        ))}
+                      </div>
                     )}
                   </CardContent>
                 </Card>
@@ -2651,38 +2860,38 @@ export default function Admin() {
 
           {/* ━━ NOTIFICAÇÕES ━━ */}
           {activeTab === 'notifications' && (
-            <div className="space-y-5">
-              <form onSubmit={handleSendNotification} className="grid grid-cols-1 xl:grid-cols-[minmax(300px,0.9fr)_minmax(520px,1.6fr)] gap-5">
+            <div className="space-y-4 sm:space-y-5">
+              <form onSubmit={handleSendNotification} className="grid grid-cols-1 xl:grid-cols-[minmax(300px,0.9fr)_minmax(520px,1.6fr)] gap-4 sm:gap-5">
                 <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl">
-                  <CardHeader className="pb-3 border-b border-border/10">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Bell className="w-4 h-4 text-primary" />
+                  <CardHeader className="p-4 sm:pb-3 border-b border-border/10">
+                    <CardTitle className="text-xs sm:text-sm flex items-center gap-2">
+                      <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                       Meta do Alerta
                     </CardTitle>
-                    <CardDescription className="text-xs">
+                    <CardDescription className="text-[10px] sm:text-xs">
                       Defina o título e os destinatários do aviso.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="pt-5 space-y-5">
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Título do Aviso</Label>
+                  <CardContent className="p-4 sm:pt-5 space-y-4 sm:space-y-5">
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <Label className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-wider">Título do Aviso</Label>
                       <Input
                         placeholder="Ex: Atualização Importante"
                         value={notifTitle}
                         onChange={e => setNotifTitle(e.target.value)}
-                        className="h-11 font-semibold text-base"
+                        className="h-10 sm:h-11 font-semibold text-sm sm:text-base"
                         required
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Destinatários</Label>
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <Label className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-wider">Destinatários</Label>
                       <div className={`grid ${(role === 'admin' || canEdit('settings')) ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
                         {(role === 'admin' || canEdit('settings')) && (
                           <button
                             type="button"
                             onClick={() => { setNotifTargetAll(true); setNotifTargetUsers([]); }}
-                            className={`h-10 rounded-md border text-sm font-semibold transition-colors ${notifTargetAll
+                            className={`h-9 sm:h-10 rounded-md border text-[11px] sm:text-sm font-semibold transition-colors ${notifTargetAll
                               ? 'bg-primary/15 text-primary border-primary/40'
                               : 'bg-background text-muted-foreground border-border hover:text-foreground'}`}
                           >
@@ -2692,7 +2901,7 @@ export default function Admin() {
                         <button
                           type="button"
                           onClick={() => setNotifTargetAll(false)}
-                          className={`h-10 rounded-md border text-sm font-semibold transition-colors ${!notifTargetAll
+                          className={`h-9 sm:h-10 rounded-md border text-[11px] sm:text-sm font-semibold transition-colors ${!notifTargetAll
                             ? 'bg-primary/15 text-primary border-primary/40'
                             : 'bg-background text-muted-foreground border-border hover:text-foreground'}`}
                         >
@@ -2702,14 +2911,14 @@ export default function Admin() {
                     </div>
 
                     {!notifTargetAll && (
-                      <div className="space-y-2">
+                      <div className="space-y-1.5 sm:space-y-2">
                         <Input
                           value={notifUserSearch}
                           onChange={e => setNotifUserSearch(e.target.value)}
-                          placeholder="Buscar usuário por nome ou login..."
-                          className="h-9 text-sm"
+                          placeholder="Buscar usuário..."
+                          className="h-9 text-xs sm:text-sm"
                         />
-                        <div className="rounded-md border border-border bg-background/40 max-h-52 overflow-y-auto custom-scrollbar divide-y divide-border/30">
+                        <div className="rounded-md border border-border bg-background/40 max-h-40 sm:max-h-52 overflow-y-auto custom-scrollbar divide-y divide-border/30">
                           {users
                             .filter(u => {
                               // Se não for admin, filtrar por hierarquia OU categoria
@@ -2741,15 +2950,15 @@ export default function Admin() {
                                     }}
                                     className="accent-primary"
                                   />
-                                  <span className="text-xs font-medium text-foreground truncate">
+                                  <span className="text-[11px] sm:text-xs font-medium text-foreground truncate">
                                     {u.full_name || u.fullName || u.username}
                                   </span>
-                                  <span className="text-[10px] text-muted-foreground ml-auto truncate">{u.username}</span>
+                                  <span className="text-[9px] sm:text-[10px] text-muted-foreground ml-auto truncate">{u.username}</span>
                                 </label>
                               );
                             })}
                         </div>
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="text-[10px] sm:text-[11px] text-muted-foreground">
                           {notifTargetUsers.length} usuário(s) selecionado(s)
                         </p>
                       </div>
@@ -2758,17 +2967,17 @@ export default function Admin() {
                 </Card>
 
                 <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl flex flex-col">
-                  <CardHeader className="pb-3 border-b border-border/10">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-primary" />
+                  <CardHeader className="p-4 sm:pb-3 border-b border-border/10">
+                    <CardTitle className="text-xs sm:text-sm flex items-center gap-2">
+                      <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                       Conteúdo do Alerta
                     </CardTitle>
-                    <CardDescription className="text-xs">
+                    <CardDescription className="text-[10px] sm:text-xs">
                       Campo de texto avançado para formatar o aviso.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="pt-5 flex-1 flex flex-col">
-                    <div className="quill-editor-wrapper quill-alert-editor flex-1 rounded-xl border border-border/60 overflow-hidden bg-background/70 shadow-inner">
+                  <CardContent className="p-4 sm:pt-5 flex-1 flex flex-col">
+                    <div className="quill-editor-wrapper quill-alert-editor min-h-[180px] sm:min-h-[220px] flex-1 rounded-xl border border-border/60 overflow-hidden bg-background/70 shadow-inner">
                       <ReactQuill
                         ref={quillRef}
                         theme="snow"
@@ -2779,9 +2988,9 @@ export default function Admin() {
                         placeholder="Escreva sua mensagem aqui..."
                       />
                     </div>
-                    <div className="pt-4">
-                      <Button className="w-full gap-2 h-12 text-base font-bold shadow-lg shadow-primary/20" type="submit">
-                        <Send className="w-5 h-5" /> Enviar Alerta Agora
+                    <div className="pt-3 sm:pt-4">
+                      <Button className="w-full gap-2 h-10 sm:h-12 text-sm sm:text-base font-bold shadow-lg shadow-primary/20" type="submit">
+                        <Send className="w-4 h-4 sm:w-5 sm:h-5" /> Enviar Alerta Agora
                       </Button>
                     </div>
                   </CardContent>
@@ -2789,56 +2998,56 @@ export default function Admin() {
               </form>
 
               <Card className="border-border/40 bg-card/50 backdrop-blur-sm flex flex-col shadow-xl">
-                <CardHeader className="pb-3 border-b border-border/10 flex flex-row items-center justify-between">
+                <CardHeader className="p-4 sm:pb-3 border-b border-border/10 flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-primary" />
-                      Histórico de Mensagens Enviadas
+                    <CardTitle className="text-xs sm:text-sm flex items-center gap-2">
+                      <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
+                      Histórico
                     </CardTitle>
-                    <CardDescription className="text-xs">
-                      Últimos alertas enviados pelo sistema.
+                    <CardDescription className="text-[10px] sm:text-xs">
+                      Alertas enviados recentemente.
                     </CardDescription>
                   </div>
                   {notifications.length > 0 && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-destructive hover:bg-destructive/10 h-8 gap-1.5 font-bold"
+                      className="text-destructive hover:bg-destructive/10 h-7 sm:h-8 gap-1 text-[10px] sm:text-xs font-bold"
                       onClick={handleClearNotifications}
                     >
-                      <Trash2 className="w-3.5 h-3.5" /> Limpar Histórico
+                      <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Limpar
                     </Button>
                   )}
                 </CardHeader>
                 <CardContent className="p-0 flex-1 overflow-hidden">
                   {loadingNotifications ? (
-                    <div className="py-20 text-center flex flex-col items-center gap-3">
-                      <Loader2 className="w-8 h-8 animate-spin text-primary opacity-50" />
-                      <p className="text-sm text-muted-foreground">Carregando histórico...</p>
+                    <div className="py-12 sm:py-20 text-center flex flex-col items-center gap-2 sm:gap-3">
+                      <Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin text-primary opacity-50" />
+                      <p className="text-[10px] sm:text-sm text-muted-foreground">Carregando...</p>
                     </div>
                   ) : notifications.length === 0 ? (
-                    <div className="py-24 text-center text-muted-foreground">
-                      <Bell className="w-12 h-12 mx-auto mb-4 opacity-10" />
-                      <p className="text-sm">Nenhuma mensagem enviada</p>
+                    <div className="py-16 sm:py-24 text-center text-muted-foreground">
+                      <Bell className="w-8 h-8 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 opacity-10" />
+                      <p className="text-[10px] sm:text-sm">Nenhuma mensagem enviada</p>
                     </div>
                   ) : (
-                    <div className="divide-y divide-border/20 overflow-y-auto max-h-[420px] custom-scrollbar">
+                    <div className="divide-y divide-border/20 overflow-y-auto max-h-[300px] sm:max-h-[420px] custom-scrollbar">
                       {notifications.map(n => (
-                        <div key={n.id} className="px-6 py-5 hover:bg-primary/5 transition-colors group">
-                          <div className="flex items-start justify-between gap-4">
+                        <div key={n.id} className="px-4 py-3 sm:px-6 sm:py-5 hover:bg-primary/5 transition-colors group">
+                          <div className="flex items-start justify-between gap-3 sm:gap-4">
                             <div className="flex-1 min-w-0">
-                              <h4 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">{n.title}</h4>
+                              <h4 className="text-sm sm:text-base font-bold text-foreground group-hover:text-primary transition-colors truncate">{n.title}</h4>
                               <div
-                                className="text-sm text-muted-foreground mt-2 line-clamp-3 opacity-80"
+                                className="text-[11px] sm:text-sm text-muted-foreground mt-1 sm:mt-2 line-clamp-2 sm:line-clamp-3 opacity-80"
                                 dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(n.message) }}
                               />
-                              <div className="mt-3 flex items-center gap-3">
-                                <span className="text-[10px] uppercase font-black text-primary/40 tracking-widest">
-                                  {n.targetAll ? 'Global' : `${Array.isArray(n.targetUserIds) ? n.targetUserIds.length : 0} usuário(s)`}
+                              <div className="mt-2 sm:mt-3 flex items-center gap-2 sm:gap-3">
+                                <span className="text-[8px] sm:text-[10px] uppercase font-black text-primary/40 tracking-widest">
+                                  {n.targetAll ? 'Global' : `${Array.isArray(n.targetUserIds) ? n.targetUserIds.length : 0} usuários`}
                                 </span>
-                                <div className="w-1 h-1 rounded-full bg-border" />
-                                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium">
-                                  <Clock className="w-3 h-3" />
+                                <div className="w-0.5 h-0.5 sm:w-1 sm:h-1 rounded-full bg-border" />
+                                <div className="flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-[10px] text-muted-foreground font-medium">
+                                  <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                                   {new Date(n.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                 </div>
                               </div>
@@ -2856,52 +3065,116 @@ export default function Admin() {
           {/* ━━ AUDITORIA ━━ */}
           {activeTab === 'audit' && (
             <div className="space-y-4">
-              <Card className="border-border/40">
-                <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><Filter className="w-4 h-4 text-primary" />Filtros</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-                    <select className="h-9 px-3 bg-background border border-input rounded-md text-sm flex-1" value={auditFilterUser} onChange={e => setAuditFilterUser(e.target.value)}><option value="">Todos os Representantes</option>{reps.map(r => <option key={r.id} value={r.code || ''}>{r.code || ''} — {r.full_name || r.fullName || r.username}</option>)}</select>
-                    <div className="flex gap-2">
-                      <select className="h-9 px-3 bg-background border border-input rounded-md text-sm flex-1" value={auditFilterUF} onChange={e => setAuditFilterUF(e.target.value)}><option value="">Todos os Estados</option>{UF_DATA.map(u => <option key={u.sigla} value={u.sigla}>{u.sigla}</option>)}</select>
-                      <select className="h-9 px-3 bg-background border border-input rounded-md text-sm flex-1" value={auditFilterAction} onChange={e => setAuditFilterAction(e.target.value)}><option value="">Todas as Ações</option>{Object.entries(auditActionLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+              <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
+                <CardHeader className="p-4 sm:pb-3 border-b border-border/10">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-xs sm:text-sm flex items-center gap-2">
+                      <Filter className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
+                      Filtros de Auditoria
+                    </CardTitle>
+                    <span className="text-[10px] font-bold text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded-full sm:hidden">
+                      {filteredAudit.length} registros
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 sm:p-5">
+                  <div className="flex flex-col gap-3">
+                    {/* Linha 1: Usuário */}
+                    <div className="flex-1">
+                      <Select value={auditFilterUser} onValueChange={setAuditFilterUser}>
+                        <SelectTrigger className="w-full h-10 bg-background/50 border-border text-xs sm:text-sm">
+                          <SelectValue placeholder="Todos os Usuários" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos os Usuários</SelectItem>
+                          {reps.map(r => (
+                            <SelectItem key={r.id} value={r.code || String(r.id)}>
+                              {r.code ? `${r.code} — ` : ''}{r.full_name || r.fullName || r.username}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Button variant="outline" size="sm" className="h-9 gap-1.5 flex-1 sm:flex-none" onClick={() => { setAuditFilterUser(''); setAuditFilterAction(''); setAuditFilterUF(''); }}><X className="w-3.5 h-3.5" />Limpar</Button>
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">{filteredAudit.length} registros</span>
+
+                    {/* Linha 2: UF e Ação */}
+                    <div className="flex gap-2">
+                      <Select value={auditFilterUF} onValueChange={setAuditFilterUF}>
+                        <SelectTrigger className="flex-1 h-10 bg-background/50 border-border text-xs sm:text-sm">
+                          <SelectValue placeholder="UF" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todas UFs</SelectItem>
+                          {UF_DATA.map(u => (
+                            <SelectItem key={u.sigla} value={u.sigla || 'empty'}>{u.sigla}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      <Select value={auditFilterAction} onValueChange={setAuditFilterAction}>
+                        <SelectTrigger className="flex-[2] h-10 bg-background/50 border-border text-xs sm:text-sm">
+                          <SelectValue placeholder="Todas as Ações" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todas as Ações</SelectItem>
+                          {Object.entries(auditActionLabel).map(([k, v]) => (
+                            <SelectItem key={k} value={k || 'empty'}>{v}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Linha 3: Botão Limpar e Contador Desktop */}
+                    <div className="flex items-center justify-between gap-3 pt-1">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-9 gap-1.5 flex-1 sm:flex-none text-xs font-bold hover:bg-destructive/10 hover:text-destructive border border-dashed border-border sm:border-none" 
+                        onClick={() => { setAuditFilterUser('all'); setAuditFilterAction('all'); setAuditFilterUF('all'); }}
+                      >
+                        <X className="w-3.5 h-3.5" /> Limpar Filtros
+                      </Button>
+                      <span className="hidden sm:inline text-[11px] font-bold text-muted-foreground uppercase tracking-widest opacity-60">
+                        {filteredAudit.length} registros encontrados
+                      </span>
                     </div>
                   </div>
                 </CardContent>
               </Card>
               
-              <Card className="border-border/40 overflow-hidden">
+              <Card className="border-border/40 overflow-hidden bg-card/30 backdrop-blur-sm">
                 <CardContent className="p-0">
-                  {filteredAudit.length === 0 ? (
-                    <div className="py-16 text-center text-muted-foreground">
-                      <ScrollText className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                      <p className="text-sm">Nenhum registro encontrado</p>
+                  {loadingAudit ? (
+                    <div className="py-20 text-center flex flex-col items-center gap-3">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary opacity-50" />
+                      <p className="text-sm text-muted-foreground">Carregando auditoria...</p>
+                    </div>
+                  ) : filteredAudit.length === 0 ? (
+                    <div className="py-24 text-center text-muted-foreground">
+                      <ScrollText className="w-12 h-12 mx-auto mb-4 opacity-10" />
+                      <p className="text-sm font-medium">Nenhum registro encontrado</p>
                     </div>
                   ) : (
                     <>
                       {/* Desktop Table View */}
-                      <div className="hidden md:block overflow-auto">
+                      <div className="hidden md:block overflow-auto max-h-[calc(100vh-380px)] custom-scrollbar">
                         <Table>
                           <TableHeader>
-                            <TableRow className="hover:bg-transparent border-border/40">
-                              <TableHead className="pl-4">Data/Hora</TableHead>
-                              <TableHead>Ação</TableHead>
-                              <TableHead>Entidade</TableHead>
-                              <TableHead>Detalhes</TableHead>
-                              <TableHead className="w-20 pr-4">Por</TableHead>
+                            <TableRow className="hover:bg-transparent border-border/10 bg-secondary/20">
+                              <TableHead className="pl-6 h-11 text-[10px] font-black uppercase tracking-wider">Data/Hora</TableHead>
+                              <TableHead className="h-11 text-[10px] font-black uppercase tracking-wider">Ação</TableHead>
+                              <TableHead className="h-11 text-[10px] font-black uppercase tracking-wider">Entidade</TableHead>
+                              <TableHead className="h-11 text-[10px] font-black uppercase tracking-wider">Detalhes</TableHead>
+                              <TableHead className="w-24 pr-6 h-11 text-[10px] font-black uppercase tracking-wider">Por</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {filteredAudit.map(log => (
-                              <TableRow key={log.id} className="border-border/30 hover:bg-secondary/30">
-                                <TableCell className="pl-4 text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">{new Date(log.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</TableCell>
-                                <TableCell><span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium whitespace-nowrap">{auditActionLabel[log.action] || log.action}</span></TableCell>
-                                <TableCell className="text-xs font-medium">{log.entity}</TableCell>
-                                <TableCell className="text-xs text-muted-foreground max-w-[280px] truncate">{log.details}</TableCell>
-                                <TableCell className="text-xs text-muted-foreground pr-4">{log.performedBy}</TableCell>
+                              <TableRow key={log.id} className="border-border/10 hover:bg-primary/5 transition-colors group">
+                                <TableCell className="pl-6 py-4 text-[10px] text-muted-foreground tabular-nums whitespace-nowrap font-medium">{new Date(log.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</TableCell>
+                                <TableCell className="py-4"><span className="text-[9px] bg-primary/10 text-primary px-2.5 py-1 rounded-full font-bold uppercase tracking-tighter whitespace-nowrap">{auditActionLabel[log.action] || log.action}</span></TableCell>
+                                <TableCell className="py-4 text-xs font-bold text-foreground/90">{log.entity}</TableCell>
+                                <TableCell className="py-4 text-[11px] text-muted-foreground max-w-[320px] truncate group-hover:text-foreground/70 transition-colors">{log.details}</TableCell>
+                                <TableCell className="py-4 text-[10px] font-bold text-muted-foreground pr-6 uppercase">{log.performedBy}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -2909,24 +3182,29 @@ export default function Admin() {
                       </div>
 
                       {/* Mobile Card View */}
-                      <div className="md:hidden divide-y divide-border/20 overflow-y-auto">
+                      <div className="md:hidden divide-y divide-border/10 max-h-[calc(100vh-320px)] overflow-y-auto custom-scrollbar">
                         {filteredAudit.map(log => (
-                          <div key={log.id} className="p-4 space-y-2 active:bg-secondary/40 transition-colors">
+                          <div key={log.id} className="p-4 space-y-2.5 active:bg-secondary/40 transition-colors">
                             <div className="flex justify-between items-start">
-                              <span className="text-[10px] font-black bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                              <span className="text-[9px] font-black bg-primary/10 text-primary px-2 py-0.5 rounded-md uppercase tracking-tighter">
                                 {auditActionLabel[log.action] || log.action}
                               </span>
-                              <span className="text-[10px] text-muted-foreground font-mono">
+                              <span className="text-[10px] text-muted-foreground font-mono font-bold opacity-60">
                                 {new Date(log.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                               </span>
                             </div>
-                            <div>
-                              <p className="text-xs font-bold text-foreground">{log.entity}</p>
-                              <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{log.details}</p>
+                            <div className="bg-secondary/20 p-2.5 rounded-lg border border-border/30">
+                              <p className="text-[11px] font-black text-foreground/90 mb-1">{log.entity}</p>
+                              <p className="text-[11px] text-muted-foreground leading-relaxed italic">"{log.details}"</p>
                             </div>
-                            <div className="flex items-center gap-1.5 pt-1">
-                              <User className="w-3 h-3 text-primary/40" />
-                              <span className="text-[10px] font-medium text-muted-foreground uppercase">{log.performedBy}</span>
+                            <div className="flex items-center gap-1.5 pt-0.5">
+                              <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                                <User className="w-2.5 h-2.5 text-primary" />
+                              </div>
+                              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-wider">{log.performedBy}</span>
+                              {log.ipAddress && (
+                                <span className="text-[8px] text-muted-foreground/40 ml-auto font-mono">{log.ipAddress}</span>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -2940,58 +3218,93 @@ export default function Admin() {
 
           {/* ━━ INTERESSES ━━ */}
           {activeTab === 'interests' && (
-            <div className="space-y-4">
-              {interests.length === 0 ? (<Card className="border-border/40"><CardContent className="py-20 text-center text-muted-foreground"><HandHeart className="w-12 h-12 mx-auto mb-4 opacity-20" /><p className="text-sm font-medium">Nenhuma solicitação recebida</p></CardContent></Card>) : (() => {
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              {interests.length === 0 ? (
+                <Card className="border-border/40 bg-card/30 backdrop-blur-sm shadow-xl">
+                  <CardContent className="py-24 text-center text-muted-foreground">
+                    <HandHeart className="w-16 h-16 mx-auto mb-4 opacity-10" />
+                    <p className="text-sm font-bold uppercase tracking-widest opacity-40">Nenhuma solicitação recebida</p>
+                  </CardContent>
+                </Card>
+              ) : (() => {
                 const iGroups = [
-                  { key: 'pending', label: 'Pendentes', icon: Clock, color: 'text-amber-400', badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30', items: interests.filter(i => i.status === 'pending') },
-                  { key: 'accepted', label: 'Aceitas', icon: CheckCircle2, color: 'text-emerald-400', badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', items: interests.filter(i => i.status === 'accepted') },
-                  { key: 'rejected', label: 'Recusadas', icon: XCircle, color: 'text-destructive', badge: 'bg-destructive/10 text-destructive border-destructive/30', items: interests.filter(i => i.status === 'rejected') },
+                  { key: 'pending', label: 'Pendentes', icon: Clock, color: 'text-amber-400', badge: 'bg-amber-500/15 text-amber-400 border-amber-500/30', items: interests.filter(i => i.status === 'pending') },
+                  { key: 'accepted', label: 'Aceitas', icon: CheckCircle2, color: 'text-emerald-400', badge: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30', items: interests.filter(i => i.status === 'accepted') },
+                  { key: 'rejected', label: 'Recusadas', icon: XCircle, color: 'text-destructive', badge: 'bg-destructive/15 text-destructive border-destructive/30', items: interests.filter(i => i.status === 'rejected') },
                 ].filter(g => g.items.length > 0);
                 return (
-                  <div className="space-y-6">
+                  <div className="space-y-8">
                     {iGroups.map(({ key, label, icon: Icon, color, badge, items }) => (
-                      <div key={key}>
-                        <div className="flex items-center gap-2 mb-3">
-                          <Icon className={`w-4 h-4 ${color}`} />
-                          <h3 className="text-sm font-semibold">{label}</h3>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge}`}>{items.length}</span>
+                      <div key={key} className="space-y-4">
+                        <div className="flex items-center gap-2.5 px-1">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-secondary/50 border border-border/40 ${color}`}>
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <h3 className="text-xs sm:text-sm font-black uppercase tracking-widest">{label}</h3>
+                          <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border shadow-sm ${badge}`}>{items.length}</span>
                         </div>
                         
-                        <Card className="border-border/40 overflow-hidden">
+                        <Card className="border-border/40 overflow-hidden bg-card/30 backdrop-blur-sm shadow-xl">
                           {/* Desktop Table View */}
                           <div className="hidden md:block">
                             <Table>
                               <TableHeader>
-                                <TableRow className="hover:bg-transparent border-border/40">
-                                  <TableHead className="pl-4">Solicitante</TableHead>
-                                  <TableHead>Área</TableHead>
-                                  <TableHead className="w-20">Modo</TableHead>
-                                  <TableHead className="w-28">Data</TableHead>
-                                  {key === 'pending' && <TableHead className="w-36 pr-4">Ação</TableHead>}
+                                <TableRow className="hover:bg-transparent border-border/10 bg-secondary/20">
+                                  <TableHead className="pl-6 h-11 text-[10px] font-black uppercase tracking-wider">Solicitante</TableHead>
+                                  <TableHead className="h-11 text-[10px] font-black uppercase tracking-wider">Área</TableHead>
+                                  <TableHead className="w-24 h-11 text-[10px] font-black uppercase tracking-wider">Modo</TableHead>
+                                  <TableHead className="w-32 h-11 text-[10px] font-black uppercase tracking-wider">Data</TableHead>
+                                  {key === 'pending' && <TableHead className="w-44 pr-6 h-11 text-[10px] font-black uppercase tracking-wider text-right">Ação</TableHead>}
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
                                 {items.map(req => (
-                                  <TableRow key={req.id} className="border-border/30 hover:bg-secondary/30">
-                                    <TableCell className="pl-4">
-                                      <div className="flex items-center gap-2">
-                                        <p className="text-sm font-bold">{req.nome}</p>
-                                        {req.userId && <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono font-bold tracking-tight">ID: {req.userId}</span>}
+                                  <TableRow key={req.id} className="border-border/10 hover:bg-primary/5 transition-colors group">
+                                    <TableCell className="pl-6 py-4">
+                                      <div className="flex items-center gap-2.5">
+                                        <p className="text-sm font-black text-foreground/90">{req.nome}</p>
+                                        {req.userId && <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-black tracking-tighter uppercase">ID: {req.userId}</span>}
                                       </div>
-                                      <div className="flex flex-wrap gap-x-3 mt-0.5">
-                                        {req.empresa && <span className="text-[10px] text-muted-foreground">{req.empresa}</span>}
-                                        {req.email && <span className="text-[10px] text-primary/80">{req.email}</span>}
+                                      <div className="flex flex-wrap gap-x-4 mt-1 opacity-70">
+                                        {req.empresa && <span className="text-[10px] font-bold text-muted-foreground uppercase">{req.empresa}</span>}
+                                        {req.email && <span className="text-[10px] font-bold text-primary/80 lowercase">{req.email}</span>}
                                       </div>
-                                      {req.observacoes && <p className="text-[10px] text-muted-foreground italic mt-1.5 border-l-2 border-primary/20 pl-2">“{req.observacoes}”</p>}
+                                      {req.observacoes && (
+                                        <p className="text-[11px] text-muted-foreground italic mt-2.5 border-l-2 border-primary/30 pl-3 leading-relaxed">
+                                          "{req.observacoes}"
+                                        </p>
+                                      )}
                                     </TableCell>
-                                    <TableCell><div className="flex items-center gap-1.5"><MapPin className="w-3 h-3 text-primary shrink-0" /><div><p className="text-xs font-semibold">{req.municipio}</p><p className="text-[10px] text-muted-foreground font-mono">{req.uf}</p></div></div></TableCell>
-                                    <TableCell>{req.modo && <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${req.modo === 'planejamento' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>{req.modo === 'planejamento' ? 'Plan.' : 'Atend.'}</span>}</TableCell>
-                                    <TableCell className="text-[10px] text-muted-foreground tabular-nums">{new Date(req.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</TableCell>
+                                    <TableCell className="py-4">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-7 h-7 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
+                                          <MapPin className="w-3.5 h-3.5 text-primary" />
+                                        </div>
+                                        <div>
+                                          <p className="text-xs font-black uppercase tracking-tighter">{req.municipio}</p>
+                                          <p className="text-[10px] text-muted-foreground font-black opacity-60 uppercase">{req.uf}</p>
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="py-4">
+                                      {req.modo && (
+                                        <span className={`text-[9px] px-2.5 py-1 rounded-md font-black uppercase tracking-tighter ${req.modo === 'planejamento' ? 'bg-blue-500/15 text-blue-400 border border-blue-500/20' : 'bg-purple-500/15 text-purple-400 border border-purple-500/20'}`}>
+                                          {req.modo === 'planejamento' ? 'Plan.' : 'Atend.'}
+                                        </span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="py-4 text-[10px] font-bold text-muted-foreground tabular-nums">
+                                      {new Date(req.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                                    </TableCell>
                                     {key === 'pending' && (
-                                      <TableCell className="pr-4">
-                                        <div className="flex gap-1.5">
-                                          <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white border-0" onClick={() => handleInterestStatus(req.id, 'accepted')}><CheckCircle2 className="w-3 h-3" />Aceitar</Button>
-                                          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-destructive hover:bg-destructive/10" onClick={() => handleInterestStatus(req.id, 'rejected')}><XCircle className="w-3 h-3" />Recusar</Button>
+                                      <TableCell className="pr-6 py-4 text-right">
+                                        <div className="flex justify-end gap-2">
+                                          <Button size="sm" className="h-8 px-4 text-[10px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/10" onClick={() => handleInterestStatus(req.id, 'accepted')}>
+                                            <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Aceitar
+                                          </Button>
+                                          <Button size="sm" variant="ghost" className="h-8 px-4 text-[10px] font-black uppercase tracking-widest text-destructive hover:bg-destructive/10" onClick={() => handleInterestStatus(req.id, 'rejected')}>
+                                            <XCircle className="w-3.5 h-3.5 mr-1.5" /> Recusar
+                                          </Button>
                                         </div>
                                       </TableCell>
                                     )}
@@ -3002,40 +3315,43 @@ export default function Admin() {
                           </div>
 
                           {/* Mobile Card View */}
-                          <div className="md:hidden divide-y divide-border/20">
+                          <div className="md:hidden divide-y divide-border/10">
                             {items.map(req => (
-                              <div key={req.id} className="p-4 space-y-3 active:bg-secondary/40 transition-colors">
-                                <div className="flex justify-between items-start gap-2">
+                              <div key={req.id} className="p-4 space-y-4 active:bg-secondary/40 transition-colors">
+                                <div className="flex justify-between items-start gap-3">
                                   <div className="min-w-0">
-                                    <p className="text-sm font-bold text-foreground truncate">{req.nome}</p>
-                                    <p className="text-[10px] text-muted-foreground truncate">{req.empresa || req.email}</p>
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-sm font-black text-foreground/90 truncate">{req.nome}</p>
+                                      {req.userId && <span className="text-[8px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-black tracking-tighter uppercase shrink-0">ID: {req.userId}</span>}
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground font-medium truncate mt-0.5">{req.empresa || req.email}</p>
                                   </div>
-                                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-tighter ${req.modo === 'planejamento' ? 'bg-blue-500/10 text-blue-500' : 'bg-purple-500/10 text-purple-500'}`}>
+                                  <span className={`text-[9px] px-2.5 py-1 rounded-md font-black uppercase tracking-tighter shrink-0 ${req.modo === 'planejamento' ? 'bg-blue-500/15 text-blue-500 border border-blue-500/20' : 'bg-purple-500/15 text-purple-500 border border-purple-500/20'}`}>
                                     {req.modo === 'planejamento' ? 'Planejamento' : 'Atendimento'}
                                   </span>
                                 </div>
                                 
-                                <div className="flex items-center justify-between text-[11px] bg-secondary/30 p-2 rounded-lg border border-border/40">
-                                  <div className="flex items-center gap-1.5">
-                                    <MapPin className="w-3 h-3 text-primary" />
-                                    <span className="font-bold">{req.municipio} - {req.uf}</span>
+                                <div className="flex items-center justify-between text-[11px] bg-secondary/30 p-3 rounded-xl border border-border/40 shadow-inner">
+                                  <div className="flex items-center gap-2">
+                                    <MapPin className="w-3.5 h-3.5 text-primary" />
+                                    <span className="font-black uppercase tracking-tighter">{req.municipio} - {req.uf}</span>
                                   </div>
-                                  <span className="text-muted-foreground font-mono">{new Date(req.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                                  <span className="text-[10px] text-muted-foreground font-black opacity-60">{new Date(req.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
                                 </div>
 
                                 {req.observacoes && (
-                                  <p className="text-[11px] text-muted-foreground italic bg-primary/5 p-2 rounded border-l-2 border-primary/30">
+                                  <p className="text-[11px] text-muted-foreground italic bg-primary/5 p-3 rounded-lg border-l-2 border-primary/40 leading-relaxed shadow-sm">
                                     "{req.observacoes}"
                                   </p>
                                 )}
 
                                 {key === 'pending' && (
-                                  <div className="flex gap-2 pt-1">
-                                    <Button className="flex-1 h-9 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-lg shadow-emerald-600/10" onClick={() => handleInterestStatus(req.id, 'accepted')}>
-                                      <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Aceitar
+                                  <div className="flex gap-2.5 pt-1">
+                                    <Button className="flex-1 h-10 text-[10px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/10" onClick={() => handleInterestStatus(req.id, 'accepted')}>
+                                      <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Aceitar
                                     </Button>
-                                    <Button variant="outline" className="flex-1 h-9 text-xs font-bold text-destructive hover:bg-destructive/10 border-destructive/20" onClick={() => handleInterestStatus(req.id, 'rejected')}>
-                                      <XCircle className="w-3.5 h-3.5 mr-1.5" /> Recusar
+                                    <Button variant="outline" className="flex-1 h-10 text-[10px] font-black uppercase tracking-widest text-destructive hover:bg-destructive/10 border-destructive/20" onClick={() => handleInterestStatus(req.id, 'rejected')}>
+                                      <XCircle className="w-3.5 h-3.5 mr-2" /> Recusar
                                     </Button>
                                   </div>
                                 )}
@@ -3053,60 +3369,93 @@ export default function Admin() {
 
           {/* ━━ PERSONALIZAÇÃO ━━ */}
           {activeTab === 'personal' && canAccess('settings') && (
-            <div className="max-w-3xl space-y-6">
-              <Card className="border-border/40">
-                <CardHeader className="pb-4">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <div className="w-7 h-7 bg-primary/15 rounded-md flex items-center justify-center"><Palette className="w-3.5 h-3.5 text-primary" /></div>
-                    Personalização da Marca
-                  </CardTitle>
-                  <CardDescription className="text-xs">Configure a identidade visual do sistema (Logo e Nome)</CardDescription>
+            <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl overflow-hidden">
+                <CardHeader className="p-5 sm:p-6 border-b border-border/10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-primary/15 rounded-xl flex items-center justify-center shrink-0 border border-primary/20 shadow-inner">
+                      <Palette className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm sm:text-base uppercase tracking-widest font-black">Identidade Visual</CardTitle>
+                      <CardDescription className="text-[10px] sm:text-xs">Configure a logo e o nome do seu sistema.</CardDescription>
+                    </div>
+                  </div>
                 </CardHeader>
-                <CardContent className="space-y-6">
+                <CardContent className="p-5 sm:p-8 space-y-8">
 
-                  {/* Logo Upload */}
-                  <div className="space-y-3">
-                    <label className="text-sm font-semibold text-foreground">Logo da Empresa</label>
-                    <p className="text-xs text-muted-foreground">Esta logo aparecerá no menu lateral e na tela de login.</p>
+                  {/* Logo Upload Section */}
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs sm:text-sm font-black text-foreground uppercase tracking-wider">Logo da Empresa</label>
+                      <p className="text-[10px] sm:text-xs text-muted-foreground leading-relaxed">Esta logo aparecerá no menu lateral e na tela de login.</p>
+                    </div>
 
-                    <div className="flex items-center gap-6 mt-3">
-                      <div className="w-24 h-24 rounded-xl border-2 border-dashed border-border flex items-center justify-center bg-secondary/30 relative overflow-hidden group">
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 pt-2">
+                      <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-2xl border-2 border-dashed border-border/60 flex items-center justify-center bg-secondary/20 relative overflow-hidden group shadow-inner">
                         {brandLogo ? (
                           <>
-                            <img src={brandLogo} alt="Logo" className="w-full h-full object-contain p-2" />
-                            <div className="absolute inset-0 bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <Button variant="destructive" size="icon" className="w-8 h-8 rounded-full" onClick={handleRemoveLogo} title="Remover Logo">
-                                <Trash2 className="w-4 h-4" />
+                            <img src={brandLogo} alt="Logo" className="w-full h-full object-contain p-4 transition-transform group-hover:scale-110 duration-500" />
+                            <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-sm">
+                              <Button variant="destructive" size="icon" className="w-10 h-10 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveLogo} title="Remover Logo">
+                                <Trash2 className="w-5 h-5" />
                               </Button>
                             </div>
                           </>
                         ) : (
-                          <div className="text-center text-muted-foreground">
-                            <ImageOff className="w-8 h-8 mx-auto mb-1 opacity-20" />
-                            <span className="text-[10px] font-medium">Sem Logo</span>
+                          <div className="text-center p-4">
+                            <div className="w-12 h-12 bg-secondary/50 rounded-full flex items-center justify-center mx-auto mb-2">
+                              <ImageOff className="w-6 h-6 text-muted-foreground/30" />
+                            </div>
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tighter opacity-40">Sem Logo</span>
                           </div>
                         )}
                       </div>
 
-                      <div className="flex-1 space-y-2">
-                        <input type="file" id="logo-upload" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-                        <Button variant="outline" className="gap-2 w-full sm:w-auto" onClick={() => document.getElementById('logo-upload')?.click()}>
-                          <Upload className="w-4 h-4" /> Enviar Nova Logo
-                        </Button>
-                        <p className="text-[10px] text-muted-foreground">Formatos suportados: PNG, JPG ou SVG. Tamanho máximo: 2MB.<br />Recomendado: Imagens com fundo transparente.</p>
+                      <div className="flex-1 w-full space-y-4">
+                        <div className="bg-primary/5 p-4 rounded-xl border border-primary/10">
+                          <p className="text-[10px] sm:text-[11px] text-primary/80 font-medium leading-relaxed">
+                            <span className="font-black uppercase mr-1">Dica:</span>
+                            Use imagens em <span className="font-bold">PNG</span> ou <span className="font-bold">SVG</span> com fundo transparente para um melhor acabamento visual.
+                          </p>
+                        </div>
+                        
+                        <div className="flex flex-col gap-2">
+                          <input type="file" id="logo-upload" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                          <Button 
+                            variant="outline" 
+                            className="gap-2 h-11 sm:h-12 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all" 
+                            onClick={() => document.getElementById('logo-upload')?.click()}
+                          >
+                            <Upload className="w-4 h-4" /> Enviar Nova Logo
+                          </Button>
+                          <p className="text-[9px] text-muted-foreground text-center sm:text-left font-medium uppercase tracking-tighter opacity-50">
+                            Máximo: 2MB • JPG, PNG ou SVG
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <hr className="border-border/40" />
+                  <div className="h-px bg-gradient-to-r from-transparent via-border/40 to-transparent" />
 
-                  {/* Nome da Empresa */}
-                  <div className="space-y-3">
-                    <label className="text-sm font-semibold text-foreground">Nome do Sistema / Empresa</label>
-                    <p className="text-xs text-muted-foreground">Aparecerá junto com a logo em todo o sistema.</p>
-                    <div className="flex max-w-sm gap-2">
-                      <Input value={brandNameDraft} onChange={e => setBrandNameDraft(e.target.value)} placeholder="Ex: Mapa Território" className="flex-1" />
-                      <Button onClick={handleSaveBrandName} className="gap-2"><Save className="w-4 h-4" /> Atualizar</Button>
+                  {/* Brand Name Section */}
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs sm:text-sm font-black text-foreground uppercase tracking-wider">Nome do Sistema</label>
+                      <p className="text-[10px] sm:text-xs text-muted-foreground leading-relaxed">Como o sistema será identificado pelos usuários.</p>
+                    </div>
+                    
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <Input 
+                        value={brandNameDraft} 
+                        onChange={e => setBrandNameDraft(e.target.value)} 
+                        placeholder="Ex: Mapa Território" 
+                        className="flex-1 h-11 sm:h-12 font-bold text-base sm:text-lg bg-background/50" 
+                      />
+                      <Button onClick={handleSaveBrandName} className="gap-2 h-11 sm:h-12 px-8 font-black uppercase tracking-widest shadow-lg shadow-primary/20">
+                        <Save className="w-4 h-4" /> Salvar
+                      </Button>
                     </div>
                   </div>
 
@@ -3121,20 +3470,24 @@ export default function Admin() {
               onSwitchToReps={() => setActiveTab('reps')} 
               canCreate={role === 'admin' || canEdit('settings') || (myPermissions.find(p => p.moduleId === 'clientes')?.canEdit || false)}
               isMobileFilterOpen={isDashFiltersOpen}
+              initialData={clientes as any}
+              loading={loadingClientes}
+              onRefresh={fetchClientes}
             />
           )}
 
-          {/* ━━ PLANEJAMENTO DE ÁREAS (com contexto) ━━ */}
-          {['clusters', 'blocos', 'roteiros', 'agenda', 'densidade', 'leituraplanilha', 'roteiro_seq', 'resumo_roteiro'].includes(activeTab) && (
+          {/* ━━ PLANEJAMENTO DE ÁREAS (Novo Módulo) ━━ */}
+          {['cycles', 'clusters', 'blocos', 'roteiros', 'agenda', 'densidade', 'roteiro_seq', 'resumo_roteiro'].includes(activeTab) && (
             <RotasProvider>
-              {activeTab === 'clusters' && <ClustersPanel />}
-              {activeTab === 'blocos' && <BlocosPanel />}
-              {activeTab === 'roteiros' && <RoteirosPanel />}
-              {activeTab === 'agenda' && <AgendaPanel />}
-              {activeTab === 'densidade' && <DensidadePanel />}
-              {activeTab === 'leituraplanilha' && <LeituraPlanilhaPanel />}
-              {activeTab === 'roteiro_seq' && <RotaSequencialPanel />}
-              {activeTab === 'resumo_roteiro' && <ResumoRoteiroPanel />}
+              <PlanningDashboard 
+                activeTab={activeTab} 
+                onSwitchToReps={() => setActiveTab('reps')}
+                canCreateClients={role === 'admin' || canEdit('settings') || (myPermissions.find(p => p.moduleId === 'clientes')?.canEdit || false)}
+                isMobileFilterOpen={isDashFiltersOpen}
+                clientesData={clientes as any}
+                loadingClientes={loadingClientes}
+                onRefreshClientes={fetchClientes}
+              />
             </RotasProvider>
           )}
 

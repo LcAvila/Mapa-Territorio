@@ -124,6 +124,17 @@ export default function MapHeader({
     myNotifications.forEach(n => markAsRead(n.id));
   }, [showNotifications, myNotifications]);
 
+  const handleRefresh = () => {
+    // Find refresh buttons in different tabs and trigger them
+    const refreshBtn = document.querySelector('button[title="Atualizar dados"]') as HTMLButtonElement;
+    if (refreshBtn) {
+      refreshBtn.click();
+    } else {
+      // Fallback for screens without the explicit refresh button
+      window.location.reload();
+    }
+  };
+
   return (
     <header className="bg-card/95 backdrop-blur-sm border-b border-border px-2 md:px-4 py-2 flex items-center justify-between gap-2 md:gap-6 sticky top-0 z-[1000] shadow-sm overflow-hidden">
       {/* Logo / Brand */}
@@ -474,6 +485,14 @@ export default function MapHeader({
                   <span className="text-[11px] font-semibold text-muted-foreground">Tema</span>
                   <ThemeToggle />
                 </div>
+                <div className="h-px bg-border/40 my-1" />
+                <button
+                  className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors"
+                  onClick={() => { setShowUserMenu(false); handleRefresh(); }}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Atualizar Dados
+                </button>
                 <button
                   className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors"
                   onClick={() => { setShowUserMenu(false); navigate('/admin'); }}

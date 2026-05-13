@@ -64,7 +64,268 @@ model User {
   managedUsers      User[]                @relation("UserManagement")
   managedBy         User[]                @relation("UserManagement")
 
+  // Route Planning relations
+  routeCycles       RouteCycle[]          @relation("SupervisorCycles")
+  createdCycles     RouteCycle[]          @relation("CreatorCycles")
+  routeSequences    RouteSequence[]
+  auditLogs         RouteAuditLog[]
+  exports           RouteExport[]
+
   @@map("users")
+}
+
+model RouteCycle {
+  id                 Int                   @id @default(autoincrement())
+  name               String
+  start_date         DateTime
+  end_date           DateTime
+  status             String                @default("rascunho") // rascunho, calculando, pronto_revisao, publicado, em_execucao, finalizado, cancelado
+  supervisor_user_id Int
+  created_by         Int
+  created_at         DateTime              @default(now())
+  updated_at         DateTime              @updatedAt
+
+  supervisor         User                  @relation("SupervisorCycles", fields: [supervisor_user_id], references: [id])
+  creator            User                  @relation("CreatorCycles", fields: [created_by], references: [id])
+  weeks              RouteCycleWeek[]
+  clientSnapshots    RouteClientSnapshot[]
+  assignments        RouteAssignment[]
+  sequences          RouteSequence[]
+  clusters           RouteCluster[]
+  blocks             RouteBlock[]
+  exports            RouteExport[]
+
+  @@map("route_cycles")
+}
+
+model RouteCycleWeek {
+  id             Int               @id @default(autoincrement())
+  route_cycle_id Int
+  week_number    Int               // 1 a 4
+  start_date     DateTime
+  end_date       DateTime
+  status         String            @default("pendente")
+  
+  cycle          RouteCycle        @relation(fields: [route_cycle_id], references: [id], onDelete: Cascade)
+  assignments    RouteAssignment[]
+  sequences      RouteSequence[]
+  clusters       RouteCluster[]
+  blocks         RouteBlock[]
+
+  @@map("route_cycle_weeks")
+}
+
+model RouteClientSnapshot {
+  id                   Int               @id @default(autoincrement())
+  route_cycle_id       Int
+  client_id            Int
+  owner_user_id        Int
+  supervisor_user_id   Int
+  client_name          String
+  trade_name           String?
+  cnpj                 String?
+  address              String?
+  city                 String?
+  state                String?
+  zip_code             String?
+  classification       String?           // Estratégico, Forte, Médio, Pontual
+  latitude             Float?
+  longitude            Float?
+  distance_base_km     Float?
+  source_base          String?
+  source_logistic_type String?
+
+  cycle                RouteCycle        @relation(fields: [route_cycle_id], references: [id], onDelete: Cascade)
+  assignments          RouteAssignment[]
+  sequenceItems        RouteSequenceItem[]
+
+  @@map("route_clients_snapshot")
+}
+
+model RouteAssignment {
+  id                 Int                 @id @default(autoincrement())
+  route_cycle_id     Int
+  week_id            Int
+  client_snapshot_id Int
+  assigned_by        Int
+  assigned_at        DateTime            @default(now())
+  assignment_mode    String              @default("automatic") // automatic, manual
+  notes              String?
+
+  cycle              RouteCycle          @relation(fields: [route_cycle_id], references: [id], onDelete: Cascade)
+  week               RouteCycleWeek      @relation(fields: [week_id], references: [id], onDelete: Cascade)
+  clientSnapshot     RouteClientSnapshot @relation(fields: [client_snapshot_id], references: [id], onDelete: Cascade)
+
+  @@map("route_assignments")
+}
+
+model RouteSequence {
+  id                     Int                  @id @default(autoincrement())
+  route_cycle_id         Int
+  week_id                Int
+  supervisor_user_id     Int
+  route_date             DateTime?
+  start_lat              Float?
+  start_lng              Float?
+  start_label            String?
+  end_lat                Float?
+  end_lng                Float?
+  end_label              String?
+  total_distance_km      Float?
+  total_duration_minutes Int?
+  average_km_per_visit   Float?
+  total_visits           Int?
+  optimization_provider  String?              @default("HERE")
+  optimization_status    String?              @default("pending")
+  raw_response_json      Json?
+  created_at             DateTime             @default(now())
+
+  cycle                  RouteCycle           @relation(fields: [route_cycle_id], references: [id], onDelete: Cascade)
+  week                   RouteCycleWeek       @relation(fields: [week_id], references: [id], onDelete: Cascade)
+  supervisor             User                 @relation(fields: [supervisor_user_id], references: [id])
+  items                  RouteSequenceItem[]
+  executionLogs          RouteExecutionLog[]
+
+  @@map("route_sequences")
+}
+
+model RouteSequenceItem {
+  id                             Int                 @id @default(autoincrement())
+  route_sequence_id              Int
+  sequence_number                Int
+  client_snapshot_id             Int
+  client_id                      Int
+  city                           String?
+  state                          String?
+  classification                 String?
+  stop_lat                       Float?
+  stop_lng                       Float?
+  distance_from_previous_km      Float?
+  duration_from_previous_minutes Int?
+  logistic_note                  String?
+  is_week_start                  Boolean             @default(false)
+  manually_changed               Boolean             @default(false)
+  status                         String              @default("pendente") // pendente, agendada, em_rota, visitada, nao_visitada, remarcada, sem_sucesso, venda_feita
+
+  sequence                       RouteSequence       @relation(fields: [route_sequence_id], references: [id], onDelete: Cascade)
+  clientSnapshot                 RouteClientSnapshot @relation(fields: [client_snapshot_id], references: [id])
+  checkins                       VisitCheckin[]
+  results                        VisitResult[]
+
+  @@map("route_sequence_items")
+}
+
+model RouteCluster {
+  id                  Int            @id @default(autoincrement())
+  route_cycle_id      Int
+  supervisor_user_id  Int
+  week_id             Int
+  state               String?
+  city                String?
+  cluster_name        String?
+  classification      String?
+  total_clients       Int?
+  average_distance_km Float?
+
+  cycle               RouteCycle     @relation(fields: [route_cycle_id], references: [id], onDelete: Cascade)
+  week                RouteCycleWeek @relation(fields: [week_id], references: [id], onDelete: Cascade)
+
+  @@map("route_clusters")
+}
+
+model RouteBlock {
+  id                 Int            @id @default(autoincrement())
+  route_cycle_id     Int
+  supervisor_user_id Int
+  week_id            Int
+  block_name         String?
+  block_type         String?
+  state              String?
+  city               String?
+  total_clients      Int?
+  notes              String?
+
+  cycle              RouteCycle     @relation(fields: [route_cycle_id], references: [id], onDelete: Cascade)
+  week               RouteCycleWeek @relation(fields: [week_id], references: [id], onDelete: Cascade)
+
+  @@map("route_blocks")
+}
+
+model RouteExecutionLog {
+  id                Int           @id @default(autoincrement())
+  route_sequence_id Int
+  action            String
+  action_by         Int
+  payload_json      Json?
+  created_at        DateTime      @default(now())
+
+  sequence          RouteSequence @relation(fields: [route_sequence_id], references: [id], onDelete: Cascade)
+
+  @@map("route_execution_logs")
+}
+
+model VisitCheckin {
+  id                     Int               @id @default(autoincrement())
+  route_sequence_item_id Int
+  checkin_at             DateTime
+  checkin_lat            Float?
+  checkin_lng            Float?
+  checkout_at            DateTime?
+  checkout_lat           Float?
+  checkout_lng           Float?
+  checkin_source         String?
+  notes                  String?
+
+  sequenceItem           RouteSequenceItem @relation(fields: [route_sequence_item_id], references: [id], onDelete: Cascade)
+
+  @@map("visit_checkins")
+}
+
+model VisitResult {
+  id                     Int               @id @default(autoincrement())
+  route_sequence_item_id Int
+  result_status          String
+  sale_made              Boolean           @default(false)
+  sale_value             Float?
+  notes                  String?
+  registered_by          Int
+  registered_at          DateTime          @default(now())
+
+  sequenceItem           RouteSequenceItem @relation(fields: [route_sequence_item_id], references: [id], onDelete: Cascade)
+
+  @@map("visit_results")
+}
+
+model RouteAuditLog {
+  id          Int      @id @default(autoincrement())
+  entity_name String
+  entity_id   Int
+  action      String
+  old_data    Json?
+  new_data    Json?
+  changed_by  Int
+  changed_at  DateTime @default(now())
+  
+  user        User     @relation(fields: [changed_by], references: [id])
+
+  @@map("route_audit_logs")
+}
+
+model RouteExport {
+  id             Int        @id @default(autoincrement())
+  route_cycle_id Int
+  export_type    String     // excel, pdf
+  export_scope   String     // base_clientes, resumo_supervisores, roteiro_sequencial, resumo_roteiro, clusters, blocos, agenda, densidade
+  filters_json   Json?
+  generated_by   Int
+  generated_at   DateTime   @default(now())
+  file_url       String?
+  file_name      String?
+
+  cycle          RouteCycle @relation(fields: [route_cycle_id], references: [id], onDelete: Cascade)
+  user           User       @relation(fields: [generated_by], references: [id])
+
+  @@map("route_exports")
 }
 
 model Group {

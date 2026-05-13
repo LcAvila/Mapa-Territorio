@@ -943,7 +943,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
                 >
                   <option value="dashboard">Dashboard</option>
                   <option value="baserotas">Base Cliente</option>
-                  <option value="reps">Representantes</option>
+                  <option value="reps">Equipe/Usuários</option>
                   <option value="territories">Territórios</option>
                   <option value="roteiros">Roteiros</option>
                 </select>
