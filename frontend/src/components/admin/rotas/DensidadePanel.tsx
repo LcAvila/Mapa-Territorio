@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Activity, Users, BarChart3, MapPin, TrendingUp, ChevronDown } from 'lucide-react';
+import { Activity, Users, BarChart3, MapPin, TrendingUp } from 'lucide-react';
 import { useRotas } from '@/contexts/RotasContext';
 import { useApiClientes, useApiRepresentatives } from '@/hooks/use-api-data';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export function DensidadePanel() {
   const { selectedUserId, setSelectedUserId } = useRotas();
@@ -47,18 +48,23 @@ export function DensidadePanel() {
           </p>
         </div>
 
-        <div className="relative min-w-[250px]">
-          <select
-            className="w-full h-10 px-3 bg-background border border-input rounded-md text-sm appearance-none pr-10"
-            value={selectedUserId || ''}
-            onChange={e => setSelectedUserId(e.target.value ? Number(e.target.value) : null)}
+        <div className="min-w-[250px]">
+          <Select 
+            value={selectedUserId ? String(selectedUserId) : 'all'} 
+            onValueChange={val => setSelectedUserId(val === 'all' ? null : Number(val))}
           >
-            <option value="">-- Todos os Usuários --</option>
-            {reps.map(r => (
-              <option key={r.id} value={r.id}>{r.code ? `${r.code} — ` : ''}{r.full_name || r.fullName || r.username}</option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <SelectTrigger className="w-full h-10 bg-background border border-input rounded-md text-sm">
+              <SelectValue placeholder="Todos os Usuários" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">-- Todos os Usuários --</SelectItem>
+              {reps.map(r => (
+                <SelectItem key={r.id} value={String(r.id)}>
+                  {r.code ? `${r.code} — ` : ''}{r.full_name || r.fullName || r.username}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

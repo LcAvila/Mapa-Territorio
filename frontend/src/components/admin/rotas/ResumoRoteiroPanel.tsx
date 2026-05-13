@@ -9,11 +9,12 @@ import React, { useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import {
   BarChart2, MapPin, Clock, Route, Users, TrendingUp,
-  CheckCircle2, Calendar, Navigation2, Info, ChevronDown
+  CheckCircle2, Calendar, Navigation2, Info
 } from 'lucide-react';
 import { useRotas } from '@/contexts/RotasContext';
 import { useApiUsers, useApiClientes } from '@/hooks/use-api-data';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const SEMANAS = ['Semana 1', 'Semana 2', 'Semana 3', 'Semana 4'];
 
@@ -96,16 +97,23 @@ export function ResumoRoteiroPanel() {
             Visão consolidada dos roteiros calculados pela HERE API. Replica e supera a aba "Resumo Roteiro" do Excel.
           </p>
         </div>
-        <div className="relative min-w-[250px]">
-          <select
-            className="w-full h-10 px-3 bg-background border border-input rounded-md text-sm appearance-none pr-10"
-            value={selectedUserId || ""}
-            onChange={e => setSelectedUserId(e.target.value ? Number(e.target.value) : null)}
+        <div className="min-w-[250px]">
+          <Select 
+            value={selectedUserId ? String(selectedUserId) : 'all'} 
+            onValueChange={val => setSelectedUserId(val === 'all' ? null : Number(val))}
           >
-            <option value="">-- Filtrar por Usuário Responsável --</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.username} — {u.full_name || u.fullName}</option>)}
-          </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <SelectTrigger className="w-full h-10 bg-background border border-input rounded-md text-sm">
+              <SelectValue placeholder="Filtrar por Usuário Responsável" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">-- Filtrar por Usuário Responsável --</SelectItem>
+              {users.map(u => (
+                <SelectItem key={u.id} value={String(u.id)}>
+                  {u.username} — {u.full_name || u.fullName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

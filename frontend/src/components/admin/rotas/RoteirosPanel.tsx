@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Map, Truck, Play, Loader2, Navigation2, CheckCircle2, ChevronDown } from 'lucide-react';
+import { Map, Truck, Play, Loader2, Navigation2, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useRotas } from '@/contexts/RotasContext';
 import { useApiRepresentatives, useApiClientes, Cliente } from '@/hooks/use-api-data';
 import { useRouting, TransportMode, RouteWaypoint } from '@/hooks/use-routing';
 import { toast } from 'sonner';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export function RoteirosPanel() {
   const { selectedUserId, setSelectedUserId } = useRotas();
@@ -94,19 +95,25 @@ export function RoteirosPanel() {
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-4">
-              <div className="relative">
-                <select
-                    className="w-full h-10 px-3 bg-background border border-input rounded-md text-sm appearance-none pr-10"
-                    value={selectedUserId || ''}
-                    onChange={handleSelectRep}
-                  >
-                    <option value="">-- Selecione um Usuário --</option>
-                    {reps.map(r => (
-                      <option key={r.id} value={r.id}>{r.code ? `${r.code} — ` : ''}{r.full_name || r.fullName || r.username}</option>
-                    ))}
-                  </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-              </div>
+              <Select 
+                value={selectedUserId ? String(selectedUserId) : 'all'} 
+                onValueChange={val => {
+                  setSelectedUserId(val === 'all' ? null : Number(val));
+                  setSelectedClientIds([]);
+                }}
+              >
+                <SelectTrigger className="w-full h-10 bg-background border border-input rounded-md text-sm">
+                  <SelectValue placeholder="Selecione um Usuário" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">-- Selecione um Usuário --</SelectItem>
+                  {reps.map(r => (
+                    <SelectItem key={r.id} value={String(r.id)}>
+                      {r.code ? `${r.code} — ` : ''}{r.full_name || r.fullName || r.username}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
               {selectedUserId && (
                 <div className="mt-4 pt-4 border-t border-border/40">
