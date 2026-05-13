@@ -348,7 +348,7 @@ export function BaseClientePanel({
   const handleDeleteClient = async (id: number, name: string) => {
     if (!window.confirm(`Tem certeza que deseja apagar o cliente "${name}"? Esta ação não pode ser desfeita.`)) return;
     try {
-      setLoading(true);
+      setInternalLoading(true);
       const token = localStorage.getItem('token');
       const tokenVersion = localStorage.getItem('tokenVersion') || '0';
       const res = await fetch(`${API_URL}/${id}`, {
@@ -365,7 +365,7 @@ export function BaseClientePanel({
       console.error(error);
       const message = error instanceof Error ? error.message : 'Erro ao apagar.';
       toast.error(message);
-      setLoading(false);
+      setInternalLoading(false);
     }
   };
 
