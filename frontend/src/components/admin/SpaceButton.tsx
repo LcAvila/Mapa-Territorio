@@ -1,15 +1,17 @@
 import React from 'react';
+import { Map } from 'lucide-react';
 
 interface SpaceButtonProps {
   onClick?: () => void;
   label?: string;
 }
 
-export default function SpaceButton({ onClick, label = 'Ver Mapa' }: SpaceButtonProps) {
+export default function SpaceButton({ onClick, label = 'VER MAPA' }: SpaceButtonProps) {
   return (
-    <div className="btn-container" onClick={onClick}>
-      <button id="space-btn" name="space-button" type="button">
-        <span>{label}</span>
+    <div className="btn-container group" onClick={onClick}>
+      <button id="space-btn" name="space-button" type="button" className="flex items-center gap-2 px-4">
+        <Map className="w-4 h-4 text-white shrink-0" />
+        <span className="hidden sm:inline">{label}</span>
         <div
           style={{ position: 'absolute', left: '119.273px', top: '18.0747px', animationDelay: '3.37051s', transform: 'scale(0.196521)' }}
           className="star"

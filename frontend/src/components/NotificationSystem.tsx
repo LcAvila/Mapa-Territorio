@@ -121,7 +121,7 @@ export default function NotificationSystem() {
   };
 
   useEffect(() => {
-    if (!currentUserId) return;
+    if (!currentUserId || !token) return;
 
     console.log('[REALTIME] Iniciando escuta para usuário:', currentUserId);
 

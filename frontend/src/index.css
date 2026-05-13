@@ -1208,6 +1208,16 @@ button#space-btn {
   overflow: visible;
 }
 
+@media (max-width: 640px) {
+  .btn-container {
+    width: 40px;
+  }
+  button#space-btn {
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+}
+
 .btn-container::after {
   content: "";
   width: 100%;

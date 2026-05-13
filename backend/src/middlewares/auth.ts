@@ -110,8 +110,13 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
         .or(`supabase_id.eq.${sbUser.id},email.eq.${sbUser.email},code.eq.${accessCode},username.eq.${accessCode}`)
         .single();
 
-      if (httpError || !httpUser) {
-        console.error(`[AUTH] HTTP Fallback failed:`, httpError?.message || 'User not found');
+      if (httpError) {
+        console.error(`[AUTH] HTTP Fallback failed:`, httpError.message);
+        return res.status(503).json({ message: 'Banco de dados offline e falha na redundância Supabase.' });
+      }
+
+      if (!httpUser) {
+        console.error(`[AUTH] User not found in HTTP Fallback:`, sbUser.email);
         return res.status(401).json({ message: 'Perfil não encontrado (Modo Offline)' });
       }
 

@@ -248,7 +248,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
       }
     }
 
-    if (formData.role === 'admin') {
+    if (formData.role === 'admin' && user.role !== 'admin') {
       toast.info('Usuário promovido a ADMIN automaticamente!');
     }
 

@@ -246,10 +246,11 @@ function CustomSelect({ options, value, onChange, placeholder, disabled = false,
   );
 }
 
-function SidebarContent({ displayPhoto, displayName, displayEmail, navItems, activeTab, setActiveTab, expandedMenus, setExpandedMenus }: {
+function SidebarContent({ displayPhoto, displayName, displayEmail, displayTipo, navItems, activeTab, setActiveTab, expandedMenus, setExpandedMenus }: {
   displayPhoto: string;
   displayName: string;
   displayEmail: string;
+  displayTipo: string;
   navItems: any[];
   activeTab: string;
   setActiveTab: (id: TabId) => void;
@@ -266,8 +267,13 @@ function SidebarContent({ displayPhoto, displayName, displayEmail, navItems, act
             : <User style={{ width: 28, height: 28 }} />
           }
         </div>
-        <p className="admin-sidebar-username">{displayName.toUpperCase()}</p>
-        {displayEmail && <p className="admin-sidebar-email">{displayEmail}</p>}
+        <div className="flex flex-col items-center min-w-0">
+          <p className="admin-sidebar-username truncate w-full">{displayName.toUpperCase()}</p>
+          <p className="text-[10px] text-muted-foreground/80 font-bold uppercase tracking-widest truncate mt-0.5">
+            {displayTipo}
+          </p>
+        </div>
+        {/* displayEmail removed as per user's visual request focused on Name and Type */}
       </div>
 
       {/* Navigation */}
@@ -1345,6 +1351,7 @@ export default function Admin() {
   const displayEmail = currentUser?.username || '';
   const displayPhoto = currentUser?.photo || '';
   const displayCargo = currentUser?.cargo || role || 'usuário';
+  const displayTipo = currentUser?.tipo || 'Usuário';
 
   const navItems: NavItem[] = useMemo(() => [
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
@@ -1467,6 +1474,7 @@ export default function Admin() {
           displayPhoto={displayPhoto}
           displayName={displayName}
           displayEmail={displayEmail}
+          displayTipo={displayTipo}
           navItems={navItems}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -1495,6 +1503,7 @@ export default function Admin() {
                       displayPhoto={displayPhoto}
                       displayName={displayName}
                       displayEmail={displayEmail}
+                      displayTipo={displayTipo}
                       navItems={navItems}
                       activeTab={activeTab}
                       setActiveTab={(id) => { setActiveTab(id); setIsMobileMenuOpen(false); }}
@@ -1529,13 +1538,7 @@ export default function Admin() {
               </Button>
             )}
 
-            <button 
-              className="admin-header-icon-btn h-9 w-9 bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 flex items-center justify-center rounded-lg"
-              onClick={() => navigate('/mapa')}
-              title="Ver Mapa"
-            >
-              <Map className="w-4 h-4 shrink-0" />
-            </button>
+            <SpaceButton onClick={() => navigate('/mapa')} />
 
             <button className="admin-header-icon-btn h-9 w-9 flex items-center justify-center" onClick={fetchAll} title="Recarregar dados">
               <RefreshCw style={{ width: 16, height: 16 }} />
@@ -1639,22 +1642,37 @@ export default function Admin() {
 
             <Popover open={showUserMenu} onOpenChange={setShowUserMenu}>
               <PopoverTrigger asChild>
-                <button className="admin-header-icon-btn flex items-center justify-center overflow-hidden border border-border/40 bg-secondary/40 shrink-0 h-9 w-9 rounded-lg">
-                  <div className="w-full h-full flex items-center justify-center bg-primary/10">
-                    <User style={{ width: 16, height: 16 }} className="text-primary" />
+                <button className="flex items-center gap-2.5 px-2 py-1.5 hover:bg-secondary/50 rounded-lg transition-all border border-transparent hover:border-border/40 min-w-0 group">
+                  <div className="w-8 h-8 rounded-full overflow-hidden border border-primary/20 bg-primary/5 shrink-0 transition-transform group-hover:scale-105">
+                    {displayPhoto ? (
+                      <img src={displayPhoto} alt={displayName} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <User style={{ width: 14, height: 14 }} className="text-primary" />
+                      </div>
+                    )}
                   </div>
+                  <div className="hidden md:flex flex-col items-start text-left min-w-0 mr-1">
+                    <span className="text-[11px] font-black text-foreground truncate leading-tight tracking-wide">
+                      {displayName.toUpperCase()}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground truncate uppercase tracking-tight opacity-70 leading-tight mt-0.5">
+                      {displayTipo}
+                    </span>
+                  </div>
+                  <ChevronDown className="w-3 h-3 text-muted-foreground opacity-50 hidden md:block shrink-0 transition-transform group-data-[state=open]:rotate-180" />
                 </button>
               </PopoverTrigger>
-              <PopoverContent className="w-48 p-1.5 shadow-2xl border-primary/10 z-[1100]" align="end">
+              <PopoverContent className="w-52 p-1.5 shadow-2xl border-primary/10 z-[1100] animate-in fade-in zoom-in-95 duration-200" align="end">
                 <div className="flex items-center justify-between px-2.5 py-2 border-b border-border/60 mb-1">
                   <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">Interface</span>
                   <ThemeToggle />
                 </div>
-                <div className="px-2.5 py-2 mb-1">
+                <div className="px-2.5 py-2 mb-1 bg-primary/[0.03] rounded-md mx-1">
                   <p className="text-[11px] font-black text-foreground truncate">{displayName.toUpperCase()}</p>
-                  <p className="text-[9px] text-muted-foreground truncate uppercase tracking-tighter opacity-70">{String(displayCargo).toLowerCase()}</p>
+                  <p className="text-[9px] text-muted-foreground truncate uppercase tracking-tighter opacity-70">{displayTipo}</p>
                 </div>
-                <div className="h-px bg-border/40 my-1" />
+                <div className="h-px bg-border/40 my-1 mx-1" />
                 <button
                   className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-bold rounded-md hover:bg-primary/10 hover:text-primary transition-all group"
                   onClick={() => { 
@@ -1667,7 +1685,7 @@ export default function Admin() {
                   <User className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 transition-opacity" />
                   Meu Perfil
                 </button>
-                <div className="h-px bg-border/40 my-1" />
+                <div className="h-px bg-border/40 my-1 mx-1" />
                 <button
                   className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-bold rounded-md text-destructive hover:bg-destructive/10 transition-all group"
                   onClick={() => { setShowUserMenu(false); logout(); navigate('/login'); }}

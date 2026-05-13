@@ -158,12 +158,24 @@ router.post('/users/:id/kick', requireAdmin, async (req: any, res) => {
     console.log(`[KICK] Tentando derrubar usuário por email: ${authEmail}`);
     
     try {
-      const { data: authData } = await supabaseAdmin.auth.admin.listUsers();
-      const sbUser = authData?.users?.find(u => u.email === authEmail);
+      let sbUserId = (user as any).supabase_id;
       
-      if (sbUser) {
-          console.log(`[KICK] Usuário Supabase encontrado (ID: ${sbUser.id}). Revogando sessões...`);
-          await supabaseAdmin.auth.admin.signOut(sbUser.id);
+      if (!sbUserId) {
+        const { data: authData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+        if (listError) {
+          console.error('[KICK] Erro ao listar usuários no Supabase:', listError.message);
+        } else if (authData && Array.isArray(authData.users)) {
+          const sbUser = authData.users.find(u => u.email === authEmail);
+          if (sbUser) {
+            sbUserId = sbUser.id;
+            await prisma.$executeRawUnsafe('UPDATE "users" SET "supabase_id" = $1 WHERE "id" = $2', sbUserId, id);
+          }
+        }
+      }
+      
+      if (sbUserId) {
+          console.log(`[KICK] Usuário Supabase encontrado (ID: ${sbUserId}). Revogando sessões...`);
+          await supabaseAdmin.auth.admin.signOut(sbUserId);
       } else {
           console.warn(`[KICK] Usuário Supabase NÃO encontrado para o email: ${authEmail}`);
       }
@@ -183,7 +195,7 @@ router.post('/users/:id/kick', requireAdmin, async (req: any, res) => {
 // Get all audit logs
 router.get('/audit', requirePermission('audit', 'view'), async (req, res) => {
   try {
-    const logs = await prisma.userActivity.findMany({
+    const fetchPromise = prisma.userActivity.findMany({
       include: {
         user: {
           select: {
@@ -196,6 +208,8 @@ router.get('/audit', requirePermission('audit', 'view'), async (req, res) => {
       orderBy: { timestamp: 'desc' },
       take: 500
     });
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+    const logs = await Promise.race([fetchPromise, timeoutPromise]) as any[];
     
     // Map to frontend structure
     const mappedLogs = logs.map(log => ({
@@ -205,14 +219,36 @@ router.get('/audit', requirePermission('audit', 'view'), async (req, res) => {
       entityId: log.entityId || '',
       details: log.details,
       performedBy: log.user?.full_name || log.user?.username || 'Sistema',
-      timestamp: log.timestamp.toISOString(),
+      timestamp: log.timestamp instanceof Date ? log.timestamp.toISOString() : new Date(log.timestamp).toISOString(),
       ipAddress: log.ipAddress
     }));
 
     res.json(mappedLogs);
   } catch (error) {
-    console.error('Error fetching audit logs:', error);
-    res.status(500).json({ message: 'Erro ao buscar logs de auditoria' });
+    console.warn('[ADMIN] Prisma failed or timed out to fetch audit logs. Falling back to HTTP.');
+    const { data, error: httpError } = await supabaseAdmin
+        .from('user_activities')
+        .select('*, user:users(id, username, full_name)')
+        .order('timestamp', { ascending: false })
+        .limit(500);
+    
+    if (httpError) {
+      console.error('[ADMIN] HTTP Fallback failed for audit logs:', httpError.message);
+      return res.status(500).json({ message: 'Erro ao buscar logs de auditoria' });
+    }
+    
+    const mappedLogs = (data || []).map((log: any) => ({
+      id: String(log.id),
+      action: log.action,
+      entity: log.entity || 'Sistema',
+      entityId: log.entityId || '',
+      details: log.details,
+      performedBy: log.user?.full_name || log.user?.username || 'Sistema',
+      timestamp: log.timestamp,
+      ipAddress: log.ipAddress
+    }));
+    
+    res.json(mappedLogs);
   }
 });
 
@@ -224,6 +260,39 @@ router.delete('/audit/clear', requireAdmin, async (req: any, res) => {
     res.json({ message: 'Histórico de auditoria removido com sucesso' });
   } catch (error) {
     res.status(500).json({ message: 'Erro ao limpar auditoria' });
+  }
+});
+
+router.get('/users/:id', requirePermission('users', 'view'), async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: PUBLIC_USER_FIELDS
+    });
+    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+    res.json(user);
+  } catch (error) {
+    console.warn(`[ADMIN] Prisma failed for user ${id}. Falling back to HTTP.`);
+    const { data, error: httpError } = await supabaseAdmin
+      .from('users')
+      .select('*, permissions:user_permissions(*, module:modules(*))')
+      .eq('id', id)
+      .single();
+    
+    if (httpError || !data) return res.status(404).json({ message: 'Usuário não encontrado' });
+    
+    // Adapt data to match PUBLIC_USER_FIELDS structure
+    const mappedUser = {
+      ...data,
+      permissions: (data.permissions || []).map((p: any) => ({
+        ...p,
+        module: p.module || p.modules
+      })),
+      managedUsers: []
+    };
+    
+    res.json(mappedUser);
   }
 });
 
@@ -375,64 +444,57 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
     return res.status(400).json({ message: 'O formato do e-mail é inválido.' });
   }
   
-  const existing = await prisma.user.findUnique({ where: { id } });
-  if (!existing) return res.status(404).json({ message: 'Usuário não encontrado' });
-  
   try {
+    // 0. Fetch existing user with timeout and HTTP fallback
+    let existing: any = null;
+    try {
+      const fetchPromise = prisma.user.findUnique({ where: { id } });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+      existing = await Promise.race([fetchPromise, timeoutPromise]);
+    } catch (dbError) {
+      console.warn(`[ADMIN] Prisma failed to fetch user ${id} for update. Using HTTP Fallback.`);
+      const { data, error } = await supabaseAdmin.from('users').select('*').eq('id', id).single();
+      if (!error && data) existing = data;
+    }
+    
+    if (!existing) return res.status(404).json({ message: 'Usuário não encontrado' });
+    
     // 1. Password sync to Supabase (mantendo lógica existente)
     if (password) {
       try {
         console.log(`[AUTH] Iniciando troca de senha para usuário ID local: ${id}`);
         
-        // Busca o supabase_id via SQL puro para evitar erro de tipo no cliente
-        const userDb: any[] = await prisma.$queryRawUnsafe('SELECT "supabase_id", "username", "code", "email" FROM "users" WHERE "id" = $1', id);
-        const userData = userDb[0];
+        // Busca o supabase_id
+        let sbUserId = existing.supabase_id;
         
-        if (!userData) throw new Error('Usuário não encontrado no banco de dados local.');
-
-        let sbUserId = userData.supabase_id;
-        console.log(`[AUTH] Supabase ID atual no banco: ${sbUserId || 'Nulo'}`);
-
         // Se não temos o supabase_id salvo, tentamos buscar no Supabase
         if (!sbUserId) {
-          const email1 = `${userData.code || userData.username}@mapaterritorio.com`.toLowerCase();
-          const email2 = userData.email?.toLowerCase();
+          const email1 = `${existing.code || existing.username}@mapaterritorio.com`.toLowerCase();
+          const email2 = existing.email?.toLowerCase();
           
           console.log(`[AUTH] Buscando ID no Supabase por e-mails: ${email1} ${email2 ? 'ou ' + email2 : ''}`);
           
-          const { data: { users: sbUsers }, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
-            perPage: 1000 // Aumenta o limite para encontrar usuários antigos
+          const { data: authData, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
+            perPage: 1000
           });
           
-          if (listErr) {
-            console.error('[AUTH] Erro ao listar usuários no Supabase:', listErr);
-            throw listErr;
-          }
-
-          const sbUser = sbUsers.find(u => 
-            u.email?.toLowerCase() === email1 || (email2 && u.email?.toLowerCase() === email2)
-          );
-          
-          if (sbUser) {
-            sbUserId = sbUser.id;
-            console.log(`[AUTH] Usuário localizado via busca: ${sbUserId}. Sincronizando ID...`);
-            await prisma.$executeRawUnsafe('UPDATE "users" SET "supabase_id" = $1 WHERE "id" = $2', sbUserId, id);
+          if (!listErr && authData && Array.isArray(authData.users)) {
+            const sbUser = authData.users.find(u => 
+              u.email?.toLowerCase() === email1 || (email2 && u.email?.toLowerCase() === email2)
+            );
+            
+            if (sbUser) {
+              sbUserId = sbUser.id;
+              console.log(`[AUTH] Usuário localizado via busca: ${sbUserId}. Sincronizando ID...`);
+              await prisma.$executeRawUnsafe('UPDATE "users" SET "supabase_id" = $1 WHERE "id" = $2', sbUserId, id).catch(() => {});
+            }
           }
         }
 
         if (sbUserId) {
-          console.log(`[AUTH] Chamando updateUserById para ID: ${sbUserId}`);
           const { data: updData, error: updErr } = await supabaseAdmin.auth.admin.updateUserById(sbUserId, { password });
-          
-          if (updErr) {
-            console.error('[AUTH] Erro retornado pelo Supabase Auth:', updErr);
-            // Erros comuns: senha curta, email não confirmado (se configurado), etc.
-            throw new Error(`Erro Supabase: ${updErr.message}`);
-          }
-          
-          console.log('[AUTH] Senha atualizada com sucesso para:', updData.user?.email);
+          if (updErr) throw new Error(`Erro Supabase: ${updErr.message}`);
         } else {
-          console.error('[AUTH] Usuário não encontrado no Supabase Auth.');
           throw new Error('O cadastro deste usuário não existe no servidor de autenticação.');
         }
       } catch (authSyncError: any) {
@@ -444,89 +506,125 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
       }
     }
 
-    // 2. Perform database update
-    const user: any = await prisma.user.update({ 
-      where: { id },
-      data: { 
-        role: role || undefined, 
-        tipo: tipo || undefined, 
-        full_name, 
-        photo,
-        telefone,
-        cpf_cnpj,
-        cargo,
-        company_name,
-        email: email || undefined,
-        cep,
-        logradouro,
-        numero,
-        complemento,
-        bairro_end,
-        cidade,
-        estado_end,
-        area_atuacao,
-        base_logistica,
-        groupId: groupId !== undefined ? (groupId ? Number(groupId) : null) : undefined,
-        // @ts-ignore
-        managedUsers: managedUserIds ? {
-          set: managedUserIds.map((id: number) => ({ id }))
-        } : undefined,
-        birth_date: birth_date ? new Date(birth_date) : undefined,
-        colorIndex: colorIndex !== undefined ? Number(colorIndex) : undefined,
-        comissao: (comissao !== undefined && comissao !== '' && comissao !== null) ? parseFloat(comissao) : (comissao === null ? null : undefined),
-        isVago: isVago !== undefined ? (isVago ? 1 : 0) : undefined,
-        // @ts-ignore
-        userTypeId: userTypeId ? Number(userTypeId) : null,
-      }, 
-      select: PUBLIC_USER_FIELDS 
-    });
+    // 2. Perform database update with timeout and HTTP fallback
+    const updateData: any = { 
+      full_name, 
+      photo,
+      telefone,
+      cpf_cnpj,
+      cargo,
+      company_name,
+      email: email || undefined,
+      cep,
+      logradouro,
+      numero,
+      complemento,
+      bairro_end,
+      cidade,
+      estado_end,
+      area_atuacao,
+      base_logistica,
+      birth_date: birth_date ? new Date(birth_date) : undefined,
+      colorIndex: colorIndex !== undefined ? Number(colorIndex) : undefined,
+      comissao: (comissao !== undefined && comissao !== '' && comissao !== null) ? parseFloat(String(comissao)) : (comissao === null ? null : undefined),
+      isVago: isVago !== undefined ? (isVago ? 1 : 0) : undefined,
+    };
 
-    // 3. Update permissions if provided (Novo!)
+    // Campos que só admin pode mudar ou que tem lógica de role
+    if (role) updateData.role = role;
+    if (tipo) updateData.tipo = tipo;
+    if (groupId !== undefined) updateData.groupId = (groupId ? Number(groupId) : null);
+    if (userTypeId) updateData.userTypeId = Number(userTypeId);
+
+    let user: any = null;
+    try {
+      const updatePromise = prisma.user.update({ 
+        where: { id },
+        data: {
+            ...updateData,
+            managedUsers: managedUserIds ? {
+                set: managedUserIds.map((id: number) => ({ id }))
+            } : undefined,
+        },
+        select: { ...PUBLIC_USER_FIELDS, supabase_id: true } as any
+      });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+      user = await Promise.race([updatePromise, timeoutPromise]);
+    } catch (updateError) {
+      console.warn(`[ADMIN] Prisma update failed for user ${id}. Using HTTP Fallback.`);
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .update(updateData)
+        .eq('id', id)
+        .select('*')
+        .single();
+      
+      if (error) {
+          console.error('[ADMIN] HTTP Fallback update failed:', error.message);
+          throw new Error('Falha ao atualizar no banco de dados (Modo Offline)');
+      }
+      user = data;
+    }
+
+    // 3. Update permissions if provided
     if (Array.isArray(permissions) && permissions.length > 0) {
-      console.log(`[ADMIN] Atualizando permissões para usuário ID ${id} via PUT.`);
-      await prisma.$executeRawUnsafe('DELETE FROM "user_permissions" WHERE "userId" = $1', id);
-      for (const p of permissions) {
-        await prisma.$executeRawUnsafe(
-          'INSERT INTO "user_permissions" ("userId", "moduleId", "canView", "canEdit") VALUES ($1, $2, $3, $4)',
-          id, p.moduleId, !!p.canView, !!p.canEdit
-        );
+      try {
+        await prisma.$executeRawUnsafe('DELETE FROM "user_permissions" WHERE "userId" = $1', id);
+        for (const p of permissions) {
+          await prisma.$executeRawUnsafe(
+            'INSERT INTO "user_permissions" ("userId", "moduleId", "canView", "canEdit") VALUES ($1, $2, $3, $4)',
+            id, p.moduleId, !!p.canView, !!p.canEdit
+          );
+        }
+      } catch (e) {
+        console.warn('[ADMIN] Failed to update permissions via Prisma, attempting HTTP fallback...');
+        await supabaseAdmin.from('user_permissions').delete().eq('userId', id);
+        const sbPerms = permissions.map(p => ({
+            userId: id,
+            moduleId: p.moduleId,
+            canView: !!p.canView,
+            canEdit: !!p.canEdit
+        }));
+        await supabaseAdmin.from('user_permissions').insert(sbPerms);
       }
     }
 
-    // 4. Sync Role to Supabase Auth Metadata if it changed to admin
-    if (role === 'admin') {
+    // 4. Sync Role to Supabase Auth Metadata
+    if (role === 'admin' || user.role === 'admin') {
        try {
-         const { data: { users: sbUsers } } = await supabaseAdmin.auth.admin.listUsers();
-         const authEmail = `${user.code || user.username}@mapaterritorio.com`;
-         const sbUser = sbUsers.find(u => u.email === authEmail);
-         if (sbUser) {
-           await supabaseAdmin.auth.admin.updateUserById(sbUser.id, {
-             user_metadata: { ...sbUser.user_metadata, role: 'admin' }
-           });
+         let sbUserId = user.supabase_id || existing.supabase_id;
+         if (sbUserId) {
+           const { data: userData } = await supabaseAdmin.auth.admin.getUserById(sbUserId);
+           if (userData?.user) {
+             await supabaseAdmin.auth.admin.updateUserById(sbUserId, {
+               user_metadata: { ...userData.user.user_metadata, role: 'admin' }
+             });
+           }
          }
        } catch (authErr) {
-         console.error('[AUTH] Erro ao sincronizar role no Supabase:', authErr);
+         console.error('[AUTH] Erro na sincronização de role:', authErr);
        }
     }
 
     console.log(`[ADMIN] Usuário ${user.username} (ID: ${id}) atualizado com sucesso.`);
-    await logUserActivity(req.user.id, 'update_user', `Atualizou usuário ${user.username}`, req, 'User', String(id));
-    res.json(user);
-  } catch (error: any) {
-    console.error('Update user error:', error);
+    await logUserActivity(req.user.id, 'update_user', `Atualizou usuário ${user.username}`, req, 'User', String(id)).catch(() => {});
     
-    // Specific check for Unique constraint (code or username)
+    const { supabase_id, ...clientUser } = user;
+    res.json(clientUser);
+
+  } catch (error: any) {
+    console.error('Update user error:', error.message || error);
+    
     if (error.code === 'P2002') {
       const field = error.meta?.target?.[0] || 'campo único';
-      return res.status(400).json({ 
-        message: `O ${field} informado já está em uso por outro usuário.`,
-        field 
-      });
+      return res.status(400).json({ message: `O ${field} informado já está em uso por outro usuário.` });
     }
 
+    // Erro amigável para o usuário, escondendo detalhes técnicos do Prisma
+    const isConnError = error.message?.includes('Can\'t reach database') || error.message?.includes('Prisma Timeout');
     res.status(500).json({ 
-      message: 'Erro ao atualizar usuário',
-      details: error.message 
+      message: isConnError ? 'O banco de dados está temporariamente instável. Tente novamente em instantes.' : 'Erro ao atualizar usuário',
+      details: isConnError ? undefined : error.message 
     });
   }
 });
@@ -538,11 +636,21 @@ router.delete('/users/:id', requireAdmin, async (req: any, res) => {
   
   try {
     // Sync delete to Supabase Auth
-    const authEmail = `${existing.code}@mapaterritorio.com`;
-    const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
-    const sbUser = users.find(u => u.email === authEmail);
-    if (sbUser) {
-        await supabaseAdmin.auth.admin.deleteUser(sbUser.id);
+    let sbUserId = (existing as any).supabase_id;
+    
+    if (!sbUserId) {
+      const authEmail = `${existing.code}@mapaterritorio.com`;
+      const { data: authData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      if (listError) {
+        console.error('[DELETE] Erro ao listar usuários no Supabase:', listError.message);
+      } else if (authData && Array.isArray(authData.users)) {
+        const sbUser = authData.users.find(u => u.email === authEmail);
+        if (sbUser) sbUserId = sbUser.id;
+      }
+    }
+
+    if (sbUserId) {
+        await supabaseAdmin.auth.admin.deleteUser(sbUserId);
     }
 
     await prisma.user.delete({ where: { id } });
