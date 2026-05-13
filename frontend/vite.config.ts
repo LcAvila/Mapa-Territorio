@@ -24,6 +24,7 @@ const customLogPlugin = () => ({
 });
 
 export default defineConfig(({ mode }) => ({
+  envDir: "../",
   server: {
     host: "::",
     port: 8080,
