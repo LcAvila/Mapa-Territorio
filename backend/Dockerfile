@@ -10,7 +10,7 @@ RUN npm install
 COPY . .
 RUN npx prisma generate
 # Inicialização com migrações e rodando em modo dev
-CMD npx prisma migrate dev && npm run dev
+CMD npx prisma migrate deploy && npm run dev
 
 # STAGE 3: Build (Produção)
 FROM base AS build
