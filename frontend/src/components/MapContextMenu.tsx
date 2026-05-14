@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { MapPin, Eye, Copy, Navigation, Layers, HandHeart, RotateCcw } from 'lucide-react';
+import { MapPin, Eye, Copy, Navigation, Layers, RotateCcw } from 'lucide-react';
+import { useAuth } from '@/contexts/auth-context-core';
 
 export interface ContextMenuState {
     x: number;
@@ -15,14 +16,14 @@ interface MapContextMenuProps {
     onViewDetails: () => void;
     onSelectState: () => void;
     onViewBairros: () => void;
-    onRegisterInterest: () => void;
     onCopyName: () => void;
 }
 
 export default function MapContextMenu({
-    menu, onClose, onViewDetails, onSelectState, onViewBairros, onRegisterInterest, onCopyName,
+    menu, onClose, onViewDetails, onSelectState, onViewBairros, onCopyName,
 }: MapContextMenuProps) {
     const ref = useRef<HTMLDivElement>(null);
+    const { assigned_state, role } = useAuth();
 
     // Close on click outside or Escape
     useEffect(() => {
@@ -87,7 +88,9 @@ export default function MapContextMenu({
                 {menu.type === 'state' ? (
                     <>
                         <Item icon={Navigation} label="Ver municípios" onClick={onSelectState} />
-                        <Item icon={RotateCcw} label="Voltar ao Brasil" onClick={() => { onSelectState(); /* This will be overridden to null by the parent if needed, but the parent uses onSelectState without args to just select it. Wait, the parent needs a way to close it. Let's add an onDeselect prop or change onSelectState to pass null */ }} />
+                        {(!assigned_state || role === 'admin') && (
+                            <Item icon={RotateCcw} label="Voltar ao Brasil" onClick={() => { onSelectState(); }} />
+                        )}
                         <Item icon={Copy} label="Copiar nome" onClick={onCopyName} />
                     </>
                 ) : (
@@ -95,8 +98,6 @@ export default function MapContextMenu({
                         <Item icon={Eye} label="Ver detalhes" onClick={onViewDetails} />
                         <Item icon={Layers} label="Ver bairros/distritos" onClick={onViewBairros} />
                         <Item icon={Copy} label="Copiar nome" onClick={onCopyName} />
-                        <div className="border-t border-border/50 my-1" />
-                        <Item icon={HandHeart} label="Manifestar interesse aqui" onClick={onRegisterInterest} highlight />
                     </>
                 )}
             </div>

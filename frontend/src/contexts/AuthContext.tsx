@@ -16,6 +16,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [userName, setUserName] = useState<string | null>(localStorage.getItem('userName'));
     const [tipo, setTipo] = useState<string | null>(localStorage.getItem('tipo'));
     const [estado_end, setEstadoEnd] = useState<string | null>(localStorage.getItem('estado_end'));
+    const [assigned_state, setAssignedState] = useState<string | null>(localStorage.getItem('assigned_state'));
     const [defaultWorkspace, setDefaultWorkspace] = useState<string | null>(localStorage.getItem('defaultWorkspace'));
     const [inactivityLimit, setInactivityLimit] = useState<number | null>(() => {
         const stored = localStorage.getItem('inactivityLimit');
@@ -23,8 +24,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     const clearLocalAuth = () => {
-        ['token', 'role', 'userId', 'userName', 'tipo', 'estado_end', 'defaultWorkspace', 'inactivityLimit', 'tokenVersion', 'lastActivityTime'].forEach(k => localStorage.removeItem(k));
-        setToken(null); setRole(null); setUserId(null); setUserName(null); setTipo(null); setEstadoEnd(null);
+        ['token', 'role', 'userId', 'userName', 'tipo', 'estado_end', 'assigned_state', 'defaultWorkspace', 'inactivityLimit', 'tokenVersion', 'lastActivityTime'].forEach(k => localStorage.removeItem(k));
+        setToken(null); setRole(null); setUserId(null); setUserName(null); setTipo(null); setEstadoEnd(null); setAssignedState(null);
         setDefaultWorkspace(null); setInactivityLimit(null); setTokenVersion(null);
     };
 
@@ -51,7 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .then(async r => {
                     if (r.ok) {
                         const userData = await r.json();
-                        login(existingToken, userData.id, userData.role, userData.full_name, userData.tipo, userData.estado_end, userData.default_workspace, userData.inactivity_limit, userData.token_version);
+                        login(existingToken, userData.id, userData.role, userData.full_name, userData.tipo, userData.estado_end, userData.default_workspace, userData.inactivity_limit, userData.token_version, userData.assigned_state);
                     } else if (r.status === 401) {
                         // Token invalid on backend (e.g. email changed or kicked)
                         clearLocalAuth();
@@ -98,30 +99,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return stored ? Number(stored) : null;
     });
 
-    const login = (newToken: string, newUserId: number, newRole: string, newUserName?: string, newTipo?: string, newEstadoEnd?: string, newWorkspace?: string, newLimit?: number, newTokenVersion?: number) => {
-        // Use Supabase access token for API calls
-        localStorage.setItem('role', newRole);
-        localStorage.setItem('token', newToken);
-        localStorage.setItem('userId', String(newUserId));
-        // Stamp activity time so the inactivity tracker has a reference point
-        localStorage.setItem('lastActivityTime', Date.now().toString());
-        if (newTokenVersion !== undefined) localStorage.setItem('tokenVersion', String(newTokenVersion));
-
-        if (newUserName) localStorage.setItem('userName', newUserName);
-        if (newTipo) localStorage.setItem('tipo', newTipo);
-        if (newEstadoEnd) localStorage.setItem('estado_end', newEstadoEnd);
-        if (newWorkspace) localStorage.setItem('defaultWorkspace', newWorkspace);
-        if (newLimit) localStorage.setItem('inactivityLimit', String(newLimit));
-
-        setRole(newRole);
+    const login = (newToken: string, newUserId: number, newRole: string, newUserName?: string, newTipo?: string, newEstadoEnd?: string, newDefaultWorkspace?: string, newInactivityLimit?: number, newTokenVersion?: number, newAssignedState?: string) => {
         setToken(newToken);
+        setRole(newRole);
         setUserId(newUserId);
-        if (newTokenVersion !== undefined) setTokenVersion(newTokenVersion);
         setUserName(newUserName || null);
         setTipo(newTipo || null);
         setEstadoEnd(newEstadoEnd || null);
-        setDefaultWorkspace(newWorkspace || null);
-        setInactivityLimit(newLimit || null);
+        setAssignedState(newAssignedState || null);
+        setDefaultWorkspace(newDefaultWorkspace || null);
+        setInactivityLimit(newInactivityLimit || null);
+        setTokenVersion(newTokenVersion || 0);
+
+        localStorage.setItem('token', newToken);
+        localStorage.setItem('role', newRole);
+        localStorage.setItem('userId', String(newUserId));
+        localStorage.setItem('lastActivityTime', Date.now().toString());
+        if (newUserName) localStorage.setItem('userName', newUserName);
+        if (newTipo) localStorage.setItem('tipo', newTipo);
+        if (newEstadoEnd) localStorage.setItem('estado_end', newEstadoEnd);
+        if (newAssignedState) localStorage.setItem('assigned_state', newAssignedState);
+        if (newDefaultWorkspace) localStorage.setItem('defaultWorkspace', newDefaultWorkspace);
+        if (newInactivityLimit) localStorage.setItem('inactivityLimit', String(newInactivityLimit));
+        if (newTokenVersion) localStorage.setItem('tokenVersion', String(newTokenVersion));
     };
 
     // Inactivity Tracker
@@ -180,6 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             userName,
             tipo,
             estado_end,
+            assigned_state,
             defaultWorkspace,
             inactivityLimit,
             tokenVersion,

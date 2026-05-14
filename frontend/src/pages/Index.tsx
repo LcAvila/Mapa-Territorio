@@ -6,7 +6,6 @@ import MapHeader from "@/components/MapHeader";
 import MapLegend from "@/components/MapLegend";
 import DetailPanel from "@/components/DetailPanel";
 import MapContextMenu, { ContextMenuState } from "@/components/MapContextMenu";
-import InterestModal from "@/components/InterestModal";
 import { getUFBySigla } from "@/data/uf-codes";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -15,12 +14,14 @@ import RoutingPanel from "@/components/RoutingPanel";
 import { useApiUsers, useApiClientes, useApiTerritories, Cliente, SearchSuggestion, GeoJSONFeature, SystemUser } from "@/hooks/use-api-data";
 import { RouteWaypoint } from "@/hooks/use-routing";
 import Loader from "@/components/Loader";
+import { HelpCircle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const Index = () => {
-  const { isAuthenticated, role, userId, logout } = useAuth();
+  const { isAuthenticated, role, userId, assigned_state, logout } = useAuth();
   const navigate = useNavigate();
 
-  const [selectedUF, setSelectedUF] = useState<string | null>(null);
+  const [selectedUF, setSelectedUF] = useState<string | null>(assigned_state || null);
   const [filtroUsuario, setFiltroUsuario] = useState<string | null>(null);
   const [modo, setModo] = useState<"planejamento" | "atendimento">("atendimento");
   const [mostrarVagos, setMostrarVagos] = useState(false);
@@ -43,9 +44,6 @@ const Index = () => {
   // Routing state
   const [showRouting, setShowRouting] = useState(false);
   const [routeWaypoints, setRouteWaypoints] = useState<RouteWaypoint[]>([]);
-
-  // Interest modal state
-  const [interestTarget, setInterestTarget] = useState<{ municipio: string; uf: string } | null>(null);
 
   const normalizeCityName = useCallback(
     (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(),
@@ -423,16 +421,27 @@ const Index = () => {
           </AnimatePresence>
         </div>
 
-        {/* Info badge when no UF selected */}
+        {/* Help icon with tooltip when no UF selected */}
         {!selectedUF && (
-          <div className="absolute bottom-6 left-4 z-[1000] bg-card/90 backdrop-blur-sm border border-border rounded-lg px-4 py-3 max-w-[280px] hidden sm:block">
-            <p className="text-xs text-muted-foreground">
-              <span className="text-primary font-semibold">Clique em um estado</span>{" "}
-              ou use o filtro acima para selecionar uma UF e ver os municípios com seus responsáveis.
-            </p>
-            <p className="text-[10px] text-muted-foreground/60 mt-1.5">
-              💡 Botão direito em qualquer área para mais opções
-            </p>
+          <div className="absolute bottom-6 left-4 z-[1000] hidden sm:block">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="p-2 bg-card/95 backdrop-blur-sm border border-border rounded-full cursor-help hover:bg-secondary transition-colors shadow-lg group">
+                  <HelpCircle className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="right" align="end" className="max-w-[280px] p-4 bg-card/98 backdrop-blur-md border-border shadow-2xl">
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    <span className="text-primary font-bold">Clique em um estado</span> ou use o filtro acima para selecionar uma UF e ver os municípios com seus responsáveis.
+                  </p>
+                  <div className="h-px bg-border/50 my-1.5" />
+                  <p className="text-[10px] text-muted-foreground/70 flex items-center gap-1.5">
+                    <span className="text-amber-500/80">💡</span> Botão direito em qualquer área para mais opções
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
           </div>
         )}
       </main>
@@ -451,20 +460,10 @@ const Index = () => {
           onViewBairros={() => {
             handleViewBairrosFromMenu(contextMenu.nome, contextMenu.uf);
           }}
-          onRegisterInterest={() => setInterestTarget({ municipio: contextMenu.nome, uf: contextMenu.uf })}
           onCopyName={() => {
             navigator.clipboard.writeText(contextMenu.nome);
             toast.success(`"${contextMenu.nome}" copiado!`);
           }}
-        />
-      )}
-
-      {/* Interest modal */}
-      {interestTarget && (
-        <InterestModal
-          municipio={interestTarget.municipio}
-          uf={interestTarget.uf}
-          onClose={() => setInterestTarget(null)}
         />
       )}
     </div>

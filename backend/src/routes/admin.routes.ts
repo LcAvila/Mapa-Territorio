@@ -130,6 +130,7 @@ const PUBLIC_USER_FIELDS = {
   bairro_end: true,
   cidade: true,
   estado_end: true,
+  assigned_state: true,
   default_screen: true,
   area_atuacao: true,
   base_logistica: true,
@@ -348,7 +349,7 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
   const { 
       code, password, role, tipo, userTypeId, managedUserIds, full_name, photo, colorIndex, comissao, isVago, 
       telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
-      cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
+      cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, assigned_state, area_atuacao, base_logistica,
       email, default_screen // Recebendo o email do frontend
     } = req.body;
   
@@ -399,6 +400,7 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
         bairro_end,
         cidade,
         estado_end,
+        assigned_state,
         area_atuacao,
         base_logistica,
         // @ts-ignore
@@ -415,7 +417,7 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
         // @ts-ignore
         userTypeId: userTypeId ? Number(userTypeId) : null,
         last_active: new Date(0), // Epoch = never logged in (sentinela)
-      }, 
+      } as any, 
       select: PUBLIC_USER_FIELDS 
     });
 
@@ -470,7 +472,7 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
   const { 
     password, role, tipo, userTypeId, managedUserIds, full_name, photo, colorIndex, comissao, isVago, 
     telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
-    cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
+    cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, assigned_state, area_atuacao, base_logistica,
     email, default_screen, permissions // Adicionando permissions e default_screen aqui
   } = req.body;
 
@@ -562,6 +564,7 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
       bairro_end,
       cidade,
       estado_end,
+      assigned_state,
       area_atuacao,
       base_logistica,
       // @ts-ignore
@@ -737,6 +740,85 @@ router.get('/territories', requirePermission('territories', 'view'), async (req,
     const { data, error: httpError } = await query;
     if (httpError) return res.status(500).json({ message: 'Erro ao listar territórios' });
     res.json(data || []);
+  }
+});
+
+router.post('/territories/claim', authenticate, async (req: any, res) => {
+  const { municipio, uf } = req.body;
+  
+  if (!municipio || !uf) return res.status(400).json({ message: 'Município e UF são obrigatórios' });
+
+  let user: any = null;
+  try {
+    const fetchPromise = prisma.user.findUnique({ where: { id: req.user.id } });
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+    user = await Promise.race([fetchPromise, timeoutPromise]);
+  } catch (e) {
+    console.warn('[CLAIM] Prisma failed to fetch user, using session user');
+    user = req.user;
+  }
+
+  if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+
+  // 1. Verificar se o usuário tem um estado atribuído e se o UF coincide
+  if (user.role !== 'admin' && user.assigned_state && user.assigned_state !== uf) {
+    return res.status(403).json({ message: `Você só pode reivindicar municípios no estado ${user.assigned_state}` });
+  }
+
+  try {
+    // 2. Verificar se o município já está ocupado com fallback HTTP se necessário
+    let existing: any = null;
+    try {
+      const findPromise = prisma.territory.findFirst({
+        where: {
+          municipio: { equals: municipio, mode: 'insensitive' },
+          uf: { equals: uf, mode: 'insensitive' }
+        }
+      });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+      existing = await Promise.race([findPromise, timeoutPromise]);
+    } catch (e) {
+      console.warn('[CLAIM] Prisma failed to find territory, checking via HTTP');
+      const { data } = await supabaseAdmin
+        .from('territories')
+        .select('*')
+        .ilike('municipio', municipio)
+        .ilike('uf', uf)
+        .single();
+      existing = data;
+    }
+
+    if (existing && existing.userId) {
+      return res.status(409).json({ message: 'Este município já foi reivindicado por outro usuário.' });
+    }
+
+    // 3. Criar ou atualizar o território com fallback HTTP
+    try {
+      if (existing) {
+        await prisma.territory.update({
+          where: { id: existing.id },
+          data: { userId: user.id, modo: 'planejamento' }
+        });
+      } else {
+        await prisma.territory.create({
+          data: { municipio, uf, userId: user.id, modo: 'planejamento' }
+        });
+      }
+    } catch (e) {
+      console.warn('[CLAIM] Prisma failed to save territory, using HTTP fallback');
+      const payload = { municipio, uf, userId: user.id, modo: 'planejamento' };
+      if (existing) {
+        await supabaseAdmin.from('territories').update(payload).eq('id', existing.id);
+      } else {
+        await supabaseAdmin.from('territories').insert(payload);
+      }
+    }
+
+    logUserActivity(user.id, 'claim_territory', `Reivindicou o município ${municipio} - ${uf}`, req, 'Territory').catch(() => {});
+    res.json({ message: 'Município reivindicado com sucesso!' });
+  } catch (error) {
+    console.error('Error claiming territory:', error);
+    res.status(500).json({ message: 'Erro ao reivindicar município' });
   }
 });
 

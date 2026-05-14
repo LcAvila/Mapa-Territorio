@@ -49,15 +49,15 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   UserPlus, Trash2, MapPin, Loader2, LogOut, Plus, Map, X, Check, ChevronDown,
-  Search, Pencil, Save, Users, ShieldCheck, User, HandHeart, CheckCircle2, XCircle,
-  Clock, LayoutDashboard, Bell, ScrollText, UsersRound, Briefcase, Send, Eye, EyeOff,
+  Search, Pencil, Save, Users, ShieldCheck, User,
+  LayoutDashboard, Bell, ScrollText, UsersRound, Briefcase, Send, Eye, EyeOff,
   Building2, Filter, RefreshCw, ChevronRight, MessageSquare, Globe, Activity,
   TrendingUp, AlertCircle, BadgeCheck, Palette, Upload, ImageOff, Download, Truck, Settings,
   Database, Layers, Grid3X3, Calendar, FileSpreadsheet, Camera, Percent, Mail, Phone, MapPinned,
   Route, BarChart2, ShieldAlert, UserCog, Contact, GraduationCap, Microscope, Stethoscope, 
   Headset, Construction, ShoppingBag, ChefHat, Coffee, Plane, HeartPulse, Hammer, Wrench, LucideIcon,
   Users2, Package, History as HistoryIcon,
-  Menu
+  Menu, Clock
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -101,7 +101,6 @@ import { API_BASE_URL } from '@/lib/api-base';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 interface Territory { id: number; municipio: string; uf: string; modo: string; userId?: number; }
-interface InterestRequest { id: number; nome: string; email: string | null; telefone: string | null; empresa: string | null; municipio: string; uf: string; modo: string | null; observacoes: string | null; status: 'pending' | 'accepted' | 'rejected'; created_at: string; userId?: number; }
 
 interface UserType {
   id: number;
@@ -120,7 +119,7 @@ interface SystemNotification { id: number; title: string; message: string; creat
 interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; ipAddress?: string; }
 interface ModulePermission { userId: number; moduleId: string; canView: boolean; canEdit: boolean; }
 
-type TabId = 'dashboard' | 'users' | 'territories' | 'groups' | 'notifications' | 'audit' | 'interests' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'cycles' | 'roteiro_seq' | 'resumo_roteiro' | 'user_types' | 'system' | 'reps' | `user_type_${number}`;
+type TabId = 'dashboard' | 'users' | 'territories' | 'groups' | 'notifications' | 'audit' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'cycles' | 'roteiro_seq' | 'resumo_roteiro' | 'user_types' | 'system' | 'reps' | `user_type_${number}`;
 
 interface NavItem {
   id: TabId | 'settings' | 'rotas_menu' | 'users_menu';
@@ -378,7 +377,6 @@ export default function Admin() {
   const [users, setUsers] = useState<SystemUser[]>([]);
   const reps = useMemo(() => users.filter(u => u.role === 'user' || u.role === 'supervisor'), [users]);
   const [userTypes, setUserTypes] = useState<UserType[]>([]);
-  const [interests, setInterests] = useState<InterestRequest[]>([]);
   const [clientes, setClientes] = useState<ClienteData[]>([]);
   const [loadingClientes, setLoadingClientes] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -560,8 +558,6 @@ export default function Admin() {
 
   const saveGroups = (g: Group[]) => { setGroups(g); LS.set('admin_groups', g); };
 
-  const pendingInterests = interests.filter(i => i.status === 'pending').length;
-
   // Current user info for sidebar profile
   const { userName: authUserName } = useAuth();
   const currentUser = users.find(u => u.id === userId);
@@ -602,7 +598,6 @@ export default function Admin() {
       ]
     },
     { id: 'territories' as const, label: 'Territórios', icon: MapPin, count: computedTerritories.length, restrict: ['admin', 'supervisor'] },
-    { id: 'interests' as const, label: 'Interesses', icon: HandHeart, count: pendingInterests > 0 ? pendingInterests : undefined, badge: pendingInterests > 0, restrict: ['admin'] },
     { id: 'notifications' as const, label: 'Enviar Alerta', icon: Bell, restrict: ['admin'] },
     {
       id: 'settings' as const, label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
@@ -620,7 +615,6 @@ export default function Admin() {
       'territories': 'territories',
       'rotas_menu': 'routes',
       'users_menu': 'users',
-      'interests': 'interests',
       'notifications': 'notifications',
       'audit': 'audit',
       'users': 'users',
@@ -646,7 +640,7 @@ export default function Admin() {
     if (item.restrict && !item.restrict.includes(role || '')) return false;
 
     return true;
-  }), [users, userTypes, groups, computedTerritories, pendingInterests, unreadCount, auditLogs, role, myPermissions]);
+  }), [users, userTypes, groups, computedTerritories, unreadCount, auditLogs, role, myPermissions]);
 
   // Update activeTab if current one is restricted after permissions load
   useEffect(() => {
@@ -713,7 +707,7 @@ export default function Admin() {
     code: string; documentType: 'cpf' | 'cnpj';
     document: string; companyName: string; birthDate: string; telefone: string; photo: string;
     cargo: string; groupId: string; tipo: 'normal' | 'representante' | 'promotor' | 'supervisor'; colorIndex: number;
-    cep: string; logradouro: string; numero: string; complemento: string; bairro_end: string; cidade: string; estado_end: string; area_atuacao: string; base_logistica: string;
+    cep: string; logradouro: string; numero: string; complemento: string; bairro_end: string; cidade: string; estado_end: string; assigned_state?: string; area_atuacao: string; base_logistica: string;
     userTypeId: string;
     default_screen: string;
     managedUserIds: number[];
@@ -724,7 +718,7 @@ export default function Admin() {
     code: '', documentType: 'cpf',
     document: '', companyName: '', birthDate: '', telefone: '', photo: '',
     cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
-    cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
+    cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', assigned_state: '', area_atuacao: '', base_logistica: '',
     userTypeId: '',
     default_screen: 'mapa',
     managedUserIds: [],
@@ -765,7 +759,6 @@ export default function Admin() {
       case 'clientes': return <Users2 size={16} />;
       case 'notifications': return <Bell size={16} />;
       case 'users': return <User size={16} />;
-      case 'interests': return <CheckCircle2 size={16} />;
       case 'routes': return <MapPin size={16} />;
       case 'audit': return <HistoryIcon size={16} />;
       case 'settings': return <Settings size={16} />;
@@ -1044,15 +1037,14 @@ export default function Admin() {
     const minAnimationPromise = new Promise(resolve => setTimeout(resolve, 800));
 
     try {
-      const [tR, uR, iR, utR] = await Promise.all([
+      const [tR, uR, utR] = await Promise.all([
         fetch(`${API}/api/admin/territories`, { headers: authHeaders }),
         fetch(`${API}/api/admin/users`, { headers: authHeaders }),
-        fetch(`${API}/api/interest`, { headers: authHeaders }),
         fetch(`${API}/api/admin/user-types`, { headers: authHeaders }),
         minAnimationPromise // Aguarda o tempo mínimo
       ]);
 
-      const responses = [tR, uR, iR, utR];
+      const responses = [tR, uR, utR];
       const unauth = responses.find(r => r.status === 401);
       if (unauth) {
         toast.error('Sessão encerrada ou inválida. Faça login novamente.');
@@ -1060,10 +1052,9 @@ export default function Admin() {
         return;
       }
 
-      if (tR.ok && uR.ok && iR.ok && utR.ok) {
+      if (tR.ok && uR.ok && utR.ok) {
         setTerritories(await tR.json());
         setUsers(await uR.json());
-        setInterests(await iR.json());
         setUserTypes(await utR.json());
       }
       // Also fetch groups
@@ -1311,6 +1302,7 @@ export default function Admin() {
       bairro_end: newUser.bairro_end,
       cidade: newUser.cidade,
       estado_end: newUser.estado_end,
+      assigned_state: newUser.assigned_state,
       area_atuacao: newUser.area_atuacao,
       base_logistica: newUser.base_logistica,
       default_screen: newUser.default_screen,
@@ -1329,7 +1321,7 @@ export default function Admin() {
           role: 'user', code: '', documentType: 'cpf',
           document: '', companyName: '', birthDate: '', telefone: '', photo: '',
           cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
-          cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
+          cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', assigned_state: '', area_atuacao: '', base_logistica: '',
           userTypeId: '',
           default_screen: 'mapa',
           managedUserIds: [],
@@ -1389,12 +1381,6 @@ export default function Admin() {
     } catch (err) {
       toast.error('Erro ao atualizar usuário');
     }
-  };
-
-  const handleInterestStatus = async (id: number, status: 'accepted' | 'rejected') => {
-    const res = await fetch(`${API}/api/interest/${id}/status`, { method: 'PUT', headers: authHeaders, body: JSON.stringify({ status }) });
-    if (res.ok) { toast.success(status === 'accepted' ? 'Aceito!' : 'Recusado'); addAudit(status === 'accepted' ? 'accept_interest' : 'reject_interest', 'Interesse', String(id), `${status === 'accepted' ? 'Aceitou' : 'Recusou'} interesse #${id}`); fetchAll(); }
-    else toast.error('Erro');
   };
 
   const handleKickUser = async (user: SystemUser) => {
@@ -2188,7 +2174,6 @@ export default function Admin() {
                           { l: 'Filtrados', v: filteredClientes.length, t: 'baserotas' as TabId, c: '#EAB308' },
                           { l: 'Territórios', v: territories.length, t: 'territories' as TabId, c: '#22C55E' },
                           { l: 'Estados', v: ufEntries.length, t: 'baserotas' as TabId, c: '#3B82F6' },
-                          { l: 'Pendentes', v: pendingInterests, t: 'interests' as TabId, c: '#F59E0B' },
                           { l: 'Usuários', v: users.length, t: 'users' as TabId, c: '#06B6D4' },
                           { l: 'Grupos', v: groups.length, t: 'groups' as TabId, c: '#6366F1' },
                         ].map(s => (
@@ -2292,7 +2277,7 @@ export default function Admin() {
                       role: 'user', code: '', documentType: 'cpf',
                       document: '', companyName: '', birthDate: '', telefone: '', photo: '',
                       cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
-                      cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
+                      cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', assigned_state: '', area_atuacao: '', base_logistica: '',
                       userTypeId: '',
                       default_screen: 'mapa',
                       managedUserIds: [],
@@ -3342,157 +3327,6 @@ export default function Admin() {
             </div>
           )}
 
-          {/* ━━ INTERESSES ━━ */}
-          {activeTab === 'interests' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              {interests.length === 0 ? (
-                <Card className="border-border/40 bg-card/30 backdrop-blur-sm shadow-xl">
-                  <CardContent className="py-24 text-center text-muted-foreground">
-                    <HandHeart className="w-16 h-16 mx-auto mb-4 opacity-10" />
-                    <p className="text-sm font-bold uppercase tracking-widest opacity-40">Nenhuma solicitação recebida</p>
-                  </CardContent>
-                </Card>
-              ) : (() => {
-                const iGroups = [
-                  { key: 'pending', label: 'Pendentes', icon: Clock, color: 'text-amber-400', badge: 'bg-amber-500/15 text-amber-400 border-amber-500/30', items: interests.filter(i => i.status === 'pending') },
-                  { key: 'accepted', label: 'Aceitas', icon: CheckCircle2, color: 'text-emerald-400', badge: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30', items: interests.filter(i => i.status === 'accepted') },
-                  { key: 'rejected', label: 'Recusadas', icon: XCircle, color: 'text-destructive', badge: 'bg-destructive/15 text-destructive border-destructive/30', items: interests.filter(i => i.status === 'rejected') },
-                ].filter(g => g.items.length > 0);
-                return (
-                  <div className="space-y-8">
-                    {iGroups.map(({ key, label, icon: Icon, color, badge, items }) => (
-                      <div key={key} className="space-y-4">
-                        <div className="flex items-center gap-2.5 px-1">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-secondary/50 border border-border/40 ${color}`}>
-                            <Icon className="w-4 h-4" />
-                          </div>
-                          <h3 className="text-xs sm:text-sm font-black uppercase tracking-widest">{label}</h3>
-                          <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border shadow-sm ${badge}`}>{items.length}</span>
-                        </div>
-                        
-                        <Card className="border-border/40 overflow-hidden bg-card/30 backdrop-blur-sm shadow-xl">
-                          {/* Desktop Table View */}
-                          <div className="hidden md:block">
-                            <Table>
-                              <TableHeader>
-                                <TableRow className="hover:bg-transparent border-border/10 bg-secondary/20">
-                                  <TableHead className="pl-6 h-11 text-[10px] font-black uppercase tracking-wider">Solicitante</TableHead>
-                                  <TableHead className="h-11 text-[10px] font-black uppercase tracking-wider">Área</TableHead>
-                                  <TableHead className="w-24 h-11 text-[10px] font-black uppercase tracking-wider">Modo</TableHead>
-                                  <TableHead className="w-32 h-11 text-[10px] font-black uppercase tracking-wider">Data</TableHead>
-                                  {key === 'pending' && <TableHead className="w-44 pr-6 h-11 text-[10px] font-black uppercase tracking-wider text-right">Ação</TableHead>}
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {items.map(req => (
-                                  <TableRow key={req.id} className="border-border/10 hover:bg-primary/5 transition-colors group">
-                                    <TableCell className="pl-6 py-4">
-                                      <div className="flex items-center gap-2.5">
-                                        <p className="text-sm font-black text-foreground/90">{req.nome}</p>
-                                        {req.userId && <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-black tracking-tighter uppercase">ID: {req.userId}</span>}
-                                      </div>
-                                      <div className="flex flex-wrap gap-x-4 mt-1 opacity-70">
-                                        {req.empresa && <span className="text-[10px] font-bold text-muted-foreground uppercase">{req.empresa}</span>}
-                                        {req.email && <span className="text-[10px] font-bold text-primary/80 lowercase">{req.email}</span>}
-                                      </div>
-                                      {req.observacoes && (
-                                        <p className="text-[11px] text-muted-foreground italic mt-2.5 border-l-2 border-primary/30 pl-3 leading-relaxed">
-                                          "{req.observacoes}"
-                                        </p>
-                                      )}
-                                    </TableCell>
-                                    <TableCell className="py-4">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-7 h-7 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
-                                          <MapPin className="w-3.5 h-3.5 text-primary" />
-                                        </div>
-                                        <div>
-                                          <p className="text-xs font-black uppercase tracking-tighter">{req.municipio}</p>
-                                          <p className="text-[10px] text-muted-foreground font-black opacity-60 uppercase">{req.uf}</p>
-                                        </div>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="py-4">
-                                      {req.modo && (
-                                        <span className={`text-[9px] px-2.5 py-1 rounded-md font-black uppercase tracking-tighter ${req.modo === 'planejamento' ? 'bg-blue-500/15 text-blue-400 border border-blue-500/20' : 'bg-purple-500/15 text-purple-400 border border-purple-500/20'}`}>
-                                          {req.modo === 'planejamento' ? 'Plan.' : 'Atend.'}
-                                        </span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell className="py-4 text-[10px] font-bold text-muted-foreground tabular-nums">
-                                      {new Date(req.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
-                                    </TableCell>
-                                    {key === 'pending' && (
-                                      <TableCell className="pr-6 py-4 text-right">
-                                        <div className="flex justify-end gap-2">
-                                          <Button size="sm" className="h-8 px-4 text-[10px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/10" onClick={() => handleInterestStatus(req.id, 'accepted')}>
-                                            <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Aceitar
-                                          </Button>
-                                          <Button size="sm" variant="ghost" className="h-8 px-4 text-[10px] font-black uppercase tracking-widest text-destructive hover:bg-destructive/10" onClick={() => handleInterestStatus(req.id, 'rejected')}>
-                                            <XCircle className="w-3.5 h-3.5 mr-1.5" /> Recusar
-                                          </Button>
-                                        </div>
-                                      </TableCell>
-                                    )}
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-
-                          {/* Mobile Card View */}
-                          <div className="md:hidden divide-y divide-border/10">
-                            {items.map(req => (
-                              <div key={req.id} className="p-4 space-y-4 active:bg-secondary/40 transition-colors">
-                                <div className="flex justify-between items-start gap-3">
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <p className="text-sm font-black text-foreground/90 truncate">{req.nome}</p>
-                                      {req.userId && <span className="text-[8px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-black tracking-tighter uppercase shrink-0">ID: {req.userId}</span>}
-                                    </div>
-                                    <p className="text-[10px] text-muted-foreground font-medium truncate mt-0.5">{req.empresa || req.email}</p>
-                                  </div>
-                                  <span className={`text-[9px] px-2.5 py-1 rounded-md font-black uppercase tracking-tighter shrink-0 ${req.modo === 'planejamento' ? 'bg-blue-500/15 text-blue-500 border border-blue-500/20' : 'bg-purple-500/15 text-purple-500 border border-purple-500/20'}`}>
-                                    {req.modo === 'planejamento' ? 'Planejamento' : 'Atendimento'}
-                                  </span>
-                                </div>
-                                
-                                <div className="flex items-center justify-between text-[11px] bg-secondary/30 p-3 rounded-xl border border-border/40 shadow-inner">
-                                  <div className="flex items-center gap-2">
-                                    <MapPin className="w-3.5 h-3.5 text-primary" />
-                                    <span className="font-black uppercase tracking-tighter">{req.municipio} - {req.uf}</span>
-                                  </div>
-                                  <span className="text-[10px] text-muted-foreground font-black opacity-60">{new Date(req.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
-                                </div>
-
-                                {req.observacoes && (
-                                  <p className="text-[11px] text-muted-foreground italic bg-primary/5 p-3 rounded-lg border-l-2 border-primary/40 leading-relaxed shadow-sm">
-                                    "{req.observacoes}"
-                                  </p>
-                                )}
-
-                                {key === 'pending' && (
-                                  <div className="flex gap-2.5 pt-1">
-                                    <Button className="flex-1 h-10 text-[10px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/10" onClick={() => handleInterestStatus(req.id, 'accepted')}>
-                                      <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Aceitar
-                                    </Button>
-                                    <Button variant="outline" className="flex-1 h-10 text-[10px] font-black uppercase tracking-widest text-destructive hover:bg-destructive/10 border-destructive/20" onClick={() => handleInterestStatus(req.id, 'rejected')}>
-                                      <XCircle className="w-3.5 h-3.5 mr-2" /> Recusar
-                                    </Button>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </Card>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-
           {/* ━━ PERSONALIZAÇÃO ━━ */}
           {activeTab === 'personal' && canAccess('settings') && (
             <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -3781,6 +3615,19 @@ export default function Admin() {
                               <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bairro</Label><Input value={newUser.bairro_end} onChange={e => setNewUser({ ...newUser, bairro_end: e.target.value })} className="h-9 text-xs" /></div>
                               <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Cidade</Label><Input value={newUser.cidade} onChange={e => setNewUser({ ...newUser, cidade: e.target.value })} className="h-9 text-xs" /></div>
                               <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">UF</Label><Input value={newUser.estado_end} onChange={e => setNewUser({ ...newUser, estado_end: e.target.value })} maxLength={2} className="h-9 text-xs uppercase" /></div>
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Estado de Atuação</Label>
+                                <select 
+                                  value={newUser.assigned_state || ''} 
+                                  onChange={e => setNewUser({ ...newUser, assigned_state: e.target.value })}
+                                  className="w-full h-9 text-xs bg-background border border-input rounded-md px-3"
+                                >
+                                  <option value="">Nenhum (Brasil todo)</option>
+                                  {UF_DATA.map(uf => (
+                                    <option key={uf.sigla} value={uf.sigla}>{uf.sigla} - {uf.nome}</option>
+                                  ))}
+                                </select>
+                              </div>
                             </div>
                           </TabsContent>
 

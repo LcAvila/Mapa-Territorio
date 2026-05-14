@@ -16,7 +16,6 @@ import pc from 'picocolors';
 import authRoutes from './routes/auth.routes';
 import adminRoutes from './routes/admin.routes';
 import geocodeRoutes from './routes/geocode.routes'; // Added this line
-import interestRoutes from './routes/interest.routes';
 import planilhaRoutes from './routes/planilha.routes';
 import clientesRoutes from './routes/clientes.routes';
 import locationRoutes from './routes/location.routes';
@@ -84,7 +83,6 @@ app.use(hpp());
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/geocode', geocodeRoutes);
-app.use('/api/interest', interestRoutes);
 app.use('/api/location', locationRoutes);
 app.use('/api/planilha', planilhaRoutes); // Mounted specifically at /api/planilha
 app.use('/api/clientes', clientesRoutes);

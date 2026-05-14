@@ -66,8 +66,8 @@ export default function Login() {
         <div className="login-root">
             {/* Full Background Image */}
             <img
-                src="/background login.jpg"
-                alt="Space Adventure"
+                src="/background-login.jpg"
+                alt="Background"
                 className="login-bg-img-full"
             />
             <div className="login-overlay-full" />

@@ -10,7 +10,6 @@ async function main() {
     { id: 'territories', name: 'Gestão Territórios' },
     { id: 'reps', name: 'Equipe Representantes' },
     { id: 'logistica', name: 'Planejamento Logístico' },
-    { id: 'interests', name: 'Gestão de Interesses' },
     { id: 'notifications', name: 'Central de Alertas' },
     { id: 'audit', name: 'Logs de Auditoria' },
     { id: 'routes', name: 'Gestão de Rotas' }

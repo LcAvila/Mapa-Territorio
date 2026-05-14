@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck, Users, Flame, Filter, X, UserCheck, Check, RefreshCw } from "lucide-react";
+import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck, Users, Flame, Filter, X, UserCheck, Check, RefreshCw, ShieldCheck, BadgeCheck } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context-core";
 import { UF_DATA } from "@/data/uf-codes";
 import { SystemUser, Cliente, SearchSuggestion } from "@/hooks/use-api-data";
@@ -8,6 +8,7 @@ import { REP_COLOR_PALETTE } from "@/data/representatives";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { ThemeToggle } from "./ThemeToggle";
 import { API_BASE_URL } from "@/lib/api-base";
@@ -54,8 +55,9 @@ export default function MapHeader({
 }: MapHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { userName, userId, token, tokenVersion } = useAuth();
+  const { userName, userId, token, tokenVersion, assigned_state } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
   const [userSearchQuery, setUserSearchQuery] = useState("");
@@ -143,12 +145,80 @@ export default function MapHeader({
   return (
     <header className="bg-card/95 backdrop-blur-sm border-b border-border px-2 md:px-4 py-2 flex items-center justify-between gap-2 md:gap-6 sticky top-0 z-[1000] shadow-sm overflow-hidden">
       {/* Logo / Brand */}
-      <div className="flex items-center gap-2 shrink-0 cursor-pointer group" onClick={() => navigate('/mapa')}>
+      <div className="flex items-center gap-2 shrink-0 cursor-pointer group" onClick={() => setShowAboutModal(true)}>
         <div className="relative">
           <img src="/Logo.png" alt="Logo" className="h-7 sm:h-10 w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
           <div className="absolute inset-0 bg-primary/10 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
         </div>
       </div>
+
+      <Dialog open={showAboutModal} onOpenChange={setShowAboutModal}>
+        <DialogContent className="max-w-[90vw] sm:max-w-[400px] p-0 overflow-hidden border-border bg-card shadow-2xl z-[5001]">
+          <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 bg-secondary border-b border-border">
+            <DialogTitle className="text-xs sm:text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4" />
+              Sobre o Sistema
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto max-h-[70vh] custom-scrollbar">
+            <div className="flex flex-col items-center text-center space-y-3 pb-4 border-b border-border">
+              <img src="/Logo.png" alt="Logo" className="h-10 sm:h-12 w-auto object-contain" />
+              <div>
+                <h3 className="text-base sm:text-lg font-black tracking-tight text-foreground">Mapa Território</h3>
+                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Versão 2.4.0 • Enterprise</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 sm:space-y-4">
+              <div className="flex items-start gap-3 sm:gap-4 p-2.5 sm:p-3 rounded-xl bg-secondary border border-border hover:bg-secondary/80 transition-colors">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20">
+                  <User className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-primary/70 mb-0.5">Arquitetura & Design</p>
+                  <p className="text-xs sm:text-sm font-bold text-foreground">Lucas Ávila</p>
+                  <p className="text-[10px] sm:text-[11px] text-muted-foreground leading-relaxed">Responsável por toda a estrutura visual, experiência do usuário e design do ecossistema.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 sm:gap-4 p-2.5 sm:p-3 rounded-xl bg-secondary border border-border hover:bg-secondary/80 transition-colors">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0 border border-blue-500/20">
+                  <BadgeCheck className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-blue-500/70 mb-0.5">Idealização & Estratégia</p>
+                  <p className="text-xs sm:text-sm font-bold text-foreground">Rafael Fortes</p>
+                  <p className="text-[10px] sm:text-[11px] text-muted-foreground leading-relaxed">Mente criativa por trás do conceito do projeto e direcionamento estratégico do produto.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 sm:gap-4 p-2.5 sm:p-3 rounded-xl bg-secondary border border-border hover:bg-secondary/80 transition-colors">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-orange-500/10 flex items-center justify-center shrink-0 border border-orange-500/20">
+                  <Truck className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-orange-500/70 mb-0.5">DevOps & Engenharia</p>
+                  <p className="text-xs sm:text-sm font-bold text-foreground">Clayton Pontes</p>
+                  <p className="text-[10px] sm:text-[11px] text-muted-foreground leading-relaxed">Especialista em infraestrutura, revisão de backend e garantia de qualidade técnica.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-border text-center">
+              <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                Copyright © 2026 • Todos os direitos reservados
+              </p>
+            </div>
+          </div>
+          
+          <div className="bg-secondary px-4 sm:px-6 py-3 flex justify-end border-t border-border">
+            <Button size="sm" onClick={() => setShowAboutModal(false)} className="h-8 text-[10px] font-black uppercase tracking-widest shadow-none">
+              Fechar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
 
 
@@ -159,9 +229,10 @@ export default function MapHeader({
             <select
               value={selectedUF || ""}
               onChange={(e) => onSelectUF?.(e.target.value || null)}
-              className="appearance-none bg-secondary text-foreground text-[10px] sm:text-sm pl-2 sm:pl-3 pr-6 sm:pr-8 py-1.5 sm:py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
+              disabled={!!assigned_state && role !== 'admin'}
+              className="appearance-none bg-secondary text-foreground text-[10px] sm:text-sm pl-2 sm:pl-3 pr-6 sm:pr-8 py-1.5 sm:py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              <option value="">Todos os Estados</option>
+              {!assigned_state && <option value="">Todos os Estados</option>}
               {UF_DATA.sort((a, b) => a.sigla.localeCompare(b.sigla)).map((uf) => (
                 <option key={uf.sigla} value={uf.sigla}>
                   {uf.sigla} - {uf.nome}
@@ -260,9 +331,10 @@ export default function MapHeader({
                         <select
                           value={selectedUF || ""}
                           onChange={(e) => onSelectUF?.(e.target.value || null)}
-                          className="w-full appearance-none bg-secondary text-foreground text-xs pl-3 pr-8 py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
+                          disabled={!!assigned_state && role !== 'admin'}
+                          className="w-full appearance-none bg-secondary text-foreground text-xs pl-3 pr-8 py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
                         >
-                          <option value="">Todos os Estados</option>
+                          {!assigned_state && <option value="">Todos os Estados</option>}
                           {UF_DATA.sort((a, b) => a.sigla.localeCompare(b.sigla)).map((uf) => (
                             <option key={uf.sigla} value={uf.sigla}>
                               {uf.sigla} - {uf.nome}

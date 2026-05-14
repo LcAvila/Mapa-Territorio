@@ -8,8 +8,9 @@ import {
 import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.heat";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { booleanPointInPolygon, point as turfPoint } from "@turf/turf";
+import { toast } from "sonner";
 import {
   useStatesGeoJSON, useMunicipiosGeoJSON, useMunicipioNames,
   useNeighborhoodsGeoJSON, useStatesMetadata, useCitiesMetadata
@@ -391,6 +392,40 @@ export default function BrazilMap({
   const { data: statesGeo } = useStatesGeoJSON();
   const { data: apiUsers = [] } = useApiUsers(!!token);
   const { data: apiTerritories = [] } = useApiTerritories(!!token);
+  const queryClient = useQueryClient();
+
+  const handleClaimMunicipio = useCallback(async (municipio: string, uf: string) => {
+    if (!token) return;
+    
+    // Check if already claimed
+    const userIds = getMunicipioResponsaveis(municipio, uf, modo, apiTerritories);
+    if (userIds.length > 0) {
+      toast.error('Este município já possui um responsável.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/territories/claim`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ municipio, uf })
+      });
+
+      if (res.ok) {
+        toast.success(`Município ${municipio} reivindicado com sucesso!`);
+        queryClient.invalidateQueries({ queryKey: ['territories'] });
+      } else {
+        const err = await res.json();
+        toast.error(err.message || 'Erro ao reivindicar município');
+      }
+    } catch (error) {
+      toast.error('Erro de conexão ao reivindicar município');
+    }
+  }, [token, apiTerritories, modo, queryClient]);
+
   // If the logged-in user is not admin, always show their clients; otherwise use the admin filter
   const effectiveUserFilter = role !== 'admin' ? loggedUserId : (filtroUsuario || null);
   const { data: apiClientes = [] } = useApiClientes(effectiveUserFilter);
@@ -692,10 +727,21 @@ export default function BrazilMap({
       contextmenu: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
         e.originalEvent.preventDefault();
-        onContextMenuMunicipio?.(name, selectedUF, e.originalEvent.clientX, e.originalEvent.clientY);
+        
+        // Double right-click detection
+        const now = Date.now();
+        const lastClick = (layer as any)._lastRightClick || 0;
+        
+        if (now - lastClick < 500) {
+          handleClaimMunicipio(name, selectedUF);
+          (layer as any)._lastRightClick = 0; // Reset
+        } else {
+          (layer as any)._lastRightClick = now;
+          onContextMenuMunicipio?.(name, selectedUF, e.originalEvent.clientX, e.originalEvent.clientY);
+        }
       },
     });
-  }, [citiesList, municipioNamesByCode, selectedUF, modo, municipioStyle, onSelectMunicipio, apiTerritories, apiUsers, onContextMenuMunicipio, role, estado_end, onResetMap, onSelectUF]);
+  }, [citiesList, municipioNamesByCode, selectedUF, modo, municipioStyle, onSelectMunicipio, apiTerritories, apiUsers, onContextMenuMunicipio, role, estado_end, onResetMap, onSelectUF, handleClaimMunicipio]);
 
   // ── Neighborhood label markers — names from Brasil Aberto metadata if possible ───
   const markers: Array<{ center: L.LatLng; name: string }> = [];
@@ -804,7 +850,7 @@ export default function BrazilMap({
         <TileLayer
           key={mapTheme}
           url={MAP_THEMES[mapTheme].url}
-          attribution="Desenvolvido por Lucas Ávila"
+          attribution=""
           opacity={MAP_THEMES[mapTheme].opacity}
           className={isMapMoving ? "map-motion-blur" : ""}
         />

@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/auth-context-core';
 import type { SystemUser } from '@/data/representatives';
 import { REP_COLOR_PALETTE } from '@/data/representatives';
 import { useApiClientes } from '@/hooks/use-api-data';
+import { UF_DATA } from '@/data/uf-codes';
 
 interface Module {
   id: string;
@@ -76,6 +77,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
     bairro_end: user.bairro_end || '',
     cidade: user.cidade || '',
     estado_end: user.estado_end || '',
+    assigned_state: (user as any).assigned_state || '',
     area_atuacao: user.area_atuacao || '',
     base_logistica: user.base_logistica || '',
     userTypeId: user.userTypeId || '',
@@ -155,6 +157,7 @@ function maskCEP(val: string) {
       bairro_end: user.bairro_end || '',
       cidade: user.cidade || '',
       estado_end: user.estado_end || '',
+      assigned_state: (user as any).assigned_state || '',
       area_atuacao: user.area_atuacao || '',
       base_logistica: user.base_logistica || '',
       userTypeId: user.userTypeId || '',
@@ -189,7 +192,6 @@ function maskCEP(val: string) {
           'clientes': 'base clientes',
           'notifications': 'Central de Alertas',
           'users': 'Gerenciamento de Usuários',
-          'interests': 'Gestão de Interesses',
           'routes': 'Gestão de rotas',
           'audit': 'Auditoria',
           'settings': 'Editar sistema'
@@ -316,6 +318,7 @@ function maskCEP(val: string) {
           bairro_end: formData.bairro_end,
           cidade: formData.cidade,
           estado_end: formData.estado_end,
+          assigned_state: formData.assigned_state,
           area_atuacao: formData.area_atuacao,
           base_logistica: formData.base_logistica,
           userTypeId: formData.userTypeId ? Number(formData.userTypeId) : null,
@@ -647,6 +650,21 @@ function maskCEP(val: string) {
                   {userTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
                 <p className="text-[10px] text-muted-foreground mt-1">Categoria personalizada definida nas configurações de sistema. O nível de acesso é definido pelo tipo selecionado.</p>
+              </div>
+
+              <div className="field">
+                <Label className="text-primary font-bold">Estado de Atuação</Label>
+                <select 
+                  className="w-full h-10 px-3 bg-background border border-primary/30 rounded-md text-sm focus:ring-2 focus:ring-primary/20"
+                  value={formData.assigned_state || ''} 
+                  onChange={e => setFormData({...formData, assigned_state: e.target.value})}
+                >
+                  <option value="">Brasil (Todos os Estados)</option>
+                  {UF_DATA.map(uf => (
+                    <option key={uf.sigla} value={uf.sigla}>{uf.sigla} - {uf.nome}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-muted-foreground mt-1">Restringe a visão e a reivindicação de municípios a este estado específico.</p>
               </div>
 
               <div className="field col-span-2">

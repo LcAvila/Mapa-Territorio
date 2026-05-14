@@ -37,6 +37,7 @@ model User {
   birth_date        DateTime?
   code              String?               @unique
   colorIndex        Int                   @default(0)
+  assigned_state    String?
   comissao          Float?
   isVago            Int                   @default(0)
   cargo             String?
@@ -55,7 +56,6 @@ model User {
   FeedPost          FeedPost[]
   FeedReaction      FeedReaction[]
   historicosVisitas HistoricoVisitas[]
-  interests         InterestRequest[]     @relation("UserInterests")
   planejamentos     PlanejamentoVisitas[]
   territories       Territory[]           @relation("UserTerritories")
   activities        UserActivity[]
@@ -381,22 +381,10 @@ model Bairro {
   @@map("bairros")
 }
 
-model InterestRequest {
-  id          Int      @id @default(autoincrement())
-  nome        String
-  email       String?
-  telefone    String?
-  empresa     String?
-  municipio   String
-  uf          String
-  modo        String?
-  observacoes String?
-  status      String   @default("pending")
-  created_at  DateTime @default(now())
-  userId      Int?
-  user        User?    @relation("UserInterests", fields: [userId], references: [id])
-
-  @@map("interest_requests")
+model PlanilhaConfig {
+  id        Int      @id @default(autoincrement())
+  tableName String
+  fields    Json
 }
 
 model UserActivity {
