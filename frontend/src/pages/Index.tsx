@@ -14,19 +14,14 @@ import ClientDetailPanel from "@/components/ClientDetailPanel";
 import RoutingPanel from "@/components/RoutingPanel";
 import { useApiUsers, useApiClientes, useApiTerritories, Cliente, SearchSuggestion, GeoJSONFeature, SystemUser } from "@/hooks/use-api-data";
 import { RouteWaypoint } from "@/hooks/use-routing";
+import Loader from "@/components/Loader";
 
 const Index = () => {
   const { isAuthenticated, role, userId, logout } = useAuth();
   const navigate = useNavigate();
 
   const [selectedUF, setSelectedUF] = useState<string | null>(null);
-  const [filtroUsuario, setFiltroUsuario] = useState<string | null>(() => {
-    // If not admin/supervisor, auto-filter to current user
-    if (role && role !== 'admin' && role !== 'supervisor') {
-      return String(userId);
-    }
-    return null;
-  });
+  const [filtroUsuario, setFiltroUsuario] = useState<string | null>(null);
   const [modo, setModo] = useState<"planejamento" | "atendimento">("atendimento");
   const [mostrarVagos, setMostrarVagos] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -73,29 +68,24 @@ const Index = () => {
       setMunicipioCodeForBairros(null);
     }
 
-    // Auto-activate bairros when municipality is clicked.
-    if (ibgeCode) {
-      setMunicipioCodeForBairros(ibgeCode);
-      return;
-    }
-
     // Fallback by name if code is unavailable.
-    const ufInfo = getUFBySigla(uf);
-    if (!ufInfo) return;
-    try {
-      const res = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${ufInfo.codigo}/municipios`);
-      if (!res.ok) return;
-      const data: { id: number; nome: string }[] = await res.json();
-      const targetName = normalizeCityName(nome);
-      const mun = data.find(m => normalizeCityName(m.nome) === targetName);
-      if (mun) {
-        setSelectedMunicipio({ nome, uf, id: mun.id });
-        setMunicipioCodeForBairros(mun.id);
+    if (!ibgeCode) {
+      const ufInfo = getUFBySigla(uf);
+      if (!ufInfo) return;
+      try {
+        const res = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${ufInfo.codigo}/municipios`);
+        if (!res.ok) return;
+        const data: { id: number; nome: string }[] = await res.json();
+        const targetName = normalizeCityName(nome);
+        const mun = data.find(m => normalizeCityName(m.nome) === targetName);
+        if (mun) {
+          setSelectedMunicipio({ nome, uf, id: mun.id });
+        }
+      } catch {
+        // Ignore fallback errors silently.
       }
-    } catch {
-      // Ignore fallback errors silently.
     }
-  }, [normalizeCityName]);
+  }, [normalizeCityName, municipioCodeForBairros]);
 
   const handleContextMenuState = useCallback((nome: string, uf: string, x: number, y: number) => {
     setContextMenu({ x, y, type: 'state', nome, uf });
@@ -218,77 +208,82 @@ const Index = () => {
   }, [searchQuery]);
 
   const { token } = useAuth();
-  const { data: apiUsers = [] } = useApiUsers(true);
-  const { data: apiTerritories = [] } = useApiTerritories(true);
-  const { data: apiClientes = [] } = useApiClientes(filtroUsuario);
+  const { data: apiUsers = [], isLoading: loadingUsers } = useApiUsers(true);
+  const { data: apiTerritories = [], isLoading: loadingTerritories } = useApiTerritories(true);
+  const { data: apiClientes = [], isLoading: loadingClientes } = useApiClientes(filtroUsuario);
+
+  const isLoading = loadingUsers || loadingTerritories || loadingClientes;
 
   // Auto-zoom to filtered users' clients bounding box
   useEffect(() => {
-    if (filtroUsuario) {
-      const userIds = filtroUsuario.split(',').map(id => Number(id.trim())).filter(id => !isNaN(id));
-      if (userIds.length === 0) return;
+    // Se não houver filtro, não faz zoom automático
+    if (!filtroUsuario) {
+      return;
+    }
 
-      if (apiClientes.length > 0) {
-        // Calculate bounding box of all clients
-        let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
-        let hasValidCoords = false;
+    const userIds = filtroUsuario.split(',').map(id => Number(id.trim())).filter(id => !isNaN(id));
+    if (userIds.length === 0) return;
 
-        apiClientes.forEach(c => {
-          if (c.latitude && c.longitude) {
-            minLat = Math.min(minLat, c.latitude);
-            maxLat = Math.max(maxLat, c.latitude);
-            minLon = Math.min(minLon, c.longitude);
-            maxLon = Math.max(maxLon, c.longitude);
-            hasValidCoords = true;
-          }
-        });
+    if (apiClientes.length > 0) {
+      // Calculate bounding box of all clients
+      let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
+      let hasValidCoords = false;
 
-        if (hasValidCoords) {
-          const center: [number, number] = [(minLat + maxLat) / 2, (minLon + maxLon) / 2];
-          
-          // Estimate zoom level based on spread
-          const latDiff = maxLat - minLat;
-          const lonDiff = maxLon - minLon;
-          const maxDiff = Math.max(latDiff, lonDiff);
-          
-          let zoom = 12; // Default zoom for a city
-          if (maxDiff > 2) zoom = 6;
-          else if (maxDiff > 1) zoom = 8;
-          else if (maxDiff > 0.5) zoom = 10;
-          else if (maxDiff > 0.1) zoom = 12;
-          else zoom = 14;
+      apiClientes.forEach(c => {
+        if (c.latitude && c.longitude) {
+          minLat = Math.min(minLat, c.latitude);
+          maxLat = Math.max(maxLat, c.latitude);
+          minLon = Math.min(minLon, c.longitude);
+          maxLon = Math.max(maxLon, c.longitude);
+          hasValidCoords = true;
+        }
+      });
 
-          setFlyToLocation({ center, zoom });
-          
-          // Also select the most common UF among clients to show boundaries
-          const ufCounts = apiClientes.reduce((acc, c) => {
-            if (c.uf) acc[c.uf] = (acc[c.uf] || 0) + 1;
-            return acc;
-          }, {} as Record<string, number>);
-          const sortedUFs = Object.entries(ufCounts).sort((a, b) => b[1] - a[1]);
-          if (sortedUFs.length > 0 && sortedUFs[0][0] !== selectedUF) {
-            setSelectedUF(sortedUFs[0][0]);
-          }
+      if (hasValidCoords) {
+        const center: [number, number] = [(minLat + maxLat) / 2, (minLon + maxLon) / 2];
+        
+        // Estimate zoom level based on spread
+        const latDiff = maxLat - minLat;
+        const lonDiff = maxLon - minLon;
+        const maxDiff = Math.max(latDiff, lonDiff);
+        
+        let zoom = 12; // Default zoom for a city
+        if (maxDiff > 2) zoom = 6;
+        else if (maxDiff > 1) zoom = 8;
+        else if (maxDiff > 0.5) zoom = 10;
+        else if (maxDiff > 0.1) zoom = 12;
+        else zoom = 14;
+
+        setFlyToLocation({ center, zoom });
+        
+        // Also select the most common UF among clients to show boundaries
+        const ufCounts = apiClientes.reduce((acc, c) => {
+          if (c.uf) acc[c.uf] = (acc[c.uf] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        const sortedUFs = Object.entries(ufCounts).sort((a, b) => b[1] - a[1]);
+        if (sortedUFs.length > 0 && sortedUFs[0][0] !== selectedUF) {
+          setSelectedUF(sortedUFs[0][0]);
         }
       }
-    } else {
-      // Reset map when filter is cleared
-      setFlyToLocation(null);
-      setSearchResultGeo(null);
     }
   }, [filtroUsuario, apiClientes, selectedUF]);
 
   // Close suggestions on map click and clear highlights
-  const handleMapBackgroundClick = () => {
+  const handleMapBackgroundClick = useCallback(() => {
     setSuggestions([]);
     setSearchResultGeo(null);
     setFlyToLocation(null);
     setSearchQuery("");
     setSelectedClients([]); // Clear client selection
     if (selectedUF) handleSelectUF(null);
-  };
+  }, [handleSelectUF, selectedUF]);
 
-  const ufInfo = selectedUF ? getUFBySigla(selectedUF) : null;
+  const ufInfo = useMemo(() => selectedUF ? getUFBySigla(selectedUF) : null, [selectedUF]);
+
+  if (isLoading) {
+    return <Loader label="Carregando Mapa..." />;
+  }
 
   return (
     <div className="flex flex-col h-screen bg-background">

@@ -156,4 +156,92 @@ export class LocationService {
       return [];
     }
   }
+
+  // ── Neighborhoods GeoJSON ──────────────────────────────────────────────────
+
+  static async getNeighborhoodsGeoJSON(ibgeCode: number): Promise<any> {
+    const cacheKey = `neighborhoods_geojson_${ibgeCode}`;
+    const cached = this.getCached<any>(cacheKey);
+    if (cached) return cached;
+
+    const IBGE_MALHAS = 'https://servicodados.ibge.gov.br/api/v3/malhas';
+    const IBGE_LOC = 'https://servicodados.ibge.gov.br/api/v1/localidades';
+
+    try {
+      // Step 1: Get subdivisions metadata (subdistritos or distritos)
+      const [subsRes, distsRes] = await Promise.all([
+        axios.get(`${IBGE_LOC}/municipios/${ibgeCode}/subdistritos`),
+        axios.get(`${IBGE_LOC}/municipios/${ibgeCode}/distritos`),
+      ]);
+      const subs = Array.isArray(subsRes.data) ? subsRes.data : [];
+      const dists = Array.isArray(distsRes.data) ? distsRes.data : [];
+      const localities = subs.length > 0 ? subs : dists;
+      const level = subs.length > 0 ? 'subdistritos' : 'distritos';
+
+      if (localities.length > 0) {
+        // Optimized: Fetch all in parallel with limited concurrency if needed, 
+        // but for a single city it's usually fine.
+        const featureRequests = localities.map(async (loc: any) => {
+          try {
+            const url = `${IBGE_MALHAS}/${level}/${loc.id}?formato=application/vnd.geo+json&qualidade=minima`;
+            const res = await axios.get(url, { timeout: 5000 });
+            const data = res.data;
+            const feats = Array.isArray(data?.features) ? data.features : [];
+            
+            return feats.map((feat: any) => ({
+              ...feat,
+              properties: { ...(feat.properties || {}), nome: loc.nome, localidadeId: loc.id }
+            }));
+          } catch { return []; }
+        });
+
+        const allFeatures = (await Promise.all(featureRequests)).flat().filter(Boolean);
+        if (allFeatures.length > 0) {
+          const result = { type: 'FeatureCollection', features: allFeatures };
+          this.setCache(cacheKey, result);
+          return result;
+        }
+      }
+    } catch (e) {
+      console.warn(`[LocationService] IBGE malhas failed for ${ibgeCode}, falling back to OSM logic...`);
+    }
+
+    // Step 2: Overpass Fallback (Simplified version of frontend logic)
+    try {
+      const overpassQuery = `[out:json][timeout:30];
+rel["boundary"="administrative"]["admin_level"="8"]["ref:IBGE"="${ibgeCode}"]->.m;
+map_to_area .m->.searchArea;
+(
+  rel["boundary"="administrative"]["admin_level"="10"](area.searchArea);
+  rel["place"~"suburb|neighbourhood"](area.searchArea);
+);
+out geom;`;
+      const res = await axios.get(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`);
+      const elements = res.data?.elements || [];
+      
+      const features = elements.map((el: any) => {
+        const coordinates = el.members
+          ?.filter((m: any) => m.type === 'way' && m.geometry && m.geometry.length > 2)
+          .map((m: any) => m.geometry.map((g: any) => [g.lon, g.lat]));
+
+        if (!coordinates || coordinates.length === 0) return null;
+
+        return {
+          type: 'Feature',
+          properties: { nome: el.tags?.name || 'Bairro', osm_id: el.id },
+          geometry: { type: 'MultiPolygon', coordinates: [coordinates] }
+        };
+      }).filter(Boolean);
+
+      if (features.length > 0) {
+        const result = { type: 'FeatureCollection', features };
+        this.setCache(cacheKey, result);
+        return result;
+      }
+    } catch (e) {
+      console.error('[LocationService] All neighborhood providers failed');
+    }
+
+    return { type: 'FeatureCollection', features: [] };
+  }
 }

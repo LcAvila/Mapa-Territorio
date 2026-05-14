@@ -26,7 +26,8 @@ model User {
   estado_end        String?
   photo             String?
   created_at        DateTime              @default(now())
-  default_workspace String?               @default("admin")
+  default_workspace String?               @default("mapa")
+  default_screen    String?               @default("mapa")
   inactivity_limit  Int?                  @default(30)
   notif_email       Boolean               @default(true)
   notif_sms         Boolean               @default(false)

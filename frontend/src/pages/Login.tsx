@@ -46,7 +46,7 @@ export default function Login() {
                     userData.full_name,
                     userData.tipo,
                     userData.estado_end,
-                    userData.default_workspace,
+                    userData.default_screen || 'mapa',
                     userData.inactivity_limit,
                     userData.token_version
                 );

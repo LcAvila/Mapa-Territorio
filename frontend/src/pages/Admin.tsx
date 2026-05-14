@@ -56,9 +56,13 @@ import {
   Database, Layers, Grid3X3, Calendar, FileSpreadsheet, Camera, Percent, Mail, Phone, MapPinned,
   Route, BarChart2, ShieldAlert, UserCog, Contact, GraduationCap, Microscope, Stethoscope, 
   Headset, Construction, ShoppingBag, ChefHat, Coffee, Plane, HeartPulse, Hammer, Wrench, LucideIcon,
-  Users2,
+  Users2, Package, History as HistoryIcon,
   Menu
 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import {
+  Tabs, TabsContent, TabsList, TabsTrigger
+} from '@/components/ui/tabs';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger
 } from '@/components/ui/dialog';
@@ -153,6 +157,19 @@ function maskDoc(val: string, type: 'cpf' | 'cnpj') {
     return d.slice(0, 11).replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, (_, a, b, c, e) => e ? `${a}.${b}.${c}-${e}` : c ? `${a}.${b}.${c}` : b ? `${a}.${b}` : a);
   }
   return d.slice(0, 14).replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, (_, a, b, c, e, f) => f ? `${a}.${b}.${c}/${e}-${f}` : e ? `${a}.${b}.${c}/${e}` : c ? `${a}.${b}.${c}` : b ? `${a}.${b}` : a);
+}
+
+function maskPhone(val: string) {
+  const d = val.replace(/\D/g, '');
+  if (d.length <= 10) {
+    return d.replace(/(\d{2})(\d{4})(\d{0,4})/, (_, a, b, c) => c ? `(${a}) ${b}-${c}` : b ? `(${a}) ${b}` : a ? `(${a})` : '');
+  }
+  return d.slice(0, 11).replace(/(\d{2})(\d{5})(\d{0,4})/, (_, a, b, c) => c ? `(${a}) ${b}-${c}` : b ? `(${a}) ${b}` : a ? `(${a})` : '');
+}
+
+function maskCEP(val: string) {
+  const d = val.replace(/\D/g, '').slice(0, 8);
+  return d.replace(/(\d{5})(\d{0,3})/, (_, a, b) => b ? `${a}-${b}` : a);
 }
 
 // ─── SearchableSelect ─────────────────────────────────────────────────────────
@@ -365,6 +382,7 @@ export default function Admin() {
   const [clientes, setClientes] = useState<ClienteData[]>([]);
   const [loadingClientes, setLoadingClientes] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   // ── Computed Territories ──────────────────────────────────────────────────
@@ -407,7 +425,12 @@ export default function Admin() {
 
 
   const { role } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    const search = window.location.search;
+    const params = new URLSearchParams(search);
+    const tabParam = params.get('tab');
+    return (tabParam as TabId) || 'dashboard';
+  });
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -537,6 +560,124 @@ export default function Admin() {
 
   const saveGroups = (g: Group[]) => { setGroups(g); LS.set('admin_groups', g); };
 
+  const pendingInterests = interests.filter(i => i.status === 'pending').length;
+
+  // Current user info for sidebar profile
+  const { userName: authUserName } = useAuth();
+  const currentUser = users.find(u => u.id === userId);
+  const displayName = authUserName || currentUser?.full_name || currentUser?.fullName || currentUser?.username || 'Admin';
+  const displayEmail = currentUser?.username || '';
+  const displayPhoto = currentUser?.photo || '';
+  const displayCargo = currentUser?.cargo || role || 'usuário';
+  const displayTipo = currentUser?.tipo || 'Usuário';
+
+  const navItems: NavItem[] = useMemo(() => [
+    { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor', 'user'] },
+    {
+      id: 'users_menu' as const, label: 'Usuários', icon: UsersRound, restrict: ['admin'], subItems: [
+        { id: 'users' as const, label: 'Todos os Usuários', icon: UserPlus, count: users.length },
+        // Dynamic User Types submenus
+        ...userTypes
+          .filter(t => t.showInMenu && t.active)
+          .map(t => ({
+            id: `user_type_${t.id}` as TabId,
+            label: t.name,
+            icon: User,
+            count: users.filter(u => u.userTypeId === t.id).length
+          })),
+        { id: 'groups' as const, label: 'Grupos', icon: UsersRound, count: groups.length },
+      ]
+    },
+    {
+      id: 'rotas_menu' as const, label: 'Planejamento de Áreas', icon: Truck, restrict: ['admin'], subItems: [
+        { id: 'cycles' as const, label: 'Ciclos', icon: Settings },
+        { id: 'roteiro_seq' as const, label: 'Roteiro Sequencial', icon: Route },
+        { id: 'resumo_roteiro' as const, label: 'Resumo Roteiro', icon: BarChart2 },
+        { id: 'clusters' as const, label: 'Clusters', icon: Layers },
+        { id: 'blocos' as const, label: 'Blocos', icon: Grid3X3 },
+        { id: 'roteiros' as const, label: 'Roteiros HERE', icon: Map },
+        { id: 'agenda' as const, label: 'Agenda', icon: Calendar },
+        { id: 'densidade' as const, label: 'Densidade', icon: Activity },
+      ]
+    },
+    { id: 'territories' as const, label: 'Territórios', icon: MapPin, count: computedTerritories.length, restrict: ['admin', 'supervisor'] },
+    { id: 'interests' as const, label: 'Interesses', icon: HandHeart, count: pendingInterests > 0 ? pendingInterests : undefined, badge: pendingInterests > 0, restrict: ['admin'] },
+    { id: 'notifications' as const, label: 'Enviar Alerta', icon: Bell, restrict: ['admin'] },
+    {
+      id: 'settings' as const, label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
+        { id: 'system' as const, label: 'Editar sistema', icon: Settings },
+        { id: 'audit' as const, label: 'Auditoria', icon: ScrollText },
+      ]
+    }
+  ].filter(item => {
+    // If it's a core section (like dashboard), allow or check specific permission if needed
+    if (item.id === 'dashboard') return true;
+
+    // Modular permission check
+    const moduleMap: Record<string, string> = {
+      'baserotas': 'clientes',
+      'territories': 'territories',
+      'rotas_menu': 'routes',
+      'users_menu': 'users',
+      'interests': 'interests',
+      'notifications': 'notifications',
+      'audit': 'audit',
+      'users': 'users',
+      'system': 'settings',
+      'settings': 'settings'
+    };
+
+    const moduleId = moduleMap[item.id as string];
+    
+    // If user has explicit modular permission, grant access regardless of role restriction
+    if (moduleId && canAccess(moduleId)) return true;
+
+    // Se for subitem, também checar permissão modular do subitem
+    if (item.subItems) {
+        const hasAccessibleSubItem = item.subItems.some(sub => {
+            const subModuleId = moduleMap[sub.id as string];
+            return subModuleId && canAccess(subModuleId);
+        });
+        if (hasAccessibleSubItem) return true;
+    }
+
+    // Otherwise, check role-based restriction
+    if (item.restrict && !item.restrict.includes(role || '')) return false;
+
+    return true;
+  }), [users, userTypes, groups, computedTerritories, pendingInterests, unreadCount, auditLogs, role, myPermissions]);
+
+  // Update activeTab if current one is restricted after permissions load
+  useEffect(() => {
+    if (loading || role === 'admin') return;
+
+    const isCurrentTabRestricted = !navItems.some(item => {
+      if (item.id === activeTab) return true;
+      if (item.subItems?.some((s: any) => s.id === activeTab)) return true;
+      return false;
+    });
+
+    if (isCurrentTabRestricted && navItems.length > 0) {
+      const firstPermitted = navItems[0].subItems ? navItems[0].subItems[0].id : navItems[0].id;
+      setActiveTab(firstPermitted as TabId);
+    }
+  }, [myPermissions, loading, navItems, activeTab, role]);
+
+  // Find active tab label for header
+  const findActiveLabel = () => {
+    for (const item of navItems) {
+      if (item.id === activeTab) return { label: item.label, icon: item.icon };
+      if (item.subItems) {
+        const sub = item.subItems.find(s => s.id === activeTab);
+        if (sub) return { label: sub.label, icon: sub.icon };
+      }
+    }
+    return null;
+  };
+
+  const activeNavInfo = findActiveLabel();
+
   // ── Dashboard filters ─────────────────────────────────────────────────────
   const [dashFilterUser, setDashFilterUser] = useState('all');
   const [dashFilterUF, setDashFilterUF] = useState('all');
@@ -574,7 +715,9 @@ export default function Admin() {
     cargo: string; groupId: string; tipo: 'normal' | 'representante' | 'promotor' | 'supervisor'; colorIndex: number;
     cep: string; logradouro: string; numero: string; complemento: string; bairro_end: string; cidade: string; estado_end: string; area_atuacao: string; base_logistica: string;
     userTypeId: string;
+    default_screen: string;
     managedUserIds: number[];
+    permissions: { moduleId: string; canView: boolean; canEdit: boolean }[];
   }>({
     fullName: '', email: '', password: '', confirmPassword: '',
     role: 'user',
@@ -583,8 +726,64 @@ export default function Admin() {
     cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
     cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
     userTypeId: '',
-    managedUserIds: []
+    default_screen: 'mapa',
+    managedUserIds: [],
+    permissions: []
   });
+
+  const [availableModules, setAvailableModules] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    fetch(`${API}/api/admin/modules`, { headers: authHeaders })
+      .then(res => res.ok ? res.json() : [])
+      .then(mods => {
+        setAvailableModules(mods);
+        // Initialize default permissions for new user
+        setNewUser(prev => ({
+          ...prev,
+          permissions: mods.map((m: any) => ({ moduleId: m.id, canView: true, canEdit: false }))
+        }));
+      });
+  }, [authHeaders]);
+
+  const handleNewUserPermissionChange = (moduleId: string, field: 'canView' | 'canEdit', value: boolean) => {
+    setNewUser(prev => ({
+      ...prev,
+      permissions: prev.permissions.map(p => {
+        if (p.moduleId === moduleId) {
+          const newState = { ...p, [field]: value };
+          if (field === 'canEdit' && value) newState.canView = true;
+          return newState;
+        }
+        return p;
+      })
+    }));
+  };
+
+  const getModuleIcon = (id: string) => {
+    switch (id) {
+      case 'clientes': return <Users2 size={16} />;
+      case 'notifications': return <Bell size={16} />;
+      case 'users': return <User size={16} />;
+      case 'interests': return <CheckCircle2 size={16} />;
+      case 'routes': return <MapPin size={16} />;
+      case 'audit': return <HistoryIcon size={16} />;
+      case 'settings': return <Settings size={16} />;
+      default: return <Package size={16} />;
+    }
+  };
+
+  // Auto-admin flag when user type is admin
+  useEffect(() => {
+    const selectedType = userTypes.find(t => String(t.id) === String(newUser.userTypeId));
+    if (selectedType?.isAdmin) {
+      setNewUser(prev => ({
+        ...prev,
+        role: 'admin',
+        permissions: prev.permissions.map(p => ({ ...p, canView: true, canEdit: true }))
+      }));
+    }
+  }, [newUser.userTypeId, userTypes]);
 
   // ── UserTypes form ────────────────────────────────────────────────────────
   const [isUserTypeModalOpen, setIsUserTypeModalOpen] = useState(false);
@@ -833,13 +1032,24 @@ export default function Admin() {
   }, [authHeaders]);
 
   const fetchAll = useCallback(async () => {
+    setIsRefreshing(true);
+    const activeNavInfo = navItems.find(item => 
+        item.id === activeTab || item.subItems?.some(sub => sub.id === activeTab)
+    );
+    const currentLabel = activeNavInfo?.label ?? 'Painel';
+
     if (!initialLoadDone) setLoading(true);
+    
+    // Garantir que a animação dure pelo menos 800ms para feedback visual
+    const minAnimationPromise = new Promise(resolve => setTimeout(resolve, 800));
+
     try {
       const [tR, uR, iR, utR] = await Promise.all([
         fetch(`${API}/api/admin/territories`, { headers: authHeaders }),
         fetch(`${API}/api/admin/users`, { headers: authHeaders }),
         fetch(`${API}/api/interest`, { headers: authHeaders }),
         fetch(`${API}/api/admin/user-types`, { headers: authHeaders }),
+        minAnimationPromise // Aguarda o tempo mínimo
       ]);
 
       const responses = [tR, uR, iR, utR];
@@ -864,13 +1074,18 @@ export default function Admin() {
         fetchClientes();
         fetchAuditLogs();
       }
+
+      if (initialLoadDone) {
+        toast.success(`${currentLabel} atualizado`);
+      }
     } catch (error) {
       console.error('Fetch error:', error);
     } finally { 
       setLoading(false); 
+      setIsRefreshing(false);
       setInitialLoadDone(true);
     }
-  }, [authHeaders, logout, fetchGroups, initialLoadDone, fetchClientes, fetchAuditLogs]);
+  }, [authHeaders, logout, fetchGroups, initialLoadDone, fetchClientes, fetchAuditLogs, activeTab, navItems]);
 
   const handleDownloadLogisticsPlan = async () => {
     try {
@@ -1080,7 +1295,7 @@ export default function Admin() {
       full_name: newUser.fullName,
       username: newUser.email || newUser.code,
       password: newUser.password,
-      role: selectedType?.isAdmin ? 'admin' : 'user',
+      role: newUser.role,
       tipo: newUser.tipo || 'normal',
       telefone: newUser.telefone,
       cpf_cnpj: newUser.document,
@@ -1098,8 +1313,10 @@ export default function Admin() {
       estado_end: newUser.estado_end,
       area_atuacao: newUser.area_atuacao,
       base_logistica: newUser.base_logistica,
+      default_screen: newUser.default_screen,
       userTypeId: newUser.userTypeId ? Number(newUser.userTypeId) : null,
-      managedUserIds: newUser.managedUserIds
+      managedUserIds: newUser.managedUserIds,
+      permissions: newUser.permissions
     };
 
     try {
@@ -1114,7 +1331,9 @@ export default function Admin() {
           cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
           cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
           userTypeId: '',
-          managedUserIds: []
+          default_screen: 'mapa',
+          managedUserIds: [],
+          permissions: availableModules.map((m: any) => ({ moduleId: m.id, canView: true, canEdit: false }))
         });
         setIsUserModalOpen(false);
         fetchAll();
@@ -1325,7 +1544,6 @@ export default function Admin() {
     'link', 'image'
   ];
 
-  const pendingInterests = interests.filter(i => i.status === 'pending').length;
   const dailyMessages = [
     "O sucesso é a soma de pequenos esforços repetidos dia após dia.",
     "A persistência é o caminho do êxito.",
@@ -1344,124 +1562,12 @@ export default function Admin() {
     return dailyMessages[index];
   };
 
-  // Current user info for sidebar profile
-  const { userName: authUserName } = useAuth();
-  const currentUser = users.find(u => u.id === userId);
-  const displayName = authUserName || currentUser?.full_name || currentUser?.fullName || currentUser?.username || 'Admin';
-  const displayEmail = currentUser?.username || '';
-  const displayPhoto = currentUser?.photo || '';
-  const displayCargo = currentUser?.cargo || role || 'usuário';
-  const displayTipo = currentUser?.tipo || 'Usuário';
+  // ─── Render Sidebar ─────────────────────────────────────────────────────────
 
-  const navItems: NavItem[] = useMemo(() => [
-    { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor', 'user'] },
-    {
-      id: 'users_menu' as const, label: 'Usuários', icon: UsersRound, restrict: ['admin'], subItems: [
-        { id: 'users' as const, label: 'Todos os Usuários', icon: UserPlus, count: users.length },
-        // Dynamic User Types submenus
-        ...userTypes
-          .filter(t => t.showInMenu && t.active)
-          .map(t => ({
-            id: `user_type_${t.id}` as TabId,
-            label: t.name,
-            icon: User,
-            count: users.filter(u => u.userTypeId === t.id).length
-          })),
-        { id: 'groups' as const, label: 'Grupos', icon: UsersRound, count: groups.length },
-      ]
-    },
-    {
-      id: 'rotas_menu' as const, label: 'Planejamento de Áreas', icon: Truck, restrict: ['admin'], subItems: [
-        { id: 'cycles' as const, label: 'Ciclos', icon: Settings },
-        { id: 'roteiro_seq' as const, label: 'Roteiro Sequencial', icon: Route },
-        { id: 'resumo_roteiro' as const, label: 'Resumo Roteiro', icon: BarChart2 },
-        { id: 'clusters' as const, label: 'Clusters', icon: Layers },
-        { id: 'blocos' as const, label: 'Blocos', icon: Grid3X3 },
-        { id: 'roteiros' as const, label: 'Roteiros HERE', icon: Map },
-        { id: 'agenda' as const, label: 'Agenda', icon: Calendar },
-        { id: 'densidade' as const, label: 'Densidade', icon: Activity },
-      ]
-    },
-    { id: 'territories' as const, label: 'Territórios', icon: MapPin, count: computedTerritories.length, restrict: ['admin', 'supervisor'] },
-    { id: 'interests' as const, label: 'Interesses', icon: HandHeart, count: pendingInterests > 0 ? pendingInterests : undefined, badge: pendingInterests > 0, restrict: ['admin'] },
-    { id: 'notifications' as const, label: 'Enviar Alerta', icon: Bell, restrict: ['admin'] },
-    {
-      id: 'settings' as const, label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
-        { id: 'system' as const, label: 'Editar sistema', icon: Settings },
-        { id: 'audit' as const, label: 'Auditoria', icon: ScrollText },
-      ]
-    }
-  ].filter(item => {
-    // If it's a core section (like dashboard), allow or check specific permission if needed
-    if (item.id === 'dashboard') return true;
-
-    // Modular permission check
-    const moduleMap: Record<string, string> = {
-      'baserotas': 'clientes',
-      'territories': 'territories',
-      'rotas_menu': 'routes',
-      'users_menu': 'users',
-      'interests': 'interests',
-      'notifications': 'notifications',
-      'audit': 'audit',
-      'users': 'users',
-      'system': 'settings',
-      'settings': 'settings'
-    };
-
-    const moduleId = moduleMap[item.id as string];
-    
-    // If user has explicit modular permission, grant access regardless of role restriction
-    if (moduleId && canAccess(moduleId)) return true;
-
-    // Se for subitem, também checar permissão modular do subitem
-    if (item.subItems) {
-        const hasAccessibleSubItem = item.subItems.some(sub => {
-            const subModuleId = moduleMap[sub.id as string];
-            return subModuleId && canAccess(subModuleId);
-        });
-        if (hasAccessibleSubItem) return true;
-    }
-
-    // Otherwise, check role-based restriction
-    if (item.restrict && !item.restrict.includes(role || '')) return false;
-
-    return true;
-  }), [users, userTypes, groups, computedTerritories, pendingInterests, unreadCount, auditLogs, role, myPermissions]);
-
-  // Update activeTab if current one is restricted after permissions load
-  useEffect(() => {
-    if (loading || role === 'admin') return;
-
-    const isCurrentTabRestricted = !navItems.some(item => {
-      if (item.id === activeTab) return true;
-      if (item.subItems?.some((s: any) => s.id === activeTab)) return true;
-      return false;
-    });
-
-    if (isCurrentTabRestricted && navItems.length > 0) {
-      const firstPermitted = navItems[0].subItems ? navItems[0].subItems[0].id : navItems[0].id;
-      setActiveTab(firstPermitted as TabId);
-    }
-  }, [myPermissions, loading, navItems, activeTab, role]);
-
-  // Find active tab label for header
-  const findActiveLabel = () => {
-    for (const item of navItems) {
-      if (item.id === activeTab) return { label: item.label, icon: item.icon };
-      if (item.subItems) {
-        const sub = item.subItems.find(s => s.id === activeTab);
-        if (sub) return { label: sub.label, icon: sub.icon };
-      }
-    }
-    return null;
-  };
-  const activeNavInfo = findActiveLabel();
-
-  // Se estiver carregando, mostramos o layout mas sem bloquear com Loader gigante
-  // O Loader agora só aparece se o loading demorar mais que o esperado (opcional)
-  // ou dentro de componentes específicos.
+  // Se estiver carregando pela primeira vez, mostramos o Loader centralizado
+  if (loading && !initialLoadDone) {
+    return <Loader label="Carregando Painel..." />;
+  }
 
   return (<>
     <ConfirmDialog open={confirmDialog.open} title={confirmDialog.title} description={confirmDialog.description} confirmLabel="Confirmar" onConfirm={confirmDialog.onConfirm} onCancel={closeConfirm} />
@@ -1541,7 +1647,7 @@ export default function Admin() {
             <SpaceButton onClick={() => navigate('/mapa')} />
 
             <button className="admin-header-icon-btn h-9 w-9 flex items-center justify-center" onClick={fetchAll} title="Recarregar dados">
-              <RefreshCw style={{ width: 16, height: 16 }} />
+              <RefreshCw className={isRefreshing ? "animate-spin" : ""} style={{ width: 16, height: 16 }} />
             </button>
 
             <div className="w-px h-6 bg-border/50 mx-0.5" />
@@ -2188,7 +2294,9 @@ export default function Admin() {
                       cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
                       cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', area_atuacao: '', base_logistica: '',
                       userTypeId: '',
-                      managedUserIds: []
+                      default_screen: 'mapa',
+                      managedUserIds: [],
+                      permissions: availableModules.map((m: any) => ({ moduleId: m.id, canView: true, canEdit: false }))
                     });
                     setIsUserModalOpen(true);
                   }}>
@@ -3510,7 +3618,7 @@ export default function Admin() {
           )}
 
           <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
-                <DialogContent className={editingUserId ? "max-w-6xl p-0 border-none bg-transparent shadow-none" : "max-w-4xl"}>
+                <DialogContent className={editingUserId ? "max-w-6xl p-0 border-none bg-transparent shadow-none" : "max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto custom-scrollbar"}>
                   {editingUserId ? (() => {
                     const editingUser = users.find(u => u.id === editingUserId);
                     if (!editingUser) {
@@ -3542,232 +3650,333 @@ export default function Admin() {
                     <DialogTitle className="flex items-center gap-2 text-xl"><UserPlus className="w-5 h-5 text-primary" /> Novo Usuário</DialogTitle>
                   </DialogHeader>
                   <form onSubmit={(e) => { handleCreateUser(e); setIsUserModalOpen(false); }} className="pt-2">
-                    <div className="flex flex-col md:flex-row gap-6">
-                      
-                      {/* Coluna da Foto (menor) */}
-                      <div className="flex flex-col items-center gap-2 w-32 shrink-0 pt-2">
-                        <label className="cursor-pointer w-24 h-24 rounded-full bg-secondary border-2 border-dashed border-border/60 flex items-center justify-center overflow-hidden hover:border-primary/50 transition-all select-none group relative">
-                          {newUser.photo ? (
-                            <>
-                              <img src={newUser.photo} alt="Avatar" className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Camera className="w-5 h-5 text-white" />
-                              </div>
-                            </>
-                          ) : (
-                            <Camera className="w-8 h-8 text-muted-foreground opacity-40 group-hover:scale-110 transition-transform" />
-                          )}
-                          <input type="file" accept="image/*" className="hidden" onChange={e => handleUserPhotoUpload(e, false)} />
-                        </label>
-                        <div className="text-center">
-                          <p className="text-[10px] font-bold text-foreground mt-1">FOTO DE PERFIL</p>
-                          <p className="text-[9px] text-muted-foreground">Max 2MB</p>
-                        </div>
-                      </div>
-
-                      {/* Resto do Formulário em Grid */}
-                      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-x-5 gap-y-4">
+                    <Tabs defaultValue="geral" className="w-full">
+                      <div className="flex flex-col lg:flex-row gap-8">
                         
-                        {/* Linha 1 */}
-                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Código *</Label><Input value={newUser.code} onChange={e => setNewUser({ ...newUser, code: e.target.value.replace(/[^a-zA-Z0-9.-]/g, '') })} required className="h-9 text-xs" /></div>
-                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Nome Completo</Label><Input value={newUser.fullName} onChange={e => setNewUser({ ...newUser, fullName: e.target.value })} className="h-9 text-xs" /></div>
-                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">E-mail</Label><Input type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} className="h-9 text-xs" /></div>
-                        
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Tipo de Usuário</Label>
-                          <CustomSelect 
-                            options={[ { value: '', label: '— Selecionar —' }, ...userTypes.map(t => ({ value: String(t.id), label: t.name })) ]} 
-                            value={String(newUser.userTypeId)} 
-                            onChange={v => setNewUser({ ...newUser, userTypeId: v })} 
-                            placeholder="Selecione..." 
-                            className="h-9" 
-                          />
-                        </div>
-                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Cargo</Label><Input value={newUser.cargo} onChange={e => setNewUser({ ...newUser, cargo: e.target.value })} placeholder="Ex: Gerente" className="h-9 text-xs" /></div>
-
-                        {/* Hierarquia de Gerenciamento (Multi-Select) */}
-                        <div className="space-y-1.5 md:col-span-3">
-                          <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Gerenciamento</Label>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button 
-                                variant="outline" 
-                                className="w-full justify-between h-9 text-xs bg-background/50 border-border hover:bg-background/80 transition-all"
-                              >
-                                <div className="flex items-center gap-2 truncate">
-                                  <Users2 className="w-3.5 h-3.5 text-primary" />
-                                  <span className="truncate">
-                                    {newUser.managedUserIds.length === 0 
-                                      ? "Nenhum usuário selecionado" 
-                                      : `${newUser.managedUserIds.length} usuário(s) selecionado(s)`}
-                                  </span>
-                                </div>
-                                <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent 
-                              className="w-[320px] p-0 bg-card border-border shadow-2xl z-[3000] overflow-hidden rounded-xl" 
-                              align="start"
-                              onWheel={(e) => e.stopPropagation()} // Fix for some scroll issues in popovers
-                            >
-                              <div className="p-3 border-b border-border/50 bg-secondary/20">
-                                <div className="relative">
-                                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                                  <input
-                                    type="text"
-                                    placeholder="Buscar por nome ou código..."
-                                    className="w-full bg-background text-xs pl-9 pr-8 py-2 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all"
-                                    onChange={(e) => {
-                                      const q = e.target.value.toLowerCase();
-                                      const items = document.querySelectorAll('.managed-user-item');
-                                      items.forEach((item: any) => {
-                                        const text = item.getAttribute('data-search').toLowerCase();
-                                        item.style.display = text.includes(q) ? 'flex' : 'none';
-                                      });
-                                    }}
-                                  />
-                                </div>
-                                <div className="flex items-center justify-between mt-2 px-1">
-                                  <span className="text-[10px] text-muted-foreground font-medium">
-                                    {newUser.managedUserIds.length} selecionados
-                                  </span>
-                                  <div className="flex gap-2">
-                                    <button 
-                                      type="button"
-                                      onClick={() => setNewUser({ ...newUser, managedUserIds: users.filter(u => u.id !== 0).map(u => u.id) })}
-                                      className="text-[10px] font-bold text-primary hover:underline"
-                                    >
-                                      Todos
-                                    </button>
-                                    <button 
-                                      type="button"
-                                      onClick={() => setNewUser({ ...newUser, managedUserIds: [] })}
-                                      className="text-[10px] font-bold text-destructive hover:underline"
-                                    >
-                                      Limpar
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div 
-                                className="max-h-[280px] overflow-y-auto overflow-x-hidden py-1 custom-scrollbar select-none"
-                                style={{ WebkitOverflowScrolling: 'touch' }}
-                              >
-                                {users.filter(u => u.id !== 0).map(u => {
-                                  const isSelected = newUser.managedUserIds.includes(u.id);
-                                  const displayName = u.full_name || u.fullName || u.username;
-                                  return (
-                                    <button
-                                      key={u.id}
-                                      type="button"
-                                      data-search={`${u.code} ${displayName}`}
-                                      className={`managed-user-item w-full flex items-center gap-3 px-3 py-2 text-xs transition-all hover:bg-secondary group ${isSelected ? 'bg-primary/5' : ''}`}
-                                      onClick={() => {
-                                        const ids = [...newUser.managedUserIds];
-                                        if (isSelected) {
-                                          setNewUser({ ...newUser, managedUserIds: ids.filter(id => id !== u.id) });
-                                        } else {
-                                          setNewUser({ ...newUser, managedUserIds: [...ids, u.id] });
-                                        }
-                                      }}
-                                    >
-                                      <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${isSelected ? 'bg-primary border-primary text-white' : 'border-border group-hover:border-primary/50'}`}>
-                                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                                      </div>
-                                      <div className="flex flex-col items-start truncate">
-                                        <span className={`font-semibold truncate ${isSelected ? 'text-primary' : 'text-foreground/90'}`}>
-                                          {displayName}
-                                        </span>
-                                        {u.code && (
-                                          <span className="text-[10px] text-muted-foreground font-mono">
-                                            {u.code}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-                          <p className="text-[10px] text-muted-foreground italic mt-1">Este usuário poderá visualizar todos os clientes dos usuários selecionados acima.</p>
+                        {/* Sidebar do Modal */}
+                        <div className="flex flex-col items-center gap-6 w-full lg:w-48 shrink-0 pt-2 border-b lg:border-b-0 lg:border-r border-border/40 pb-6 lg:pb-0 lg:pr-6">
                           
-                          {/* Visualização dos selecionados */}
-                          {newUser.managedUserIds.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 mt-3">
-                              {newUser.managedUserIds.map(id => {
-                                const u = users.find(user => user.id === id);
-                                if (!u) return null;
-                                return (
-                                  <div 
-                                    key={id} 
-                                    className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 border border-primary/20 text-[10px] text-primary font-medium animate-in fade-in zoom-in duration-200"
-                                  >
-                                    <span className="opacity-70 font-mono">{u.code}</span>
-                                    <span>{u.full_name || u.username}</span>
-                                    <button 
-                                      type="button"
-                                      onClick={() => setNewUser({ ...newUser, managedUserIds: newUser.managedUserIds.filter(mid => mid !== id) })}
-                                      className="hover:text-destructive transition-colors ml-0.5"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
+                          {/* Foto de Perfil */}
+                          <div className="flex flex-col items-center gap-2 w-full">
+                            <label className="cursor-pointer w-24 h-24 rounded-full bg-secondary border-2 border-dashed border-border/60 flex items-center justify-center overflow-hidden hover:border-primary/50 transition-all select-none group relative">
+                              {newUser.photo ? (
+                                <>
+                                  <img src={newUser.photo} alt="Avatar" className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Camera className="w-5 h-5 text-white" />
                                   </div>
-                                );
-                              })}
+                                </>
+                              ) : (
+                                <Camera className="w-8 h-8 text-muted-foreground opacity-40 group-hover:scale-110 transition-transform" />
+                              )}
+                              <input type="file" accept="image/*" className="hidden" onChange={e => handleUserPhotoUpload(e, false)} />
+                            </label>
+                            <div className="text-center">
+                              <p className="text-[10px] font-bold text-foreground mt-1 uppercase tracking-widest">Foto de Perfil</p>
                             </div>
-                          )}
-                        </div>
-
-                        {/* Linha 3 */}
-                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Nome da Empresa</Label><Input value={newUser.companyName} onChange={e => setNewUser({ ...newUser, companyName: e.target.value })} placeholder="Ex: Tech Soluções" className="h-9 text-xs" /></div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Grupo</Label>
-                          <CustomSelect options={[ { value: '', label: '— Nenhum —' }, ...groupsData.map(g => ({ value: String(g.id), label: g.name })) ]} value={String(newUser.groupId)} onChange={v => setNewUser({ ...newUser, groupId: v })} placeholder="Selecione..." className="h-9" />
-                        </div>
-                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Telefone</Label><Input value={newUser.telefone} onChange={e => setNewUser({ ...newUser, telefone: e.target.value })} placeholder="(00) 00000-0000" className="h-9 text-xs" /></div>
-
-                        {/* Linha 4 */}
-                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Data de Nasc.</Label><Input type="date" value={newUser.birthDate} onChange={e => setNewUser({ ...newUser, birthDate: e.target.value })} className="h-9 text-xs" /></div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Tipo Doc</Label>
-                          <div className="flex gap-1 h-9">
-                            {(['cpf', 'cnpj'] as const).map(t => (
-                              <button key={t} type="button" onClick={() => setNewUser({ ...newUser, documentType: t, document: '' })} className={`flex-1 rounded-md text-[10px] font-bold border transition-colors ${newUser.documentType === t ? 'bg-primary border-primary text-white' : 'border-border text-muted-foreground hover:bg-secondary'}`}>
-                                {t.toUpperCase()}
-                              </button>
-                            ))}
                           </div>
-                        </div>
-                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{newUser.documentType.toUpperCase()}</Label><Input value={newUser.document} onChange={e => setNewUser({ ...newUser, document: maskDoc(e.target.value, newUser.documentType) })} className="h-9 text-xs" /></div>
 
-                        {/* Linhas de Senha (movidas para baixo) */}
-                        <div className="space-y-1.5 md:col-start-1">
-                          <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Senha *</Label>
-                          <div className="relative">
-                            <Input type={showNewPwd ? 'text' : 'password'} value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} required className="h-9 text-xs pr-9" />
-                            <button type="button" className="absolute right-2.5 top-1/2 -translate-y-1/2" onClick={() => setShowNewPwd(!showNewPwd)}>{showNewPwd ? <EyeOff className="w-3.5 h-3.5 hover:text-primary transition-colors" /> : <Eye className="w-3.5 h-3.5 hover:text-primary transition-colors" />}</button>
-                          </div>
+                          {/* Menu de Abas */}
+                          <TabsList className="flex flex-col w-full h-auto bg-transparent border-none gap-1 p-0">
+                            <TabsTrigger value="geral" className="w-full justify-start gap-3 px-3 py-2.5 h-auto text-xs font-bold data-[state=active]:bg-primary/10 data-[state=active]:text-primary hover:bg-secondary/50 transition-all rounded-lg">
+                              <User className="w-4 h-4" /> Informações
+                            </TabsTrigger>
+                            <TabsTrigger value="ambiente" className="w-full justify-start gap-3 px-3 py-2.5 h-auto text-xs font-bold data-[state=active]:bg-primary/10 data-[state=active]:text-primary hover:bg-secondary/50 transition-all rounded-lg">
+                              <LayoutDashboard className="w-4 h-4" /> Ambiente
+                            </TabsTrigger>
+                            <TabsTrigger value="endereco" className="w-full justify-start gap-3 px-3 py-2.5 h-auto text-xs font-bold data-[state=active]:bg-primary/10 data-[state=active]:text-primary hover:bg-secondary/50 transition-all rounded-lg">
+                              <MapPin className="w-4 h-4" /> Endereço
+                            </TabsTrigger>
+                            <TabsTrigger value="gerenciamento" className="w-full justify-start gap-3 px-3 py-2.5 h-auto text-xs font-bold data-[state=active]:bg-primary/10 data-[state=active]:text-primary hover:bg-secondary/50 transition-all rounded-lg">
+                              <Users2 className="w-4 h-4" /> Gerenciamento
+                            </TabsTrigger>
+                            <TabsTrigger value="permissao" className="w-full justify-start gap-3 px-3 py-2.5 h-auto text-xs font-bold data-[state=active]:bg-primary/10 data-[state=active]:text-primary hover:bg-secondary/50 transition-all rounded-lg">
+                              <ShieldCheck className="w-4 h-4" /> Permissões
+                            </TabsTrigger>
+                          </TabsList>
                         </div>
-                        <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Confirmar Senha *</Label><Input type={showNewPwd ? 'text' : 'password'} value={newUser.confirmPassword} onChange={e => setNewUser({ ...newUser, confirmPassword: e.target.value })} required className="h-9 text-xs" /></div>
+
+                        {/* Conteúdo das Abas */}
+                        <div className="flex-1 min-w-0">
+                          
+                          {/* ABA: GERAL */}
+                          <TabsContent value="geral" className="mt-0 space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-5 gap-y-4">
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Código *</Label><Input value={newUser.code} onChange={e => setNewUser({ ...newUser, code: e.target.value.replace(/[^a-zA-Z0-9.-]/g, '') })} required className="h-9 text-xs" /></div>
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Nome Completo</Label><Input value={newUser.fullName} onChange={e => setNewUser({ ...newUser, fullName: e.target.value })} className="h-9 text-xs" /></div>
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">E-mail</Label><Input type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} className="h-9 text-xs" /></div>
+                              
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Tipo de Usuário</Label>
+                                <CustomSelect 
+                                  options={[ { value: '', label: '— Selecionar —' }, ...userTypes.map(t => ({ value: String(t.id), label: t.name })) ]} 
+                                  value={String(newUser.userTypeId)} 
+                                  onChange={v => setNewUser({ ...newUser, userTypeId: v })} 
+                                  placeholder="Selecione..." 
+                                  className="h-9" 
+                                />
+                              </div>
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Cargo</Label><Input value={newUser.cargo} onChange={e => setNewUser({ ...newUser, cargo: e.target.value })} placeholder="Ex: Gerente" className="h-9 text-xs" /></div>
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Nome da Empresa</Label><Input value={newUser.companyName} onChange={e => setNewUser({ ...newUser, companyName: e.target.value })} placeholder="Ex: Tech Soluções" className="h-9 text-xs" /></div>
+                              
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Grupo</Label>
+                                <CustomSelect options={[ { value: '', label: '— Nenhum —' }, ...groupsData.map(g => ({ value: String(g.id), label: g.name })) ]} value={String(newUser.groupId)} onChange={v => setNewUser({ ...newUser, groupId: v })} placeholder="Selecione..." className="h-9" />
+                              </div>
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Telefone</Label><Input value={newUser.telefone} onChange={e => setNewUser({ ...newUser, telefone: maskPhone(e.target.value) })} placeholder="(00) 00000-0000" className="h-9 text-xs" /></div>
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Data de Nasc.</Label><Input type="date" value={newUser.birthDate} onChange={e => setNewUser({ ...newUser, birthDate: e.target.value })} className="h-9 text-xs" /></div>
+
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Tipo Doc</Label>
+                                <div className="flex gap-1 h-9">
+                                  {(['cpf', 'cnpj'] as const).map(t => (
+                                    <button key={t} type="button" onClick={() => setNewUser({ ...newUser, documentType: t, document: '' })} className={`flex-1 rounded-md text-[10px] font-bold border transition-colors ${newUser.documentType === t ? 'bg-primary border-primary text-white' : 'border-border text-muted-foreground hover:bg-secondary'}`}>
+                                      {t.toUpperCase()}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{newUser.documentType.toUpperCase()}</Label><Input value={newUser.document} onChange={e => setNewUser({ ...newUser, document: maskDoc(e.target.value, newUser.documentType) })} className="h-9 text-xs" /></div>
+                              
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Senha *</Label>
+                                <div className="relative">
+                                  <Input type={showNewPwd ? 'text' : 'password'} value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} required className="h-9 text-xs pr-9" />
+                                  <button type="button" className="absolute right-2.5 top-1/2 -translate-y-1/2" onClick={() => setShowNewPwd(!showNewPwd)}>{showNewPwd ? <EyeOff className="w-3.5 h-3.5 hover:text-primary transition-colors" /> : <Eye className="w-3.5 h-3.5 hover:text-primary transition-colors" />}</button>
+                                </div>
+                              </div>
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Confirmar Senha *</Label><Input type={showNewPwd ? 'text' : 'password'} value={newUser.confirmPassword} onChange={e => setNewUser({ ...newUser, confirmPassword: e.target.value })} required className="h-9 text-xs" /></div>
+                            </div>
+                          </TabsContent>
+
+                          {/* ABA: AMBIENTE */}
+                          <TabsContent value="ambiente" className="mt-0 space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Área de Trabalho Padrão</Label>
+                                <select 
+                                  className="w-full h-9 px-3 bg-background border border-border rounded-md text-xs focus:ring-1 focus:ring-primary/40 outline-none"
+                                  value={newUser.default_screen} 
+                                  onChange={e => setNewUser({...newUser, default_screen: e.target.value})}
+                                >
+                                  <option value="mapa">Mapa Principal</option>
+                                  <option value="dashboard">Dashboard</option>
+                                  <option value="baserotas">Base Cliente</option>
+                                  <option value="territories">Territórios</option>
+                                  <option value="rotas_menu">Planejamento de Áreas</option>
+                                  <option value="settings">Configurações</option>
+                                </select>
+                                <p className="text-[10px] text-muted-foreground italic">Define qual tela será carregada automaticamente após o login do usuário.</p>
+                              </div>
+                            </div>
+                          </TabsContent>
+
+                          {/* ABA: ENDEREÇO */}
+                          <TabsContent value="endereco" className="mt-0 space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">CEP</Label><Input value={newUser.cep} onChange={e => setNewUser({ ...newUser, cep: maskCEP(e.target.value) })} onBlur={() => fetchCepAdmin(newUser.cep.replace(/\D/g, ''))} maxLength={9} className="h-9 text-xs" /></div>
+                              <div className="space-y-1.5 sm:col-span-2"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Logradouro / Rua</Label><Input value={newUser.logradouro} onChange={e => setNewUser({ ...newUser, logradouro: e.target.value })} className="h-9 text-xs" /></div>
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Número</Label><Input value={newUser.numero} onChange={e => setNewUser({ ...newUser, numero: e.target.value })} className="h-9 text-xs" /></div>
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Complemento</Label><Input value={newUser.complemento} onChange={e => setNewUser({ ...newUser, complemento: e.target.value })} className="h-9 text-xs" /></div>
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bairro</Label><Input value={newUser.bairro_end} onChange={e => setNewUser({ ...newUser, bairro_end: e.target.value })} className="h-9 text-xs" /></div>
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Cidade</Label><Input value={newUser.cidade} onChange={e => setNewUser({ ...newUser, cidade: e.target.value })} className="h-9 text-xs" /></div>
+                              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">UF</Label><Input value={newUser.estado_end} onChange={e => setNewUser({ ...newUser, estado_end: e.target.value })} maxLength={2} className="h-9 text-xs uppercase" /></div>
+                            </div>
+                          </TabsContent>
+
+                          {/* ABA: GERENCIAMENTO */}
+                          <TabsContent value="gerenciamento" className="mt-0 space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                            <div className="space-y-4">
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Usuários sob Gestão</Label>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button 
+                                      variant="outline" 
+                                      className="w-full justify-between h-10 text-xs bg-background/50 border-border hover:bg-background/80 transition-all"
+                                    >
+                                      <div className="flex items-center gap-2 truncate">
+                                        <Users2 className="w-4 h-4 text-primary" />
+                                        <span className="truncate">
+                                          {newUser.managedUserIds.length === 0 
+                                            ? "Nenhum usuário selecionado" 
+                                            : `${newUser.managedUserIds.length} usuário(s) selecionado(s)`}
+                                        </span>
+                                      </div>
+                                      <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent 
+                                    className="w-[90vw] sm:w-[400px] p-0 bg-card border-border shadow-2xl z-[3000] overflow-hidden rounded-xl" 
+                                    align="start"
+                                  >
+                                    <div className="p-3 border-b border-border/50 bg-secondary/20">
+                                      <div className="relative">
+                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                        <input
+                                          type="text"
+                                          placeholder="Buscar por nome ou código..."
+                                          className="w-full bg-background text-xs pl-9 pr-8 py-2 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all"
+                                          onChange={(e) => {
+                                            const q = e.target.value.toLowerCase();
+                                            const items = document.querySelectorAll('.managed-user-item-new');
+                                            items.forEach((item: any) => {
+                                              const text = item.getAttribute('data-search').toLowerCase();
+                                              item.style.display = text.includes(q) ? 'flex' : 'none';
+                                            });
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="flex items-center justify-between mt-2 px-1">
+                                        <span className="text-[10px] text-muted-foreground font-medium">
+                                          {newUser.managedUserIds.length} selecionados
+                                        </span>
+                                        <div className="flex gap-2">
+                                          <button type="button" onClick={() => setNewUser({ ...newUser, managedUserIds: users.filter(u => u.id !== 0).map(u => u.id) })} className="text-[10px] font-bold text-primary hover:underline">Todos</button>
+                                          <button type="button" onClick={() => setNewUser({ ...newUser, managedUserIds: [] })} className="text-[10px] font-bold text-destructive hover:underline">Limpar</button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="max-h-[300px] overflow-y-auto py-1 custom-scrollbar">
+                                      {users.filter(u => u.id !== 0).map(u => {
+                                        const isSelected = newUser.managedUserIds.includes(u.id);
+                                        const displayName = u.full_name || u.fullName || u.username;
+                                        return (
+                                          <button
+                                            key={u.id}
+                                            type="button"
+                                            data-search={`${u.code} ${displayName}`}
+                                            className={`managed-user-item-new w-full flex items-center gap-3 px-3 py-2 text-xs transition-all hover:bg-secondary group ${isSelected ? 'bg-primary/5' : ''}`}
+                                            onClick={() => {
+                                              const ids = [...newUser.managedUserIds];
+                                              if (isSelected) setNewUser({ ...newUser, managedUserIds: ids.filter(id => id !== u.id) });
+                                              else setNewUser({ ...newUser, managedUserIds: [...ids, u.id] });
+                                            }}
+                                          >
+                                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${isSelected ? 'bg-primary border-primary text-white' : 'border-border group-hover:border-primary/50'}`}>
+                                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                            </div>
+                                            <div className="flex flex-col items-start truncate">
+                                              <span className={`font-semibold truncate ${isSelected ? 'text-primary' : 'text-foreground/90'}`}>{displayName}</span>
+                                              {u.code && <span className="text-[10px] text-muted-foreground font-mono">{u.code}</span>}
+                                            </div>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                                <p className="text-[10px] text-muted-foreground italic mt-1">Este usuário poderá visualizar todos os clientes dos usuários selecionados acima.</p>
+                                
+                                {newUser.managedUserIds.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5 mt-3">
+                                    {newUser.managedUserIds.map(id => {
+                                      const u = users.find(user => user.id === id);
+                                      if (!u) return null;
+                                      return (
+                                        <div key={id} className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 border border-primary/20 text-[10px] text-primary font-medium animate-in fade-in zoom-in duration-200">
+                                          <span className="opacity-70 font-mono">{u.code}</span>
+                                          <span>{u.full_name || u.username}</span>
+                                          <button type="button" onClick={() => setNewUser({ ...newUser, managedUserIds: newUser.managedUserIds.filter(mid => mid !== id) })} className="hover:text-destructive transition-colors ml-0.5"><X className="w-3 h-3" /></button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </TabsContent>
+
+                          {/* ABA: PERMISSÕES */}
+                          <TabsContent value="permissao" className="mt-0 space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                            <div className="section-title mb-2">Permissões de Acesso</div>
+                            <p className="text-xs text-muted-foreground mb-6">Configure quais áreas do sistema este usuário pode visualizar ou gerenciar.</p>
+                            
+                            <div className="rounded-xl border border-border/50 bg-secondary/5 overflow-hidden">
+                              <table className="w-full text-sm text-left border-collapse">
+                                <thead className="bg-secondary/20">
+                                  <tr>
+                                    <th className="px-6 py-4 font-bold text-[10px] uppercase tracking-wider text-muted-foreground">Módulo do Sistema</th>
+                                    <th className="px-6 py-4 text-center font-bold text-[10px] uppercase tracking-wider text-muted-foreground">Visualizar</th>
+                                    <th className="px-6 py-4 text-center font-bold text-[10px] uppercase tracking-wider text-muted-foreground">Editar / Gerenciar</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {availableModules.map(mod => {
+                                    const perm = newUser.permissions.find(p => p.moduleId === mod.id);
+                                    return (
+                                      <tr key={mod.id} className="border-b border-border/20 hover:bg-secondary/10 transition-colors">
+                                        <td className="px-6 py-4">
+                                          <div className="flex items-center gap-3">
+                                            <div className="p-2 rounded-lg bg-background border border-border/50 text-muted-foreground group-hover:text-primary transition-colors">
+                                              {getModuleIcon(mod.id)}
+                                            </div>
+                                            <div>
+                                              <p className="font-bold text-xs capitalize">{mod.name}</p>
+                                              <p className="text-[10px] text-muted-foreground">Acesso ao módulo {mod.id}</p>
+                                            </div>
+                                          </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                          <button 
+                                            type="button" 
+                                            onClick={() => handleNewUserPermissionChange(mod.id, 'canView', !perm?.canView)}
+                                            className={`w-5 h-5 rounded border mx-auto flex items-center justify-center transition-all ${perm?.canView ? 'bg-primary border-primary text-white' : 'border-border'}`}
+                                          >
+                                            {perm?.canView && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                          </button>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                          <button 
+                                            type="button" 
+                                            onClick={() => handleNewUserPermissionChange(mod.id, 'canEdit', !perm?.canEdit)}
+                                            className={`w-5 h-5 rounded border mx-auto flex items-center justify-center transition-all ${perm?.canEdit ? 'bg-primary border-primary text-white' : 'border-border'}`}
+                                          >
+                                            {perm?.canEdit && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {/* Flag de Administrador */}
+                            <div className="mt-8 p-6 rounded-xl border border-border/50 bg-secondary/10 flex items-center justify-between group hover:border-primary/30 transition-all">
+                              <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                                  <ShieldCheck size={20} />
+                                </div>
+                                <div>
+                                  <p className="text-xs font-bold uppercase tracking-wider">Acesso Total (Administrador)</p>
+                                  <p className="text-[10px] text-muted-foreground mt-1 max-w-[400px]">Ao ativar esta opção, o usuário terá acesso irrestrito a todas as funções, configurações e dados do sistema, ignorando as permissões individuais acima.</p>
+                                </div>
+                              </div>
+                              <Switch 
+                                checked={newUser.role === 'admin'} 
+                                onCheckedChange={(checked) => {
+                                  const newRole = checked ? 'admin' : 'user';
+                                  setNewUser(prev => ({
+                                    ...prev,
+                                    role: newRole,
+                                    permissions: checked 
+                                      ? prev.permissions.map(p => ({ ...p, canView: true, canEdit: true }))
+                                      : prev.permissions
+                                  }));
+                                }} 
+                              />
+                            </div>
+                            <p className="text-[10px] text-muted-foreground italic mt-2">Permissões de edição concedem automaticamente permissão de visualização.</p>
+                          </TabsContent>
+
+                        </div>
                       </div>
-                    </div>
+                    </Tabs>
 
-                    <div className="mt-6 pt-4 border-t border-border/40 grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <h4 className="col-span-full text-xs font-bold text-primary mb-1">ENDEREÇO</h4>
-                      <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">CEP</Label><Input value={newUser.cep} onChange={e => setNewUser({ ...newUser, cep: e.target.value.replace(/\D/g, '') })} onBlur={() => fetchCepAdmin(newUser.cep)} maxLength={8} className="h-9 text-xs" /></div>
-                      <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Logradouro / Rua</Label><Input value={newUser.logradouro} onChange={e => setNewUser({ ...newUser, logradouro: e.target.value })} className="h-9 text-xs" /></div>
-                      <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Número</Label><Input value={newUser.numero} onChange={e => setNewUser({ ...newUser, numero: e.target.value })} className="h-9 text-xs" /></div>
-                      <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Complemento</Label><Input value={newUser.complemento} onChange={e => setNewUser({ ...newUser, complemento: e.target.value })} className="h-9 text-xs" /></div>
-                      <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bairro</Label><Input value={newUser.bairro_end} onChange={e => setNewUser({ ...newUser, bairro_end: e.target.value })} className="h-9 text-xs" /></div>
-                      <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Cidade</Label><Input value={newUser.cidade} onChange={e => setNewUser({ ...newUser, cidade: e.target.value })} className="h-9 text-xs" /></div>
-                      <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">UF</Label><Input value={newUser.estado_end} onChange={e => setNewUser({ ...newUser, estado_end: e.target.value })} maxLength={2} className="h-9 text-xs uppercase" /></div>
-                    </div>
-
-                    <div className="flex gap-3 pt-6 mt-4 border-t border-border/10 justify-end">
-                      <Button variant="ghost" type="button" onClick={() => setIsUserModalOpen(false)} className="w-32">Cancelar</Button>
-                      <Button type="submit" className="w-48 gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"><Save className="w-4 h-4" /> Cadastrar Usuário</Button>
+                    <div className="flex flex-col sm:flex-row gap-3 pt-6 mt-6 border-t border-border/40 justify-end">
+                      <Button variant="ghost" type="button" onClick={() => setIsUserModalOpen(false)} className="w-full sm:w-32 order-2 sm:order-1">Cancelar</Button>
+                      <Button type="submit" className="w-full sm:w-48 gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all order-1 sm:order-2"><Save className="w-4 h-4" /> Cadastrar Usuário</Button>
                     </div>
                   </form>
                 </>

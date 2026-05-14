@@ -121,8 +121,16 @@ export function RotaSequencialPanel() {
                 </Button>
               ) : (
                 <>
-                  <Button variant="outline" onClick={handleOptimize} disabled={loading} className="gap-2 border-primary/20 text-primary hover:bg-primary/5">
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  <Button 
+                    variant="outline" 
+                    onClick={async () => {
+                      await handleOptimize();
+                      toast.success("Roteiro atualizado");
+                    }} 
+                    disabled={loading} 
+                    className="gap-2 border-primary/20 text-primary hover:bg-primary/5"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                     Reotimizar HERE API
                   </Button>
                   <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700">

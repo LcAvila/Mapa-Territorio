@@ -37,6 +37,17 @@ router.get('/districts/:ibgeCode', async (req, res) => {
   }
 });
 
+router.get('/neighborhoods-geojson/:ibgeCode', async (req, res) => {
+  try {
+    const { ibgeCode } = req.params;
+    const geojson = await LocationService.getNeighborhoodsGeoJSON(Number(ibgeCode));
+    res.json(geojson);
+  } catch (error) {
+    console.error('[Location] Error fetching neighborhoods GeoJSON:', error);
+    res.status(500).json({ error: 'Erro ao buscar polígonos dos bairros' });
+  }
+});
+
 router.get('/bairros/:cidade/:uf', async (req, res) => {
   try {
     const { cidade, uf } = req.params;

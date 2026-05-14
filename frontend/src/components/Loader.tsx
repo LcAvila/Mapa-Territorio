@@ -1,31 +1,38 @@
 import React from 'react';
 import styled from 'styled-components';
 
-const Loader = () => {
+interface LoaderProps {
+  label?: string;
+}
+
+const Loader = ({ label }: LoaderProps) => {
   return (
     <StyledWrapper>
-      <div className="center-body">
+      <div className="center-body flex-col gap-4">
         <div className="loader-shape-3" />
+        {label && <p className="text-primary font-bold text-sm animate-pulse">{label}</p>}
       </div>
     </StyledWrapper>
   );
 }
 
 const StyledWrapper = styled.div`
-  width: 100%;
-  height: 100%;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 9999;
+  background: #202628;
 
   .center-body {
-    background: #202628;
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    width: 100%;
-    height: 100%;
-    min-height: 500px;
+    gap: 1rem;
   }
   
   .loader-shape-3 {

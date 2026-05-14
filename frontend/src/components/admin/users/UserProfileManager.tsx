@@ -79,6 +79,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
     area_atuacao: user.area_atuacao || '',
     base_logistica: user.base_logistica || '',
     userTypeId: user.userTypeId || '',
+    default_screen: user.default_screen || 'mapa',
     managedUserIds: (user as any).managedUsers?.map((u: any) => u.id) || []
   });
 
@@ -101,6 +102,27 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
   });
 
   const API = API_BASE_URL;
+
+function maskDoc(val: string, type: 'cpf' | 'cnpj') {
+  const d = val.replace(/\D/g, '');
+  if (type === 'cpf') {
+    return d.slice(0, 11).replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, (_, a, b, c, e) => e ? `${a}.${b}.${c}-${e}` : c ? `${a}.${b}.${c}` : b ? `${a}.${b}` : a);
+  }
+  return d.slice(0, 14).replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, (_, a, b, c, e, f) => f ? `${a}.${b}.${c}/${e}-${f}` : e ? `${a}.${b}.${c}/${e}` : c ? `${a}.${b}.${c}` : b ? `${a}.${b}` : a);
+}
+
+function maskPhone(val: string) {
+  const d = val.replace(/\D/g, '');
+  if (d.length <= 10) {
+    return d.replace(/(\d{2})(\d{4})(\d{0,4})/, (_, a, b, c) => c ? `(${a}) ${b}-${c}` : b ? `(${a}) ${b}` : a ? `(${a})` : '');
+  }
+  return d.slice(0, 11).replace(/(\d{2})(\d{5})(\d{0,4})/, (_, a, b, c) => c ? `(${a}) ${b}-${c}` : b ? `(${a}) ${b}` : a ? `(${a})` : '');
+}
+
+function maskCEP(val: string) {
+  const d = val.replace(/\D/g, '').slice(0, 8);
+  return d.replace(/(\d{5})(\d{0,3})/, (_, a, b) => b ? `${a}-${b}` : a);
+}
   const token = localStorage.getItem('token');
   const tokenVersion = localStorage.getItem('tokenVersion');
   const authHeaders = useMemo(() => ({ 
@@ -136,6 +158,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
       area_atuacao: user.area_atuacao || '',
       base_logistica: user.base_logistica || '',
       userTypeId: user.userTypeId || '',
+      default_screen: user.default_screen || 'mapa',
       managedUserIds: (user as any).managedUsers?.map((u: any) => u.id) || []
     });
     
@@ -201,6 +224,19 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
     fetchData();
     if (activeTab === 'history') fetchActivities();
   }, [fetchData, fetchActivities, activeTab]);
+
+  // Auto-admin flag when user type is admin
+  useEffect(() => {
+    if (!userTypes) return;
+    const selectedType = userTypes.find(t => String(t.id) === String(formData.userTypeId));
+    if (selectedType?.isAdmin) {
+      setFormData(prev => ({ ...prev, role: 'admin' }));
+      // Automatically set all permissions to true if admin
+      if (availableModules.length > 0) {
+        setPermissions(availableModules.map(m => ({ moduleId: m.id, canView: true, canEdit: true })));
+      }
+    }
+  }, [formData.userTypeId, userTypes, availableModules]);
 
   const fetchCepProfile = async (cep: string) => {
     const cleanCep = cep.replace(/\D/g, '');
@@ -283,6 +319,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
           area_atuacao: formData.area_atuacao,
           base_logistica: formData.base_logistica,
           userTypeId: formData.userTypeId ? Number(formData.userTypeId) : null,
+          default_screen: formData.default_screen,
           managedUserIds: formData.managedUserIds,
           // Se for admin, envia todas as permissões para o backend persistir
           permissions: finalRole === 'admin' ? availableModules.map(m => ({ moduleId: m.id, canView: true, canEdit: true })) : permissions
@@ -312,7 +349,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
       const res = await fetch(`${API}/api/admin/users/${user.id}/permissions`, {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ permissions })
+        body: JSON.stringify({ permissions, role: formData.role })
       });
       
       const result = await res.json();
@@ -401,6 +438,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { toast.error('A foto deve ter no máximo 2MB'); return; }
     const reader = new FileReader();
     reader.onload = (ev) => setFormData(f => ({ ...f, photo: ev.target?.result as string }));
     reader.readAsDataURL(file);
@@ -490,11 +528,14 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
               </div>
               <div className="field">
                 <Label>CPF / CNPJ</Label>
-                <Input value={formData.cpf_cnpj} onChange={e => setFormData({...formData, cpf_cnpj: e.target.value})} />
+                <Input value={formData.cpf_cnpj} onChange={e => {
+                  const type = e.target.value.replace(/\D/g, '').length <= 11 ? 'cpf' : 'cnpj';
+                  setFormData({...formData, cpf_cnpj: maskDoc(e.target.value, type)});
+                }} />
               </div>
               <div className="field">
                 <Label>Telefone</Label>
-                <Input value={formData.telefone} onChange={e => setFormData({...formData, telefone: e.target.value})} />
+                <Input value={formData.telefone} onChange={e => setFormData({...formData, telefone: maskPhone(e.target.value)})} placeholder="(00) 00000-0000" />
               </div>
               <div className="field">
                 <Label>Data de Nascimento</Label>
@@ -502,7 +543,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
               </div>
               
               {showPwdFields && (
-                <div className="col-span-full grid grid-cols-2 gap-4 mt-4 p-4 rounded-lg bg-primary/5 border border-primary/10">
+                <div className="col-span-full grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 p-4 rounded-lg bg-primary/5 border border-primary/10">
                   <div className="field">
                     <Label>Nova Senha</Label>
                     <div className="relative">
@@ -545,7 +586,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
               <div className="section-title mt-4">Endereço</div>
               <div className="field">
                 <Label>CEP</Label>
-                <Input value={formData.cep} onChange={e => setFormData({...formData, cep: e.target.value.replace(/\D/g, '')})} onBlur={() => fetchCepProfile(formData.cep)} maxLength={8} />
+                <Input value={formData.cep} onChange={e => setFormData({...formData, cep: maskCEP(e.target.value)})} onBlur={() => fetchCepProfile(formData.cep.replace(/\D/g, ''))} maxLength={9} />
               </div>
               <div className="field">
                 <Label>Logradouro / Rua</Label>
@@ -576,7 +617,25 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
 
           {activeTab === 'org' && (
             <FormGrid>
-              <div className="section-title">Dados Organizacionais</div>
+              <div className="section-title">Ambiente de Trabalho</div>
+              <div className="field">
+                <Label>Área de Trabalho Padrão</Label>
+                <select 
+                  className="w-full h-10 px-3 bg-background border rounded-md text-sm"
+                  value={formData.default_screen} 
+                  onChange={e => setFormData({...formData, default_screen: e.target.value})}
+                >
+                  <option value="mapa">Mapa Principal</option>
+                  <option value="dashboard">Dashboard</option>
+                  <option value="baserotas">Base Cliente</option>
+                  <option value="territories">Territórios</option>
+                  <option value="rotas_menu">Planejamento de Áreas</option>
+                  <option value="settings">Configurações</option>
+                </select>
+                <p className="text-[10px] text-muted-foreground mt-1">Define qual tela será carregada automaticamente após o login do usuário.</p>
+              </div>
+
+              <div className="section-title mt-4">Dados Organizacionais</div>
               <div className="field">
                 <Label>Tipo de Usuário (Categoria)</Label>
                 <select 

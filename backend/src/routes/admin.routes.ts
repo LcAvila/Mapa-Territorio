@@ -112,10 +112,27 @@ const PUBLIC_USER_FIELDS = {
   id: true,
   username: true,
   full_name: true,
+  code: true,
   email: true,
   role: true,
   tipo: true,
   userTypeId: true,
+  cpf_cnpj: true,
+  telefone: true,
+  birth_date: true,
+  cargo: true,
+  company_name: true,
+  groupId: true,
+  cep: true,
+  logradouro: true,
+  numero: true,
+  complemento: true,
+  bairro_end: true,
+  cidade: true,
+  estado_end: true,
+  default_screen: true,
+  area_atuacao: true,
+  base_logistica: true,
   managedUsers: {
     select: {
       id: true,
@@ -126,7 +143,6 @@ const PUBLIC_USER_FIELDS = {
   },
   photo: true,
   colorIndex: true,
-  cargo: true,
   last_active: true,
   isVago: true,
   token_version: true,
@@ -333,8 +349,10 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
       code, password, role, tipo, userTypeId, managedUserIds, full_name, photo, colorIndex, comissao, isVago, 
       telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
       cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
-      email // Recebendo o email do frontend
+      email, default_screen // Recebendo o email do frontend
     } = req.body;
+  
+  const permissions = req.body.permissions as { moduleId: string; canView: boolean; canEdit: boolean }[] | undefined;
   
   if (!code) return res.status(400).json({ message: 'Código é obrigatório' });
 
@@ -383,6 +401,8 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
         estado_end,
         area_atuacao,
         base_logistica,
+        // @ts-ignore
+        default_screen: default_screen || 'mapa',
         groupId: groupId ? Number(groupId) : null,
         // @ts-ignore
         managedUsers: managedUserIds ? {
@@ -402,19 +422,39 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
     // Salva o supabase_id usando Raw SQL para evitar erro de tipo/cliente preso
     await prisma.$executeRawUnsafe('UPDATE "users" SET "supabase_id" = $1 WHERE "id" = $2', authUser.user.id, user.id);
 
-    // Step 3: Initialize default permissions for all modules
+    // Step 3: Initialize permissions
     try {
-      const modules: any[] = await prisma.$queryRawUnsafe('SELECT "id" FROM "modules"');
-      if (modules.length > 0) {
-        for (const m of modules) {
-           await prisma.$executeRawUnsafe(
-             'INSERT INTO "user_permissions" ("userId", "moduleId", "canView", "canEdit") VALUES ($1, $2, $3, $4)',
-             user.id, m.id, role === 'admin' || role === 'supervisor', role === 'admin' || role === 'supervisor'
-           );
+      if (permissions && permissions.length > 0) {
+        // Use custom permissions from request
+        for (const p of permissions) {
+          await prisma.$executeRawUnsafe(
+            'INSERT INTO "user_permissions" ("userId", "moduleId", "canView", "canEdit") VALUES ($1, $2, $3, $4)',
+            user.id, p.moduleId, p.canView, p.canEdit
+          );
+        }
+      } else {
+        // Fallback to default permissions for all modules
+        const modules: any[] = await prisma.$queryRawUnsafe('SELECT "id" FROM "modules"');
+        if (modules.length > 0) {
+          for (const m of modules) {
+             let canView = role === 'admin' || role === 'supervisor';
+             let canEdit = role === 'admin' || role === 'supervisor';
+
+             // Regra padrão: para não-admins, dashboard, clientes, territories e audit são somente visualizar
+             if (role !== 'admin' && ['dashboard', 'clientes', 'territories', 'audit', 'settings'].includes(m.id)) {
+               canView = true;
+               canEdit = false;
+             }
+
+             await prisma.$executeRawUnsafe(
+               'INSERT INTO "user_permissions" ("userId", "moduleId", "canView", "canEdit") VALUES ($1, $2, $3, $4)',
+               user.id, m.id, canView, canEdit
+             );
+          }
         }
       }
     } catch (permError) {
-      console.error('Error initializing default permissions:', permError);
+      console.error('Error initializing permissions:', permError);
     }
 
     await logUserActivity(req.user.id, 'create_user', `Criou novo usuário ${code}`, req, 'User', String(user.id));
@@ -431,7 +471,7 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
     password, role, tipo, userTypeId, managedUserIds, full_name, photo, colorIndex, comissao, isVago, 
     telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
     cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, area_atuacao, base_logistica,
-    email, permissions // Adicionando permissions aqui
+    email, default_screen, permissions // Adicionando permissions e default_screen aqui
   } = req.body;
 
   // Validação de e-mail no backend
@@ -524,6 +564,8 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
       estado_end,
       area_atuacao,
       base_logistica,
+      // @ts-ignore
+      default_screen,
       birth_date: birth_date ? new Date(birth_date) : undefined,
       colorIndex: colorIndex !== undefined ? Number(colorIndex) : undefined,
       comissao: (comissao !== undefined && comissao !== '' && comissao !== null) ? parseFloat(String(comissao)) : (comissao === null ? null : undefined),
@@ -795,7 +837,7 @@ router.get('/users/:id/permissions', async (req, res) => {
 // Save user permissions and handle auto-promotion
 router.post('/users/:id/permissions', authenticate, requirePermission('users', 'edit'), async (req: any, res) => {
   const userId = Number(req.params.id);
-  const { permissions } = req.body;
+  const { permissions, role } = req.body;
 
   try {
     // 1. Save permissions using Raw Queries to ensure persistence
@@ -810,27 +852,28 @@ router.post('/users/:id/permissions', authenticate, requirePermission('users', '
       }
     }
 
-    // 2. Check for auto-promotion to admin
-    // Se marcou 'canEdit' nos módulos principais, promove a admin
-    const coreModules = ['users', 'clientes', 'territories', 'notifications'];
-    const hasCoreEdit = coreModules.every(slug => 
-      permissions.find((p: any) => p.moduleId === slug)?.canEdit === true
-    );
+    // 2. Handle role update (explicit or automatic)
+    let finalRole = role;
+    
+    // Heurística de auto-promoção se não foi enviado um role específico
+    if (!finalRole) {
+      const coreModules = ['users', 'clientes', 'territories', 'notifications'];
+      const hasCoreEdit = coreModules.every(slug => 
+        permissions.find((p: any) => p.moduleId === slug)?.canEdit === true
+      );
+      if (hasCoreEdit) finalRole = 'admin';
+    }
 
     let roleUpdated = false;
-    if (hasCoreEdit) {
-      await prisma.$executeRawUnsafe('UPDATE "users" SET "role" = \'admin\' WHERE "id" = $1', userId);
+    if (finalRole) {
+      await prisma.$executeRawUnsafe('UPDATE "users" SET "role" = $1 WHERE "id" = $2', finalRole, userId);
       
-      // Sincroniza com Supabase Auth Metadata para o próximo login
+      // Sincroniza com Supabase Auth Metadata
       try {
-        const { data: { users: sbUsers } } = await supabaseAdmin.auth.admin.listUsers();
         const targetUser = await prisma.user.findUnique({ where: { id: userId } });
-        const authEmail = `${targetUser?.code || targetUser?.username}@mapaterritorio.com`;
-        const sbUser = sbUsers.find(u => u.email === authEmail);
-        
-        if (sbUser) {
-          await supabaseAdmin.auth.admin.updateUserById(sbUser.id, {
-            user_metadata: { ...sbUser.user_metadata, role: 'admin' }
+        if (targetUser?.supabase_id) {
+          await supabaseAdmin.auth.admin.updateUserById(targetUser.supabase_id, {
+            user_metadata: { role: finalRole }
           });
         }
       } catch (authErr) {
@@ -838,14 +881,14 @@ router.post('/users/:id/permissions', authenticate, requirePermission('users', '
       }
 
       roleUpdated = true;
-      console.log(`[ADMIN] Usuário ID ${userId} promovido a ADMIN automaticamente.`);
+      console.log(`[ADMIN] Usuário ID ${userId} atualizado para ROLE: ${finalRole}`);
     }
 
-    await logUserActivity(req.user.id, 'update_permissions', `Atualizou permissões do usuário ${userId}${roleUpdated ? ' (Promovido a ADMIN)' : ''}`, req);
+    await logUserActivity(req.user.id, 'update_permissions', `Atualizou permissões do usuário ${userId}${roleUpdated ? ' (Role: ' + finalRole + ')' : ''}`, req);
     
     res.json({ 
       message: 'Permissões salvas com sucesso', 
-      promoted: roleUpdated 
+      promoted: roleUpdated && finalRole === 'admin'
     });
   } catch (error) {
     console.error('Error saving permissions:', error);

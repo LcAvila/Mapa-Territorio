@@ -11,10 +11,26 @@ import Profile from "./pages/Profile";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NotFound from "./pages/NotFound";
 import NotificationSystem from "./components/NotificationSystem";
+import { useAuth } from "./contexts/auth-context-core";
+import { Navigate } from "react-router-dom";
 
 import { ThemeProvider } from "./contexts/ThemeContext";
 
 const queryClient = new QueryClient();
+
+const RootRedirect = () => {
+  const { defaultWorkspace } = useAuth();
+  
+  if (defaultWorkspace === 'mapa' || !defaultWorkspace) {
+    return <Navigate to="/mapa" replace />;
+  }
+  
+  if (defaultWorkspace === 'admin') {
+    return <Navigate to="/admin" replace />;
+  }
+  
+  return <Navigate to={`/admin?tab=${defaultWorkspace}`} replace />;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -29,7 +45,8 @@ const App = () => (
               <Route path="/login" element={<Login />} />
 
               <Route element={<ProtectedRoute />}>
-                <Route path="/" element={<Admin />} />
+                <Route path="/" element={<RootRedirect />} />
+                <Route path="/admin" element={<Admin />} />
                 <Route path="/mapa" element={<Index />} />
                 <Route path="/perfil" element={<Profile />} />
               </Route>

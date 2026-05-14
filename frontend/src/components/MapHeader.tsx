@@ -61,6 +61,7 @@ export default function MapHeader({
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // ── Notifications Logic ──
   const currentUserId = userId || Number(localStorage.getItem('userId') || 0) || null;
@@ -125,13 +126,17 @@ export default function MapHeader({
   }, [showNotifications, myNotifications]);
 
   const handleRefresh = () => {
+    setIsRefreshing(true);
     // Find refresh buttons in different tabs and trigger them
     const refreshBtn = document.querySelector('button[title="Atualizar dados"]') as HTMLButtonElement;
     if (refreshBtn) {
       refreshBtn.click();
+      // Wait a bit to show animation before resetting
+      setTimeout(() => setIsRefreshing(false), 2000);
     } else {
       // Fallback for screens without the explicit refresh button
-      window.location.reload();
+      toast.success("Mapa atualizado");
+      setTimeout(() => window.location.reload(), 500);
     }
   };
 
@@ -490,7 +495,7 @@ export default function MapHeader({
                   className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors"
                   onClick={() => { setShowUserMenu(false); handleRefresh(); }}
                 >
-                  <RefreshCw className="w-3.5 h-3.5" />
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
                   Atualizar Dados
                 </button>
                 <button

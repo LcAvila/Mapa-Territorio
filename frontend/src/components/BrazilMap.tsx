@@ -1,5 +1,5 @@
-import { RotateCcw, Loader, Layers } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { RotateCcw, Loader, Layers, Wind } from "lucide-react";
+import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import { useEffect, useCallback, useRef, useState, useMemo } from "react";
 import {
   MapContainer, TileLayer, GeoJSON, useMap,
@@ -271,6 +271,112 @@ function HeatmapLayer({ points }: { points: [number, number, number][] }) {
 
 
 
+// ─── Wind Animation Overlay ──────────────────────────────────────────────────
+function WindZoomAnimation() {
+  const map = useMap();
+  const [zoomType, setZoomType] = useState<'in' | 'out' | null>(null);
+  const lastZoomRef = useRef(map.getZoom());
+
+  useEffect(() => {
+    // zoomstart é disparado no INÍCIO da animação do Leaflet
+    const handleZoomStart = () => {
+      // Infelizmente o Leaflet não nos dá o zoom de destino no zoomstart facilmente.
+      // Mas para flyTo e flyToBounds (zoom automático), podemos detectar a intenção.
+      // Como alternativa robusta, vamos escutar 'zoomstart' e tentar inferir 
+      // ou apenas disparar a animação visual que dura o tempo do flyTo.
+      
+      // Para fins de animação durante o zoom, o ideal é detectar a mudança de zoom 
+      // assim que ela começa.
+      const currentZoom = map.getZoom();
+      
+      // Como o zoomstart acontece ANTES da mudança, usamos um pequeno hack:
+      // Se o mapa está animando (flyTo), o zoom final será diferente.
+      // Para simplificar e garantir que aconteça DURANTE, vamos usar 'zoomstart'.
+      // Mas para saber se é IN ou OUT no início, precisamos de uma referência externa.
+      
+      // Melhor abordagem: Escutar 'movestart' e checar se há animação de zoom.
+    };
+
+    const handleZoomAnim = (e: L.LeafletEvent) => {
+      const zoomEvent = e as any;
+      if (zoomEvent.zoom > lastZoomRef.current) {
+        setZoomType('in');
+      } else if (zoomEvent.zoom < lastZoomRef.current) {
+        setZoomType('out');
+      }
+      lastZoomRef.current = zoomEvent.zoom;
+      
+      const timer = setTimeout(() => setZoomType(null), 1200);
+      return () => clearTimeout(timer);
+    };
+
+    // 'zoomanim' é disparado frame a frame durante o flyTo/zoom animado
+    map.on('zoomanim', handleZoomAnim);
+    
+    return () => {
+      map.off('zoomanim', handleZoomAnim);
+    };
+  }, [map]);
+
+  return (
+    <AnimatePresence>
+      {zoomType && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 pointer-events-none z-[10000] flex items-center justify-center overflow-hidden"
+        >
+          {/* Create multiple wind lines */}
+          {[...Array(12)].map((_, i) => (
+            <motion.div
+              key={i}
+              initial={zoomType === 'in' ? { 
+                scale: 0.5, 
+                opacity: 0,
+                x: (Math.random() - 0.5) * 200,
+                y: (Math.random() - 0.5) * 200,
+                rotate: Math.random() * 360
+              } : { 
+                scale: 2, 
+                opacity: 0,
+                x: (Math.random() - 0.5) * 1000,
+                y: (Math.random() - 0.5) * 1000,
+                rotate: Math.random() * 360
+              }}
+              animate={{ 
+                scale: zoomType === 'in' ? 3 : 0.2,
+                opacity: [0, 0.5, 0],
+                x: zoomType === 'in' ? (Math.random() - 0.5) * 2000 : 0,
+                y: zoomType === 'in' ? (Math.random() - 0.5) * 2000 : 0,
+              }}
+              transition={{ 
+                duration: 0.8, 
+                ease: "easeOut",
+                delay: Math.random() * 0.2 
+              }}
+              className="absolute"
+            >
+              <Wind 
+                size={40 + Math.random() * 60} 
+                className="text-primary/30 blur-[1px]" 
+                strokeWidth={1}
+              />
+            </motion.div>
+          ))}
+          
+          {/* Radial "Speed Lines" effect */}
+          <motion.div 
+            initial={{ scale: zoomType === 'in' ? 0.8 : 1.2, opacity: 0 }}
+            animate={{ scale: zoomType === 'in' ? 1.5 : 0.5, opacity: [0, 0.2, 0] }}
+            className="absolute inset-0 border-[40px] border-primary/10 rounded-full blur-3xl"
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 // ─── Main BrazilMap Component ─────────────────────────────────────────────────
 export default function BrazilMap({
   selectedUF, modo, filtroUsuario, mostrarVagos,
@@ -370,11 +476,11 @@ export default function BrazilMap({
     const hideSelection = isMapMoving && isSelected;
 
     return {
-      fillColor: isSelected ? "hsl(168, 60%, 40%)" : "transparent",
-      weight: isSelected ? 2.5 : 1.5,
+      fillColor: isSelected ? "hsl(168, 60%, 40%)" : "hsl(168, 60%, 40%)",
+      weight: isSelected ? 2.5 : 1.2,
       opacity: 1,
       color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : "hsl(168, 70%, 65%)",
-      fillOpacity: isSelected ? 0.2 : 0.05,
+      fillOpacity: isSelected ? 0.3 : 0.1,
       dashArray: isSelected ? undefined : "4 3",
     };
   }, [selectedNeighborhood, isMapMoving]);
@@ -677,6 +783,9 @@ export default function BrazilMap({
           onMoveStart={() => setIsMapMoving(true)}
           onMoveEnd={() => setIsMapMoving(false)}
         />
+        {/* Wind Animation Overlay */}
+        <WindZoomAnimation />
+
         <MapEventHandler
           onBackgroundClick={() => {
             if (clientContextMenu) setClientContextMenu(null);
@@ -740,28 +849,29 @@ export default function BrazilMap({
 
         {/* Municipalities layer (Level 2) - Always show when a state is selected */}
         {municipiosGeo && selectedUF && (
-          <GeoJSON
-            key={`muns-${selectedUF}-${modo}-${filtroUsuario}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}-${citiesList.length}`}
-            data={municipiosGeo}
-            style={municipioStyle}
-            onEachFeature={onEachMunicipio}
-            interactive={true}
-          />
-        )}
-
-        {/* Bairros layer (Level 3) - Strict Hierarchy: Only when municipality is selected and active */}
-        {municipioCodeForBairros && selectedMunicipioCode && String(municipioCodeForBairros) === String(selectedMunicipioCode) && (
-          <Pane name="bairrosPane" style={{ zIndex: 450, pointerEvents: 'auto' }}>
-            {/* Show selected municipality boundary */}
-            {municipiosGeo && selectedUF && (
+          <Pane name="municipiosPane" style={{ zIndex: 400 }}>
+            <GeoJSON
+              key={`muns-${selectedUF}-${modo}-${filtroUsuario}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}-${citiesList.length}`}
+              data={municipiosGeo}
+              style={municipioStyle}
+              onEachFeature={onEachMunicipio}
+              interactive={true}
+            />
+            {/* Destaque do Município Selecionado (Sempre visível se selecionado) */}
+            {(selectedMunicipioCode || selectedMunicipioName) && (
               <GeoJSON
-                key={`muns-bg-${municipioCodeForBairros}`}
+                key={`muns-highlight-${selectedMunicipioCode || selectedMunicipioName}`}
                 data={municipiosGeo}
                 style={targetMunicipioStyle}
                 interactive={false}
               />
             )}
+          </Pane>
+        )}
 
+        {/* Bairros layer (Level 3) - Strict Hierarchy: Only when municipality is selected and active */}
+        {municipioCodeForBairros && selectedMunicipioCode && String(municipioCodeForBairros) === String(selectedMunicipioCode) && (
+          <Pane name="bairrosPane" style={{ zIndex: 450, pointerEvents: 'auto' }}>
             {/* Neighborhood polygons - Only render if we have a reasonable amount of features or high zoom */}
             {neighborhoodsGeo && (
               <GeoJSON
@@ -839,9 +949,9 @@ export default function BrazilMap({
                   interactive={true}
                   eventHandlers={{
                     click: (e) => {
-                      L.DomEvent.stopPropagation(e);
+                      L.DomEvent.stopPropagation(e.originalEvent);
                       // Previne o dblclick nativo do Leaflet de disparar zoom indesejado ao clicar no marcador
-                      L.DomEvent.preventDefault(e);
+                      L.DomEvent.preventDefault(e.originalEvent);
                       
                       if (clientContextMenu) setClientContextMenu(null);
                       const isCtrl = e.originalEvent.ctrlKey;
@@ -860,11 +970,11 @@ export default function BrazilMap({
                     },
                     dblclick: (e) => {
                       // Mata explicitamente o zoom por clique duplo no marcador
-                      L.DomEvent.stopPropagation(e);
-                      L.DomEvent.preventDefault(e);
+                      L.DomEvent.stopPropagation(e.originalEvent);
+                      L.DomEvent.preventDefault(e.originalEvent);
                     },
                     contextmenu: (e) => {
-                      L.DomEvent.stopPropagation(e);
+                      L.DomEvent.stopPropagation(e.originalEvent);
                       e.originalEvent.preventDefault();
                       setClientContextMenu({
                         client: cliente,
