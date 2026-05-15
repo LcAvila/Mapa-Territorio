@@ -23,79 +23,60 @@ interface Notification {
   targetAll?: boolean;
   targetUserIds?: number[] | null;
   createdAt: string;
+  seen?: boolean; // Propriedade vinda do servidor
 }
 
 export default function NotificationSystem() {
   const { userId, token, tokenVersion } = useAuth();
   const [currentNotification, setCurrentNotification] = useState<Notification | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [sessionSeenIds, setSessionSeenIds] = useState<number[]>([]);
   const currentUserId = userId || Number(localStorage.getItem('userId') || 0) || null;
-  const seenKey = currentUserId ? `seen_notifications_user_${currentUserId}` : 'seen_notifications_guest';
 
-  const isNotificationForCurrentUser = (notif: Notification): boolean => {
-    if (!notif) return false;
-    if (notif.targetAll) return true;
-    
-    // Se não for para todos, precisamos do ID do usuário logado
-    if (!currentUserId) return false;
-
-    // Trata o campo targetUserIds que pode vir do Supabase Realtime como JSON string ou Array
-    let targetIds: number[] = [];
+  const markSeenOnServer = async (id: number) => {
+    if (!token) return;
     try {
-      const raw = notif.targetUserIds;
-      if (Array.isArray(raw)) {
-        targetIds = raw.map(id => Number(id));
-      } else if (typeof raw === 'string') {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          targetIds = parsed.map(id => Number(id));
-        }
+      const res = await fetch(`${API_BASE_URL}/api/notifications/${id}/seen`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (res.ok) {
+        console.log(`[NOTIF] Marked ${id} as seen on server`);
       }
-    } catch (e) {
-      console.error('Erro ao processar targetUserIds:', e);
-    }
-
-    return targetIds.includes(currentUserId);
-  };
-
-  const wasSeen = (id: number): boolean => {
-    try {
-      const seen = JSON.parse(localStorage.getItem(seenKey) || '[]') as number[];
-      return seen.includes(id);
-    } catch {
-      return false;
-    }
-  };
-
-  const markSeen = (id: number) => {
-    try {
-      const seen = JSON.parse(localStorage.getItem(seenKey) || '[]') as number[];
-      if (seen.includes(id)) return;
-      const updated = [id, ...seen].slice(0, 200);
-      localStorage.setItem(seenKey, JSON.stringify(updated));
-    } catch {
-      localStorage.setItem(seenKey, JSON.stringify([id]));
+    } catch (error) {
+      console.error('Error marking as seen on server:', error);
     }
   };
 
   const openModalForNotification = (notif: Notification) => {
-    // Evita abrir a mesma notificação múltiplas vezes
+    // Evita abrir a mesma notificação múltiplas vezes na mesma sessão
+    if (sessionSeenIds.includes(notif.id)) return;
     if (currentNotification?.id === notif.id && isOpen) return;
     
     setCurrentNotification(notif);
     setIsOpen(true);
-    markSeen(notif.id);
+    
+    // Adiciona ao bloqueio de sessão para não reabrir enquanto não fechar ou se já foi exibida
+    setSessionSeenIds(prev => [...prev, notif.id]);
     
     // Alerta sonoro visual via Toast além do Modal
-    toast.info(`Novo Alerta: ${notif.title}`, {
-      description: 'Clique para ler os detalhes',
+    toast.info(`${notif.title}`, {
+      description: 'Clique para ler os detalhes importantes',
       action: {
         label: 'Ver Agora',
         onClick: () => setIsOpen(true)
       },
-      duration: 10000,
-      icon: <Bell className="w-4 h-4 text-primary" />
+      duration: 15000,
+      icon: <div className="p-1 bg-primary/20 rounded-full"><Bell className="w-4 h-4 text-primary animate-pulse" /></div>
     });
+  };
+
+  const isNotificationForCurrentUser = (n: Notification) => {
+    if (n.targetAll) return true;
+    if (!currentUserId || !n.targetUserIds) return false;
+    return n.targetUserIds.map((id) => Number(id)).includes(currentUserId);
   };
 
   const fetchLatestNotification = async () => {
@@ -111,7 +92,8 @@ export default function NotificationSystem() {
       });
       if (!res.ok) return;
       const data = (await res.json()) as Notification[];
-      const candidate = data.find((n) => isNotificationForCurrentUser(n) && !wasSeen(n.id));
+      // Busca a primeira notificação que o usuário ainda não viu (baseado no campo 'seen' do servidor)
+      const candidate = data.find((n) => isNotificationForCurrentUser(n) && !n.seen);
       if (candidate) {
         openModalForNotification(candidate);
       }
@@ -121,60 +103,25 @@ export default function NotificationSystem() {
   };
 
   useEffect(() => {
-    if (!currentUserId || !token) return;
-
-    console.log('[REALTIME] Iniciando escuta para usuário:', currentUserId);
-
-    // Listen for new notifications in real-time
-    const channel = supabase
-      .channel(`user-notifications-${currentUserId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-        },
-        (payload) => {
-          console.log('[REALTIME] Nova linha inserida na tabela:', payload);
-          const newNotif = payload.new as Notification;
-          
-          if (isNotificationForCurrentUser(newNotif)) {
-            console.log('[REALTIME] Notificação válida para este usuário, abrindo modal...');
-            if (!wasSeen(newNotif.id)) {
-              openModalForNotification(newNotif);
-            }
-          } else {
-            console.log('[REALTIME] Notificação ignorada (não é para este usuário)');
-          }
-        }
-      )
-      .subscribe((status) => {
-        console.log('[REALTIME] Status da subscrição:', status);
-      });
-
-    return () => {
-      console.log('[REALTIME] Removendo canal de escuta');
-      supabase.removeChannel(channel);
-    };
-  }, [currentUserId, seenKey]);
-
-  useEffect(() => {
-    if (!token || !currentUserId) return;
-
-    // First sync as soon as auth/session is ready
     fetchLatestNotification();
 
+    // Polling opcional a cada 2 minutos para novas notificações
+    const interval = setInterval(fetchLatestNotification, 120000);
+    
     // Hard fallback para sincronização apenas ao focar na aba
     const onFocus = () => { fetchLatestNotification(); };
     window.addEventListener('focus', onFocus);
 
     return () => {
+      clearInterval(interval);
       window.removeEventListener('focus', onFocus);
     };
-  }, [token, tokenVersion, currentUserId, seenKey]);
+  }, [token, tokenVersion, currentUserId]);
 
   const handleClose = () => {
+    if (currentNotification) {
+      markSeenOnServer(currentNotification.id);
+    }
     setIsOpen(false);
     setTimeout(() => setCurrentNotification(null), 300);
   };
@@ -186,42 +133,70 @@ export default function NotificationSystem() {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto border-t-4 border-t-primary animate-in fade-in zoom-in duration-300">
-        <DialogHeader>
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 bg-primary/10 rounded-full">
-              <Bell className="w-5 h-5 text-primary animate-bounce" />
+      <DialogContent className="sm:max-w-[650px] max-h-[90vh] p-0 overflow-hidden border-none bg-background shadow-2xl animate-in fade-in zoom-in duration-300 z-[5001]">
+        <div className="flex flex-col h-full bg-background relative z-[5002]">
+          {/* Faixa decorativa no topo */}
+          <div className="h-2 w-full bg-primary/80" />
+        
+        <div className="p-6 sm:p-8 overflow-y-auto custom-scrollbar">
+          <DialogHeader className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-primary/10 rounded-xl shadow-inner">
+                  <Bell className="w-6 h-6 text-primary animate-bounce" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/70 block">Notificação Importante</span>
+                  <DialogTitle className="text-2xl sm:text-3xl font-black text-foreground tracking-tight leading-none mt-1">
+                    {currentNotification.title}
+                  </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    Alerta do sistema enviado por {currentNotification.senderName || 'Sistema'}.
+                  </DialogDescription>
+                </div>
+              </div>
             </div>
-            <span className="text-xs font-bold uppercase tracking-wider text-primary">Novo Alerta do Sistema</span>
-          </div>
-          <DialogTitle className="text-2xl font-extrabold text-foreground">
-            {currentNotification.title}
-          </DialogTitle>
-          <div className="flex flex-col gap-1 mt-1">
-            <DialogDescription className="text-xs font-semibold text-primary/80 flex items-center gap-1">
-              <User className="w-3 h-3" />
-              Remetente: {currentNotification.senderName || 'Sistema'}
-            </DialogDescription>
-            <DialogDescription className="text-[10px] opacity-60 flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              Enviado em {new Date(currentNotification.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-            </DialogDescription>
-          </div>
-        </DialogHeader>
 
-        <div className="my-6 prose prose-sm dark:prose-invert max-w-none">
-          {/* Renderizing the rich text content */}
-          <div 
-            className="ql-editor !p-0" 
-            dangerouslySetInnerHTML={{ __html: sanitizedContent }} 
-          />
+            <div className="flex flex-wrap items-center gap-4 py-3 border-y border-border/40">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/50 rounded-lg border border-border/40">
+                <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
+                  <User className="w-3 h-3 text-primary" />
+                </div>
+                <span className="text-xs font-bold text-foreground/80">
+                  {currentNotification.senderName || 'Sistema'}
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Clock className="w-3.5 h-3.5" />
+                <span className="text-[11px] font-medium">
+                  {new Date(currentNotification.createdAt).toLocaleString('pt-BR', { 
+                    day: '2-digit', month: 'long', year: 'numeric', 
+                    hour: '2-digit', minute: '2-digit' 
+                  })}
+                </span>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="mt-8 mb-4">
+            <div 
+              className="ql-editor !p-0 text-sm sm:text-base leading-relaxed text-foreground/90 selection:bg-primary/20" 
+              dangerouslySetInnerHTML={{ __html: sanitizedContent }} 
+            />
+          </div>
         </div>
 
-        <DialogFooter className="sm:justify-end gap-2 border-t pt-4">
-          <Button type="button" onClick={handleClose} className="bg-primary hover:bg-primary/90 text-white font-bold px-8">
-            Entendido
+        <DialogFooter className="p-4 bg-secondary/20 border-t border-border/40 sm:justify-end">
+          <Button 
+            type="button" 
+            onClick={handleClose} 
+            className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-white font-bold uppercase tracking-wider px-6 h-9 text-[10px] rounded-lg shadow-sm transition-all active:scale-95"
+          >
+            Entendido, li a mensagem
           </Button>
         </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

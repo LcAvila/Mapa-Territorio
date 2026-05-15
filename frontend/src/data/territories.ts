@@ -24,15 +24,20 @@ export const allTerritories: TerritoryAssignment[] = [];
 export const allBairros: BairroAssignment[] = [];
 
 // Helper functions now accept a data array parameter (passed in from API data)
+const normalize = (s: string) => 
+  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+
 export function getMunicipioResponsaveis(
   municipio: string,
   uf: string,
   modo: "planejamento" | "atendimento",
   territories: TerritoryAssignment[] = []
 ): number[] {
+  const targetMun = normalize(municipio);
   return territories
     .filter(t =>
-      t.municipio.toLowerCase() === municipio.toLowerCase() &&
+      t.municipio &&
+      normalize(t.municipio) === targetMun &&
       t.uf === uf &&
       t.modo === modo &&
       t.userId !== undefined

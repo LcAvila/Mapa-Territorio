@@ -26,6 +26,7 @@ interface BrazilMapProps {
   selectedUF: string | null;
   modo: "planejamento" | "atendimento";
   filtroUsuario: string | null;
+  assignedStates?: string[];
   mostrarVagos: boolean;
   onSelectUF: (uf: string) => void;
   onSearchEnter?: (q: string) => void;
@@ -39,6 +40,7 @@ interface BrazilMapProps {
   selectedMunicipioName?: string | null;
   showClientes: boolean;
   showHeatmap: boolean;
+  showUsuarios?: boolean;
   onContextMenuState?: (nome: string, uf: string, x: number, y: number) => void;
   onContextMenuMunicipio?: (nome: string, uf: string, x: number, y: number) => void;
   flyToLocation?: { center: [number, number]; zoom: number } | null;
@@ -380,9 +382,10 @@ function WindZoomAnimation() {
 
 // ─── Main BrazilMap Component ─────────────────────────────────────────────────
 export default function BrazilMap({
-  selectedUF, modo, filtroUsuario, mostrarVagos,
+  selectedUF, modo, filtroUsuario, assignedStates = [], mostrarVagos,
   onSelectUF, onSelectMunicipio, searchQuery,
   municipioCodeForBairros, selectedMunicipioCode, onDeactivateBairros, selectedMunicipioName, showClientes, showHeatmap,
+  showUsuarios,
   onContextMenuState, onContextMenuMunicipio,
   flyToLocation, searchResultGeo,
   selectedClients = [], onSelectClients, onResetMap, onZoomToLocation
@@ -394,37 +397,43 @@ export default function BrazilMap({
   const { data: apiTerritories = [] } = useApiTerritories(!!token);
   const queryClient = useQueryClient();
 
+  const filteredStatesGeo = useMemo(() => {
+    if (!statesGeo) return null;
+    if (role === 'admin' || assignedStates.length === 0) return statesGeo;
+    
+    return {
+      ...statesGeo,
+      features: (statesGeo.features as GeoJSONFeature[]).filter(f => {
+        const uf = getUFByCode(Number(f?.properties?.codarea));
+        return uf && assignedStates.includes(uf.sigla);
+      })
+    } as GeoJSONFeatureCollection;
+  }, [statesGeo, assignedStates, role]);
+
   const handleClaimMunicipio = useCallback(async (municipio: string, uf: string) => {
     if (!token) return;
     
-    // Check if already claimed
-    const userIds = getMunicipioResponsaveis(municipio, uf, modo, apiTerritories);
-    if (userIds.length > 0) {
-      toast.error('Este município já possui um responsável.');
-      return;
-    }
-
     try {
-      const res = await fetch(`${API_BASE}/api/admin/territories/claim`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/territories/claim`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ municipio, uf })
+        body: JSON.stringify({ municipio, uf, modo })
       });
 
       if (res.ok) {
-        toast.success(`Município ${municipio} reivindicado com sucesso!`);
-        queryClient.invalidateQueries({ queryKey: ['territories'] });
+        toast.success(`Você agora é responsável por ${municipio}!`);
+        queryClient.invalidateQueries({ queryKey: ["api", "territories"] });
       } else {
         const err = await res.json();
-        toast.error(err.message || 'Erro ao reivindicar município');
+        toast.error(err.message || 'Erro ao reivindicar município.');
       }
     } catch (error) {
-      toast.error('Erro de conexão ao reivindicar município');
+      toast.error('Erro de conexão ao reivindicar município.');
     }
-  }, [token, apiTerritories, modo, queryClient]);
+  }, [token, queryClient, modo]);
 
   // If the logged-in user is not admin, always show their clients; otherwise use the admin filter
   const effectiveUserFilter = role !== 'admin' ? loggedUserId : (filtroUsuario || null);
@@ -527,6 +536,25 @@ export default function BrazilMap({
     const isSelected = uf && selectedUF === uf.sigla;
     const hideSelection = isMapMoving && isSelected;
 
+    // If showUsuarios is active, show state color based on assignments
+    if (showUsuarios && uf) {
+      const stateTerritories = apiTerritories.filter(t => t.uf === uf.sigla);
+      if (stateTerritories.length > 0) {
+        // Get the color of the first user found in this state
+        const firstUserId = stateTerritories[0].userId;
+        const user = firstUserId ? getUserById(firstUserId, apiUsers) : null;
+        const color = user ? getUserColor(user) : "hsl(210, 80%, 40%)";
+
+        return {
+          fillColor: color,
+          weight: isSelected ? 2 : 1.5,
+          opacity: 1,
+          color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : color,
+          fillOpacity: 0.4,
+        };
+      }
+    }
+
     return {
       fillColor: isSelected ? "hsl(168, 70%, 45%)" : "hsl(220, 15%, 25%)",
       weight: isSelected ? 2 : 1.5,
@@ -534,7 +562,7 @@ export default function BrazilMap({
       color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : "hsl(220, 15%, 35%)",
       fillOpacity: isSelected ? 0.15 : 0.6,
     };
-  }, [selectedUF, isMapMoving]);
+  }, [selectedUF, isMapMoving, showUsuarios, apiTerritories, apiUsers]);
 
   const municipioStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
@@ -568,12 +596,15 @@ export default function BrazilMap({
 
     if (userIds.length === 0) return blank;
     
-    const filterIds = filtroUsuario ? filtroUsuario.split(',').map(id => Number(id.trim())) : [];
-    const matchedUserId = filterIds.length > 0 
-      ? userIds.find(id => filterIds.includes(id))
+    // Only show user colors if the "Usuarios" filter is active or a specific user filter is set
+    if (!showUsuarios && !filtroUsuario) return blank;
+
+    // If showUsuarios is active, always show the color of the first user
+    const matchedUserId = (showUsuarios || filtroUsuario) 
+      ? (filtroUsuario ? userIds.find(id => filtroUsuario.split(',').map(f => Number(f.trim())).includes(id)) : userIds[0])
       : userIds[0];
 
-    if (filterIds.length > 0 && !matchedUserId) {
+    if (filtroUsuario && !matchedUserId && !showUsuarios) {
       return { fillColor: "hsl(220, 15%, 15%)", weight: 0.5, opacity: 0.3, color: "hsl(220, 15%, 20%)", fillOpacity: 0.2 };
     }
 
@@ -587,10 +618,10 @@ export default function BrazilMap({
     return {
       fillColor: color, weight: user.isVago ? 2 : 1.5, opacity: 1,
       color: user.isVago ? "hsl(0, 70%, 50%)" : color,
-      fillOpacity: user.isVago ? 0.3 : 0.55,
+      fillOpacity: (showUsuarios || (filtroUsuario && matchedUserId)) ? 0.8 : (user.isVago ? 0.3 : 0.55),
       dashArray: user.isVago ? "6 4" : undefined,
     };
-  }, [citiesList, municipioNamesByCode, selectedUF, modo, filtroUsuario, mostrarVagos, searchQuery, apiTerritories, apiUsers, selectedClients]);
+  }, [citiesList, municipioNamesByCode, selectedUF, modo, filtroUsuario, mostrarVagos, searchQuery, apiTerritories, apiUsers, selectedClients, showUsuarios]);
 
   const stateOutlineStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
@@ -660,7 +691,12 @@ export default function BrazilMap({
 
     (layer as L.Path).on({
       mouseover: (e) => {
-        e.target.setStyle({ color: 'hsl(var(--admin-sidebar-accent))', fillOpacity: 0.3, weight: 2.5 });
+        const currentStyle = stateStyle(f);
+        e.target.setStyle({ 
+          color: 'hsl(var(--admin-sidebar-accent))', 
+          fillOpacity: Math.max(0.3, currentStyle.fillOpacity + 0.1), 
+          weight: 2.5 
+        });
         e.target.bindTooltip(uf.nome, { sticky: true }).openTooltip();
       },
       mouseout: (e) => {
@@ -690,20 +726,36 @@ export default function BrazilMap({
     const userIds = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
 
     // Role-based restrictions mapping
-    let tooltipHtml = '';
-    if (role === 'user' && estado_end && selectedUF !== estado_end) {
-      if (userIds.length > 0) {
-        const hasVago = userIds.some(id => getUserById(id, apiUsers)?.isVago);
-        tooltipHtml = `<strong>${name}</strong><br/>${hasVago ? '<em>Vago</em>' : '<em>Ocupado</em>'}`;
-      } else {
-        tooltipHtml = `<strong>${name}</strong><br/><em>Sem responsável</em>`;
-      }
-    } else {
-      const userNames = userIds.map(id => { const u = getUserById(id, apiUsers); return u ? `${u.username} - ${u.full_name || u.fullName}` : `ID: ${id}`; });
-      tooltipHtml = userIds.length > 0
-        ? `<strong>${name}</strong><br/>${userNames.join("<br/>")}`
-        : `<strong>${name}</strong><br/><em>Sem responsável</em>`;
-    }
+    const userDetails = userIds.map(id => {
+      const u = getUserById(id, apiUsers);
+      if (!u) return `ID: ${id}`;
+      return `${u.username} - ${u.full_name || u.fullName}`;
+    });
+
+    const tooltipHtml = `
+      <div class="p-2 space-y-1.5 min-w-[180px] text-slate-900">
+        <div class="flex items-center justify-between gap-2 border-b border-slate-200 pb-1.5 mb-1">
+          <span class="font-bold text-sm text-primary-foreground bg-primary px-2 py-0.5 rounded">${name}</span>
+          <span class="text-[10px] font-bold text-slate-500">${selectedUF}</span>
+        </div>
+        ${userIds.length > 0 ? `
+          <div class="space-y-1.5">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Responsáveis</p>
+            ${userDetails.map(detail => `
+              <p class="text-[11px] font-bold text-slate-800 flex items-center gap-2 leading-tight">
+                <span class="w-2 h-2 rounded-full bg-primary shrink-0"></span>
+                ${detail}
+              </p>
+            `).join("")}
+          </div>
+        ` : `
+          <p class="text-xs text-slate-500 italic font-medium">Sem responsável atribuído</p>
+        `}
+        <div class="pt-1.5 mt-1 border-t border-slate-100">
+          <p class="text-[9px] text-slate-400 font-bold leading-tight italic">Clique duplo para reivindicar este território.</p>
+        </div>
+      </div>
+    `;
 
     if (layer instanceof L.Path) {
       const el = layer.getElement();
@@ -712,7 +764,12 @@ export default function BrazilMap({
 
     (layer as L.Path).on({
       mouseover: (e) => {
-        e.target.setStyle({ color: 'hsl(var(--admin-sidebar-accent))', fillOpacity: 0.6, weight: 3 });
+        const currentStyle = municipioStyle(f);
+        e.target.setStyle({ 
+          color: 'hsl(var(--admin-sidebar-accent))', 
+          fillOpacity: Math.min(0.8, currentStyle.fillOpacity + 0.2), 
+          weight: 3 
+        });
         e.target.bindTooltip(tooltipHtml, { sticky: true }).openTooltip();
       },
       mouseout: (e) => {
@@ -724,17 +781,22 @@ export default function BrazilMap({
         const ibgeCode = Number(codArea);
         onSelectMunicipio(name, selectedUF, Number.isFinite(ibgeCode) ? ibgeCode : undefined);
       },
+      dblclick: (e: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(e);
+        handleClaimMunicipio(name, selectedUF);
+      },
       contextmenu: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
         e.originalEvent.preventDefault();
-        
+
         // Double right-click detection
         const now = Date.now();
         const lastClick = (layer as any)._lastRightClick || 0;
-        
+
         if (now - lastClick < 500) {
           handleClaimMunicipio(name, selectedUF);
           (layer as any)._lastRightClick = 0; // Reset
+          onContextMenuMunicipio?.("", "", 0, 0); // Close menu if open (hack using empty params)
         } else {
           (layer as any)._lastRightClick = now;
           onContextMenuMunicipio?.(name, selectedUF, e.originalEvent.clientX, e.originalEvent.clientY);
@@ -816,8 +878,8 @@ export default function BrazilMap({
         zoomControl={true}
         scrollWheelZoom={true}
         dragging={true}
-        doubleClickZoom={true}
-        boxZoom={true}
+        doubleClickZoom={false}
+      boxZoom={true}
         keyboard={true}
         attributionControl={false}
         style={{ background: "hsl(220, 20%, 8%)" }}
@@ -872,21 +934,21 @@ export default function BrazilMap({
         )}
 
         {/* States layer (Level 1) */}
-          {statesGeo && !selectedUF && (
+          {filteredStatesGeo && !selectedUF && (
             <Pane name="basePane" style={{ zIndex: 100 }}>
               <GeoJSON 
-                key={`states-${statesMetadata?.length || 0}`} 
-                data={statesGeo} 
+                key={`states-${assignedStates.join(',')}-${statesMetadata?.length || 0}-${showUsuarios}-${apiTerritories.length}`} 
+                data={filteredStatesGeo} 
                 style={stateStyle} 
                 onEachFeature={onEachState} 
               />
             </Pane>
           )}
-          {statesGeo && selectedUF && (
+          {filteredStatesGeo && selectedUF && (
             <Pane name="basePane" style={{ zIndex: 100 }}>
               <GeoJSON 
                 key={`states-outline-${selectedUF}`} 
-                data={statesGeo} 
+                data={filteredStatesGeo} 
                 style={stateOutlineStyle} 
                 interactive={false}
               />
@@ -897,7 +959,7 @@ export default function BrazilMap({
         {municipiosGeo && selectedUF && (
           <Pane name="municipiosPane" style={{ zIndex: 400 }}>
             <GeoJSON
-              key={`muns-${selectedUF}-${modo}-${filtroUsuario}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}-${citiesList.length}`}
+              key={`muns-${selectedUF}-${modo}-${filtroUsuario}-${showUsuarios}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}-${citiesList.length}`}
               data={municipiosGeo}
               style={municipioStyle}
               onEachFeature={onEachMunicipio}

@@ -60,6 +60,7 @@ model User {
   territories       Territory[]           @relation("UserTerritories")
   activities        UserActivity[]
   permissions       UserPermission[]
+  notificationsSeen NotificationSeen[]
   group             Group?                @relation(fields: [groupId], references: [id])
   userType          UserType?             @relation(fields: [userTypeId], references: [id])
   managedUsers      User[]                @relation("UserManagement")
@@ -556,15 +557,28 @@ model FeedReaction {
 }
 
 model Notification {
-  id            Int      @id @default(autoincrement())
+  id            Int                @id @default(autoincrement())
   title         String
   message       String
-  createdAt     DateTime @default(now())
-  targetAll     Boolean  @default(true)
+  createdAt     DateTime           @default(now())
+  targetAll     Boolean            @default(true)
   targetUserIds Json?
-  senderName    String?  @default("Sistema")
+  senderName    String?            @default("Sistema")
+  seenByUsers   NotificationSeen[]
 
   @@map("notifications")
+}
+
+model NotificationSeen {
+  id             Int          @id @default(autoincrement())
+  notificationId Int
+  userId         Int
+  seenAt         DateTime     @default(now())
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, userId])
+  @@map("notification_seen")
 }
 
 model UserType {

@@ -10,7 +10,10 @@ RUN npm install
 COPY . .
 RUN npx prisma generate
 # Inicialização com migrações e rodando em modo dev
-CMD npx prisma migrate deploy && npm run dev
+# Usamos timeout de 10s para a migração para não travar o boot em redes restritas
+CMD npx prisma generate && \
+    (timeout 10s npx prisma migrate deploy || echo "⚠️ Migração ignorada (timeout ou erro de rede)") && \
+    npm run dev
 
 # STAGE 3: Build (Produção)
 FROM base AS build

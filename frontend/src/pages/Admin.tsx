@@ -115,7 +115,7 @@ interface UserType {
 }
 
 interface Group { id: string; name: string; userIds: number[]; createdAt: string; }
-interface SystemNotification { id: number; title: string; message: string; createdAt: string; targetAll?: boolean; targetUserIds?: number[]; }
+interface SystemNotification { id: number; title: string; message: string; createdAt: string; targetAll?: boolean; targetUserIds?: number[]; seen?: boolean; }
 interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; ipAddress?: string; }
 interface ModulePermission { userId: number; moduleId: string; canView: boolean; canEdit: boolean; }
 
@@ -188,7 +188,7 @@ function SearchableSelect({ options, value, onChange, placeholder, disabled = fa
         {loading ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /> : <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />}
       </button>
       {open && (
-        <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-xl overflow-hidden">
+        <div className="absolute z-[10000] w-full mt-1 bg-popover border border-border rounded-md shadow-xl overflow-hidden">
           <div className="p-2 border-b border-border">
             <div className="relative"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <input autoFocus type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Pesquisar..."
@@ -400,14 +400,15 @@ export default function Admin() {
     });
 
     territories.forEach(t => {
-      if (!t.municipio || !t.uf) return;
-      const city = t.municipio.trim();
+      if (!t.uf) return;
+      const city = t.municipio ? t.municipio.trim() : null;
       const uf = t.uf.trim().toUpperCase();
-      const key = `${city}-${uf}`;
+      const key = city ? `${city}-${uf}` : `STATE-${uf}`;
       
       if (!map.has(key)) {
-        map.set(key, { municipio: city, uf, userIds: new Set(), clientCount: 0 });
+        map.set(key, { municipio: city || '', uf, userIds: new Set(), clientCount: 0 });
       }
+      if (t.userId) map.get(key)!.userIds.add(t.userId);
     });
 
     return Array.from(map.values()).map((t, idx) => ({
@@ -417,6 +418,75 @@ export default function Admin() {
       userIds: Array.from(t.userIds),
       clientCount: t.clientCount
     })).sort((a, b) => a.uf.localeCompare(b.uf) || a.municipio.localeCompare(b.municipio));
+  }, [clientes, territories]);
+
+  // ── Computed UF Stats ──────────────────────────────────────────────────
+  const computedUFStats = useMemo(() => {
+    const stats = new globalThis.Map<string, { 
+      uf: string, 
+      nome: string, 
+      userIds: Set<number>, 
+      clientCount: number, 
+      municipios: globalThis.Map<string, { nome: string, userIds: Set<number>, clientCount: number }> 
+    }>();
+    
+    UF_DATA.forEach(uf => {
+      stats.set(uf.sigla, { 
+        uf: uf.sigla, 
+        nome: uf.nome, 
+        userIds: new Set(), 
+        clientCount: 0, 
+        municipios: new globalThis.Map() 
+      });
+    });
+
+    clientes.forEach(c => {
+      if (!c.uf) return;
+      const uf = c.uf.trim().toUpperCase();
+      if (!stats.has(uf)) return;
+      const entry = stats.get(uf)!;
+      entry.clientCount++;
+      if (c.userId) entry.userIds.add(c.userId);
+
+      if (c.cidade) {
+        const city = c.cidade.trim();
+        if (!entry.municipios.has(city)) {
+          entry.municipios.set(city, { nome: city, userIds: new Set(), clientCount: 0 });
+        }
+        const mEntry = entry.municipios.get(city)!;
+        mEntry.clientCount++;
+        if (c.userId) mEntry.userIds.add(c.userId);
+      }
+    });
+
+    territories.forEach(t => {
+      if (!t.uf) return;
+      const uf = t.uf.trim().toUpperCase();
+      if (!stats.has(uf)) return;
+      const entry = stats.get(uf)!;
+      if (t.userId) entry.userIds.add(t.userId);
+
+      if (t.municipio) {
+        const city = t.municipio.trim();
+        if (!entry.municipios.has(city)) {
+          entry.municipios.set(city, { nome: city, userIds: new Set(), clientCount: 0 });
+        }
+        const mEntry = entry.municipios.get(city)!;
+        if (t.userId) mEntry.userIds.add(t.userId);
+      }
+    });
+
+    return Array.from(stats.values())
+      .filter(s => s.userIds.size > 0 || s.clientCount > 0)
+      .map(s => ({
+        ...s,
+        userIds: Array.from(s.userIds),
+        municipios: Array.from(s.municipios.values()).map(m => ({
+          ...m,
+          userIds: Array.from(m.userIds)
+        })).sort((a, b) => a.nome.localeCompare(b.nome))
+      }))
+      .sort((a, b) => a.uf.localeCompare(b.uf));
   }, [clientes, territories]);
 
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
@@ -436,6 +506,8 @@ export default function Admin() {
   const [isDashMapOpen, setIsDashMapOpen] = useState(false);
   const [isTerritoryMapOpen, setIsTerritoryMapOpen] = useState(false);
   const [isTerritoryDetailOpen, setIsTerritoryDetailOpen] = useState(false);
+  const [isUFDetailOpen, setIsUFDetailOpen] = useState(false);
+  const [selectedUFDetail, setSelectedUFDetail] = useState<string | null>(null);
   const [selectedTerritory, setSelectedTerritory] = useState<{
     id: number;
     municipio: string;
@@ -443,6 +515,14 @@ export default function Admin() {
     userIds: number[];
     clientCount: number;
   } | null>(null);
+
+  // Estados para o Modal Detalhado de UF
+  const [isRemovingUser, setIsRemovingUser] = useState(false);
+  const ufDetailData = useMemo(() => {
+    if (!selectedUFDetail) return null;
+    return computedUFStats.find(s => s.uf === selectedUFDetail);
+  }, [selectedUFDetail, computedUFStats]);
+
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
 
   // ── Brand / Personalização ────────────────────────────────────────────────
@@ -478,37 +558,45 @@ export default function Admin() {
     toast.success('Logo removida');
   };
 
-  // ── LocalStorage state ────────────────────────────────────────────────────
-  const [groups, setGroups] = useState<Group[]>(() => LS.get('admin_groups', []));
-  const [notifications, setNotifications] = useState<SystemNotification[]>([]);
-  const [loadingNotifications, setLoadingNotifications] = useState(false);
-  const [seenNotifications, setSeenNotifications] = useState<number[]>(() => {
-    const key = userId ? `seen_notifications_user_${userId}` : 'seen_notifications_guest';
-    return LS.get<number[]>(key, []);
-  });
-
-  const unreadCount = useMemo(() => {
-    return notifications.filter(n => !seenNotifications.includes(n.id)).length;
-  }, [notifications, seenNotifications]);
-
-  const markAllAsSeen = useCallback(() => {
-    if (notifications.length === 0) return;
-    const key = userId ? `seen_notifications_user_${userId}` : 'seen_notifications_guest';
-    const allIds = notifications.map(n => n.id);
-    const updated = Array.from(new Set([...allIds, ...seenNotifications])).slice(0, 500);
-    setSeenNotifications(updated);
-    LS.set(key, updated);
-  }, [notifications, seenNotifications, userId]);
-
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [loadingAudit, setLoadingAudit] = useState(false);
-
   // ── Auth & Permissions ──────────────────────────────────────────────────
   const authHeaders = useMemo(() => ({
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
     'x-user-token-version': String(tokenVersion || 0)
   }), [token, tokenVersion]);
+
+  // ── LocalStorage state ────────────────────────────────────────────────────
+  const [groups, setGroups] = useState<Group[]>(() => LS.get('admin_groups', []));
+  const [notifications, setNotifications] = useState<SystemNotification[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+
+  const unreadCount = useMemo(() => {
+    return notifications.filter(n => !n.seen).length;
+  }, [notifications]);
+
+  const markAllAsSeen = useCallback(async () => {
+    if (notifications.length === 0) return;
+    const unread = notifications.filter(n => !n.seen);
+    if (unread.length === 0) return;
+
+    try {
+      // Mark each unread notification as seen on server
+      await Promise.all(unread.map(n => 
+        fetch(`${API}/api/notifications/${n.id}/seen`, {
+          method: 'POST',
+          headers: authHeaders
+        })
+      ));
+      
+      // Update local state
+      setNotifications(prev => prev.map(n => ({ ...n, seen: true })));
+    } catch (error) {
+      console.error('Error marking all notifications as seen:', error);
+    }
+  }, [notifications, authHeaders]);
+
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [loadingAudit, setLoadingAudit] = useState(false);
 
   const [myPermissions, setMyPermissions] = useState<ModulePermission[]>([]);
   const fetchMyPermissions = useCallback(async () => {
@@ -732,10 +820,16 @@ export default function Admin() {
       .then(res => res.ok ? res.json() : [])
       .then(mods => {
         setAvailableModules(mods);
-        // Initialize default permissions for new user
+        // Default modules to enable: dashboard, clientes, territories, settings
+        const defaultEnabled = ['dashboard', 'clientes', 'territories', 'settings'];
+        
         setNewUser(prev => ({
           ...prev,
-          permissions: mods.map((m: any) => ({ moduleId: m.id, canView: true, canEdit: false }))
+          permissions: mods.map((m: any) => ({ 
+            moduleId: m.id, 
+            canView: defaultEnabled.includes(m.id), 
+            canEdit: false 
+          }))
         }));
       });
   }, [authHeaders]);
@@ -948,7 +1042,7 @@ export default function Admin() {
   const [includeBairro, setIncludeBairro] = useState(false);
   const [selectedBairro, setSelectedBairro] = useState('');
   const [selectedUserForTerritory, setSelectedUserForTerritory] = useState('');
-  const [selectedModo, setSelectedModo] = useState<'planejamento' | 'atendimento'>('planejamento');
+  const [selectedModo, setSelectedModo] = useState<'planejamento' | 'atendimento'>('atendimento');
   const [municipios, setMunicipios] = useState<{ id: number; nome: string }[]>([]);
   const [subdistritos, setSubdistritos] = useState<{ id: number; nome: string }[]>([]);
   const [loadingMunicipios, setLoadingMunicipios] = useState(false);
@@ -1218,19 +1312,43 @@ export default function Admin() {
 
   // ── Territory CRUD ────────────────────────────────────────────────────────
   const handleAddToStaged = () => {
-    if (!selectedUF || !selectedMunicipioName || !selectedUserForTerritory) { toast.error('Selecione estado, município e usuário'); return; }
-    if (staged.find(s => s.municipio === selectedMunicipioName && s.uf === selectedUF && String(s.userId) === selectedUserForTerritory && s.modo === selectedModo)) { toast.warning('Já na lista'); return; }
-    setStaged(prev => [...prev, { municipio: selectedMunicipioName, uf: selectedUF, bairro: includeBairro && selectedBairro ? subdistritos.find(s => String(s.id) === selectedBairro)?.nome : undefined, userId: Number(selectedUserForTerritory), modo: selectedModo }]);
-    setSelectedMunicipio(''); setSelectedMunicipioName(''); setSelectedBairro('');
-    toast.success('Adicionado!');
+    if (!selectedUF || !selectedUserForTerritory) { toast.error('Selecione ao menos o estado e o usuário'); return; }
+    
+    const municipioLabel = selectedMunicipioName || 'Estado Inteiro';
+    if (staged.find(s => s.municipio === (selectedMunicipioName || null) && s.uf === selectedUF && String(s.userId) === selectedUserForTerritory && s.modo === selectedModo)) { 
+      toast.warning('Esta atribuição já está na lista'); 
+      return; 
+    }
+    
+    setStaged(prev => [...prev, { 
+      municipio: selectedMunicipioName || '', // No backend trataremos string vazia como null
+      uf: selectedUF, 
+      bairro: includeBairro && selectedBairro ? subdistritos.find(s => String(s.id) === selectedBairro)?.nome : undefined, 
+      userId: Number(selectedUserForTerritory), 
+      modo: selectedModo 
+    }]);
+    
+    setSelectedMunicipio(''); 
+    setSelectedMunicipioName(''); 
+    setSelectedBairro('');
+    toast.success(`${municipioLabel} adicionado à lista!`);
   };
 
   const handleConfirmStaged = async () => {
     if (!staged.length) { toast.error('Nada para confirmar'); return; }
     let ok = 0, fail = 0;
     for (const item of staged) {
-      const res = await fetch(`${API}/api/admin/territories`, { method: 'POST', headers: authHeaders, body: JSON.stringify({ municipio: item.municipio, uf: item.uf, userId: item.userId, modo: item.modo }) });
-      if (res.ok) { ok++; addAudit('assign_territory', 'Território', item.municipio, `Atribuiu ${item.municipio}/${item.uf} → ${item.userId}`); }
+      const res = await fetch(`${API}/api/admin/territories`, { 
+        method: 'POST', 
+        headers: authHeaders, 
+        body: JSON.stringify({ 
+          municipio: item.municipio || null, 
+          uf: item.uf, 
+          userId: item.userId, 
+          modo: item.modo 
+        }) 
+      });
+      if (res.ok) { ok++; addAudit('assign_territory', 'Território', item.municipio || 'Estado', `Atribuiu ${item.municipio || item.uf}/${item.uf} → ${item.userId}`); }
       else fail++;
     }
     if (ok) toast.success(`${ok} território(s) atribuído(s)!`);
@@ -1242,6 +1360,49 @@ export default function Admin() {
     const res = await fetch(`${API}/api/admin/territories/${id}`, { method: 'DELETE', headers: authHeaders });
     if (res.ok) { toast.success(`${municipio} removido!`); addAudit('delete_territory', 'Território', String(id), `Removeu ${municipio}/${uf}`); fetchAll(); }
     else toast.error('Erro');
+  };
+
+  const handleRemoveUserFromUF = async (uf: string, userId: number) => {
+    // Buscar todas as atribuições (territories) deste usuário para este UF
+    const relatedTerritories = territories.filter(t => t.uf === uf && t.userId === userId);
+    
+    if (relatedTerritories.length === 0) {
+      toast.error('Nenhuma atribuição encontrada para este usuário neste estado.');
+      return;
+    }
+
+    openConfirm(
+      'Remover Usuário do Estado?',
+      `Isso removerá todas as ${relatedTerritories.length} atribuições (municípios e estado) de "${users.find(u => u.id === userId)?.username}" no estado ${uf}.`,
+      async () => {
+        setIsRemovingUser(true);
+        try {
+          let ok = 0;
+          let fail = 0;
+          
+          for (const t of relatedTerritories) {
+            const res = await fetch(`${API}/api/admin/territories/${t.id}`, { 
+              method: 'DELETE', 
+              headers: authHeaders 
+            });
+            if (res.ok) ok++;
+            else fail++;
+          }
+
+          if (ok > 0) {
+            toast.success(`${ok} atribuições removidas com sucesso!`);
+            addAudit('remove_user_from_uf', 'Território', uf, `Removeu usuário ${userId} do estado ${uf} (${ok} locais)`);
+            fetchAll();
+          }
+          if (fail > 0) toast.error(`Falha ao remover ${fail} atribuições.`);
+        } catch (error) {
+          toast.error('Erro de conexão ao remover usuário.');
+        } finally {
+          setIsRemovingUser(false);
+          closeConfirm();
+        }
+      }
+    );
   };
 
   const filteredTerritories = territories.filter(t => {
@@ -1688,7 +1849,7 @@ export default function Admin() {
                   ) : (
                     <div className="divide-y divide-border/30">
                       {notifications.map((n) => {
-                        const isRead = seenNotifications.includes(n.id);
+                        const isRead = n.seen;
                         return (
                           <div key={n.id} className={`group px-5 py-4 transition-all duration-200 ${isRead ? 'opacity-80' : 'bg-primary/[0.02] border-l-2 border-l-primary shadow-[inset_0_0_20px_rgba(var(--primary),0.01)]'}`}>
                             <div className="flex justify-between items-start gap-3">
@@ -2618,11 +2779,11 @@ export default function Admin() {
           {activeTab === 'territories' && (() => {
             const allUFs = [...new Set(computedTerritories.map(t => t.uf))].sort();
 
-            const filteredTerritories = computedTerritories.filter(t => {
-              if (filterUF && filterUF !== 'all' && t.uf !== filterUF) return false;
+            const filteredUFStats = computedUFStats.filter(s => {
+              if (filterUF && filterUF !== 'all' && s.uf !== filterUF) return false;
               if (filterMunicipio) {
                 const q = filterMunicipio.toLowerCase();
-                if (!t.municipio.toLowerCase().includes(q)) return false;
+                if (!s.nome.toLowerCase().includes(q) && !s.uf.toLowerCase().includes(q)) return false;
               }
               return true;
             });
@@ -2641,7 +2802,7 @@ export default function Admin() {
                           <div className="relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
                             <Input 
-                              placeholder="Buscar cidade..." 
+                              placeholder="Buscar estado..." 
                               value={filterMunicipio} 
                               onChange={e => setFilterMunicipio(e.target.value)} 
                               className="h-8 text-xs pl-7 w-32 sm:w-44" 
@@ -2674,10 +2835,10 @@ export default function Admin() {
                       </div>
                     </CardHeader>
                     <CardContent className="p-0 flex-1">
-                      {filteredTerritories.length === 0 ? (
+                      {filteredUFStats.length === 0 ? (
                         <div className="py-16 text-center text-muted-foreground">
                           <MapPin className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                          <p className="text-sm">Nenhum território encontrado</p>
+                          <p className="text-sm">Nenhum estado encontrado</p>
                         </div>
                       ) : (
                         <>
@@ -2686,34 +2847,49 @@ export default function Admin() {
                             <Table>
                               <TableHeader>
                                 <TableRow className="hover:bg-transparent border-border/40">
-                                  <TableHead className="pl-4">Município</TableHead>
+                                  <TableHead className="pl-4">Estado</TableHead>
                                   <TableHead className="w-12">UF</TableHead>
                                   <TableHead className="text-center">Clientes</TableHead>
-                                  <TableHead>Usuários Responsáveis</TableHead>
+                                  <TableHead className="text-center">Usuários</TableHead>
+                                  <TableHead>Responsáveis</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                {filteredTerritories.map(t => (
-                                  <TableRow key={t.id} className="border-border/30 hover:bg-secondary/30">
-                                    <TableCell className="text-xs font-medium pl-4">{t.municipio}</TableCell>
-                                    <TableCell className="text-xs font-mono text-muted-foreground">{t.uf}</TableCell>
+                                {filteredUFStats.map(s => (
+                                  <TableRow 
+                                    key={s.uf} 
+                                    className="border-border/30 hover:bg-primary/5 cursor-pointer transition-colors group"
+                                    onClick={() => { setSelectedUFDetail(s.uf); setIsUFDetailOpen(true); }}
+                                  >
+                                    <TableCell className="text-xs font-bold pl-4 uppercase tracking-wider group-hover:text-primary transition-colors">
+                                      {s.nome}
+                                    </TableCell>
+                                    <TableCell className="text-xs font-mono text-muted-foreground">{s.uf}</TableCell>
                                     <TableCell className="text-center">
                                       <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                                        {t.clientCount}
+                                        {s.clientCount}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                      <span className="text-[10px] font-bold bg-secondary text-muted-foreground px-2 py-0.5 rounded-full border border-border/50">
+                                        {s.userIds.length}
                                       </span>
                                     </TableCell>
                                     <TableCell>
                                       <div className="flex flex-wrap gap-1">
-                                        {t.userIds.length === 0 ? (
+                                        {s.userIds.length === 0 ? (
                                           <span className="text-[10px] text-muted-foreground italic">Sem usuário</span>
-                                        ) : t.userIds.map(id => {
+                                        ) : s.userIds.slice(0, 3).map(id => {
                                           const u = users.find(u => u.id === id);
                                           return (
-                                            <span key={id} className="text-[10px] px-1.5 py-0.5 rounded-md border border-border/50 bg-background/50 flex items-center gap-1">
-                                              {u ? u.full_name || u.username : `ID: ${id}`}
+                                            <span key={id} className="text-[9px] px-1.5 py-0.5 rounded-md border border-border/50 bg-background/50 flex items-center gap-1 font-bold uppercase truncate max-w-[120px]">
+                                              {u ? u.username : `ID: ${id}`}
                                             </span>
                                           );
                                         })}
+                                        {s.userIds.length > 3 && (
+                                          <span className="text-[9px] font-bold text-primary/60">+{s.userIds.length - 3}</span>
+                                        )}
                                       </div>
                                     </TableCell>
                                   </TableRow>
@@ -2740,7 +2916,7 @@ export default function Admin() {
                                     </span>
                                     <span className="text-[10px] text-muted-foreground font-bold">{t.clientCount} Clientes</span>
                                   </div>
-                                  <h4 className="text-sm font-bold text-foreground truncate">{t.municipio}</h4>
+                                  <h4 className="text-sm font-bold text-foreground truncate">{t.municipio || 'Estado Inteiro'}</h4>
                                   <div className="flex flex-wrap gap-1 mt-1.5">
                                     {t.userIds.slice(0, 2).map(id => {
                                       const u = users.find(u => u.id === id);
@@ -2768,7 +2944,76 @@ export default function Admin() {
                 </div>
                 {/* MAPA */}
                 <div className="lg:col-span-1 space-y-4 order-1 lg:order-2">
-                  <Card className="border-border/40 overflow-hidden">
+                  <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl relative z-[100]">
+                    <CardHeader className="p-4 border-b border-border/10">
+                      <CardTitle className="text-xs uppercase tracking-widest font-black flex items-center gap-2">
+                        <div className="w-8 h-8 bg-primary/15 rounded-lg flex items-center justify-center">
+                          <MapPin className="w-4 h-4 text-primary" />
+                        </div>
+                        Atribuir Estado
+                      </CardTitle>
+                      <CardDescription className="text-[10px]">Vincule um estado inteiro a um usuário.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-4 space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Estado (UF) *</label>
+                        <SearchableSelect 
+                          options={UF_DATA.map(uf => ({ value: uf.sigla, label: `${uf.sigla} - ${uf.nome}` }))}
+                          value={selectedUF}
+                          onChange={setSelectedUF}
+                          placeholder="Selecione o Estado"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Usuário Responsável *</label>
+                        <SearchableSelect 
+                          options={users.map(u => ({ value: String(u.id), label: `${u.full_name || u.fullName || u.username} (${u.username})` }))}
+                          value={selectedUserForTerritory}
+                          onChange={setSelectedUserForTerritory}
+                          placeholder="Selecione o Usuário"
+                        />
+                      </div>
+
+                      <Button 
+                        className="w-full gap-2 h-10 font-bold shadow-lg shadow-primary/20 mt-2" 
+                        onClick={handleAddToStaged}
+                      >
+                        <Plus className="w-4 h-4" /> Adicionar à Lista
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  {staged.length > 0 && (
+                    <Card className="border-primary/30 bg-primary/5 animate-in zoom-in-95 duration-300">
+                      <CardHeader className="p-3 border-b border-primary/10">
+                        <CardTitle className="text-[10px] uppercase font-black flex items-center justify-between">
+                          Pendentes de Confirmação
+                          <span className="bg-primary text-white px-1.5 py-0.5 rounded text-[9px]">{staged.length}</span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        <div className="max-h-40 overflow-y-auto divide-y divide-primary/10 custom-scrollbar">
+                          {staged.map((item, idx) => (
+                            <div key={idx} className="p-2.5 flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-bold truncate">{item.municipio || 'Estado Inteiro'}</p>
+                                <p className="text-[9px] text-muted-foreground uppercase">{item.uf} • {users.find(u => u.id === item.userId)?.username}</p>
+                              </div>
+                              <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive shrink-0" onClick={() => setStaged(prev => prev.filter((_, i) => i !== idx))}>
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="p-2 border-t border-primary/10">
+                          <Button className="w-full h-8 text-[10px] font-black uppercase" onClick={handleConfirmStaged}>Confirmar Tudo</Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  <Card className="border-border/40 overflow-hidden relative z-0">
                     <CardHeader className="pb-3 border-b border-border/10 flex flex-row items-center justify-between">
                       <div>
                         <CardTitle className="text-sm flex items-center gap-2">
@@ -3909,6 +4154,254 @@ export default function Admin() {
                     </Button>
                   </div>
                 </>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Modal Detalhado de UF (Novo) */}
+          <Dialog open={isUFDetailOpen} onOpenChange={setIsUFDetailOpen}>
+            <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] p-0 overflow-hidden border-none shadow-2xl">
+              {ufDetailData && (
+                <div className="flex flex-col h-full bg-background">
+                  {/* Header do Modal */}
+                  <div className="p-6 bg-primary/10 border-b border-border/40 relative">
+                    <DialogHeader className="sr-only">
+                      <DialogTitle>{ufDetailData.nome} - {ufDetailData.uf}</DialogTitle>
+                      <DialogDescription>Gestão detalhada de territórios, usuários e clientes no estado de {ufDetailData.nome}.</DialogDescription>
+                    </DialogHeader>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-14 h-14 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center font-black text-2xl shadow-lg shadow-primary/20">
+                          {ufDetailData.uf}
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-black tracking-tight">{ufDetailData.nome}</h2>
+                          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest opacity-60">Gestão de Territórios Estaduais</p>
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="icon" className="rounded-full hover:bg-background/50" onClick={() => setIsUFDetailOpen(false)}>
+                        <X className="w-5 h-5" />
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4 mt-6">
+                      <div className="bg-background/60 backdrop-blur-sm p-3 rounded-xl border border-border/40 flex flex-col items-center justify-center">
+                        <p className="text-xl font-black text-primary">{ufDetailData.clientCount}</p>
+                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Total Clientes</p>
+                      </div>
+                      <div className="bg-background/60 backdrop-blur-sm p-3 rounded-xl border border-border/40 flex flex-col items-center justify-center">
+                        <p className="text-xl font-black text-primary">{ufDetailData.userIds.length}</p>
+                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Usuários Vinculados</p>
+                      </div>
+                      <div className="bg-background/60 backdrop-blur-sm p-3 rounded-xl border border-border/40 flex flex-col items-center justify-center">
+                        <p className="text-xl font-black text-primary">{ufDetailData.municipios.length}</p>
+                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Municípios Ativos</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Conteúdo com Tabs */}
+                  <div className="flex-1 overflow-hidden">
+                    <Tabs defaultValue="usuarios" className="h-full flex flex-col">
+                      <div className="px-6 border-b border-border/20 bg-muted/30">
+                        <TabsList className="bg-transparent h-12 gap-6 p-0">
+                          <TabsTrigger value="usuarios" className="data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-1 text-xs font-black uppercase tracking-widest border-b-2 border-transparent transition-all">
+                            <UsersRound className="w-3.5 h-3.5 mr-2" /> Usuários
+                          </TabsTrigger>
+                          <TabsTrigger value="municipios" className="data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-1 text-xs font-black uppercase tracking-widest border-b-2 border-transparent transition-all">
+                            <MapPin className="w-3.5 h-3.5 mr-2" /> Municípios
+                          </TabsTrigger>
+                          <TabsTrigger value="clientes" className="data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-1 text-xs font-black uppercase tracking-widest border-b-2 border-transparent transition-all">
+                            <Database className="w-3.5 h-3.5 mr-2" /> Clientes
+                          </TabsTrigger>
+                        </TabsList>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                        {/* ABA USUÁRIOS */}
+                        <TabsContent value="usuarios" className="mt-0 space-y-4">
+                          {ufDetailData.userIds.length === 0 ? (
+                            <div className="py-20 text-center">
+                              <Users className="w-12 h-12 mx-auto mb-4 opacity-10" />
+                              <p className="text-sm text-muted-foreground">Nenhum usuário vinculado a este estado.</p>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {ufDetailData.userIds.map(id => {
+                                const u = users.find(user => user.id === id);
+                                if (!u) return null;
+                                const userCities = ufDetailData.municipios.filter(m => m.userIds.includes(id)).length;
+                                const userClients = ufDetailData.municipios.reduce((acc, m) => {
+                                  if (m.userIds.includes(id)) return acc + m.clientCount;
+                                  return acc;
+                                }, 0);
+
+                                return (
+                                  <div key={id} className="p-4 rounded-xl border border-border/50 bg-card hover:border-primary/30 transition-all flex items-center justify-between group">
+                                    <div className="flex items-center gap-4 min-w-0">
+                                      <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center shrink-0 relative">
+                                        {u.photo ? <img src={u.photo} alt="Avatar" className="w-full h-full object-cover rounded-xl" /> : <User className="w-6 h-6 text-muted-foreground/30" />}
+                                        <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-card bg-emerald-500" />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <h4 className="font-black text-sm truncate">{u.full_name || u.username}</h4>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">{u.username}</span>
+                                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-primary/10 text-primary uppercase">{userCities} Cidades</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary" onClick={() => {
+                                        setEditingUserId(u.id);
+                                        setEditUserForm({
+                                          username: u.username,
+                                          fullName: u.full_name || u.fullName || '',
+                                          document: u.document || u.cpf_cnpj || '',
+                                          password: '',
+                                          confirmPassword: '',
+                                          role: u.role as 'user' | 'supervisor' | 'admin',
+                                          code: u.code || '',
+                                          photo: u.photo || '',
+                                          telefone: u.telefone || '',
+                                          birthDate: u.birth_date || u.birthDate || '',
+                                          cargo: u.cargo || '',
+                                          companyName: u.company_name || u.companyName || '',
+                                          groupId: String(u.groupId || ''),
+                                          userTypeId: String(u.userTypeId || ''),
+                                          managedUserIds: u.managedUsers?.map(m => m.id) || []
+                                        });
+                                        setIsUserModalOpen(true);
+                                      }}>
+                                        <Pencil className="w-4 h-4" />
+                                      </Button>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleRemoveUserFromUF(ufDetailData.uf, u.id)}>
+                                        <Trash2 className="w-4 h-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </TabsContent>
+
+                        {/* ABA MUNICÍPIOS */}
+                        <TabsContent value="municipios" className="mt-0">
+                          <div className="rounded-xl border border-border/40 overflow-hidden">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="bg-muted/30 hover:bg-muted/30 border-border/20">
+                                  <TableHead className="text-[10px] font-black uppercase pl-6 h-10">Município</TableHead>
+                                  <TableHead className="text-[10px] font-black uppercase text-center h-10">Clientes</TableHead>
+                                  <TableHead className="text-[10px] font-black uppercase h-10">Responsáveis</TableHead>
+                                  <TableHead className="w-20 text-center h-10 pr-6">Ações</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {ufDetailData.municipios.map(m => (
+                                  <TableRow key={m.nome} className="hover:bg-primary/5 border-border/10 transition-colors group">
+                                    <TableCell className="pl-6 py-3 font-bold text-xs uppercase tracking-tight">{m.nome}</TableCell>
+                                    <TableCell className="text-center py-3">
+                                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border/50">
+                                        {m.clientCount}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="py-3">
+                                      <div className="flex flex-wrap gap-1">
+                                        {m.userIds.map(id => {
+                                          const u = users.find(user => user.id === id);
+                                          return (
+                                            <span key={id} className="text-[9px] font-black px-1.5 py-0.5 rounded-md border border-border/40 bg-background/50 uppercase">
+                                              {u?.username || `ID: ${id}`}
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-center pr-6 py-3">
+                                      <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                          onClick={() => {
+                                            const t = territories.find(ter => ter.uf === ufDetailData.uf && ter.municipio === m.nome);
+                                            if (t) handleDeleteTerritory(t.id, m.nome, t.userId!, ufDetailData.uf);
+                                            else toast.error('Não foi possível localizar o ID da atribuição.');
+                                          }}
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </TabsContent>
+
+                        {/* ABA CLIENTES */}
+                        <TabsContent value="clientes" className="mt-0">
+                          <div className="rounded-xl border border-border/40 overflow-hidden">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="bg-muted/30 hover:bg-muted/30 border-border/20">
+                                  <TableHead className="text-[10px] font-black uppercase pl-6 h-10">Cliente</TableHead>
+                                  <TableHead className="text-[10px] font-black uppercase h-10">Município</TableHead>
+                                  <TableHead className="text-[10px] font-black uppercase h-10">Responsável</TableHead>
+                                  <TableHead className="w-20 text-center h-10 pr-6">Status</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {clientes.filter(c => c.uf === ufDetailData.uf).slice(0, 100).map(c => {
+                                  const u = users.find(user => user.id === c.userId);
+                                  return (
+                                    <TableRow key={c.id_cliente || c.codigo_cliente} className="hover:bg-primary/5 border-border/10 transition-colors group">
+                                      <TableCell className="pl-6 py-3">
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-black uppercase truncate">{c.nome_cliente}</p>
+                                          <p className="text-[9px] text-muted-foreground font-mono">#{c.codigo_cliente || '000'}</p>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="py-3 text-[10px] font-bold uppercase text-muted-foreground">{c.cidade}</TableCell>
+                                      <TableCell className="py-3">
+                                        <span className="text-[10px] font-black text-primary px-2 py-0.5 rounded-full bg-primary/10 uppercase">
+                                          {u?.username || 'S/ USER'}
+                                        </span>
+                                      </TableCell>
+                                      <TableCell className="text-center pr-6 py-3">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-500 mx-auto" />
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                                {clientes.filter(c => c.uf === ufDetailData.uf).length > 100 && (
+                                  <TableRow>
+                                    <TableCell colSpan={4} className="text-center py-4 text-xs text-muted-foreground font-bold italic">
+                                      Exibindo apenas os primeiros 100 clientes deste estado.
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </TabsContent>
+                      </div>
+                    </Tabs>
+                  </div>
+
+                  {/* Footer do Modal */}
+                  <div className="p-4 bg-muted/20 border-t border-border/40 flex justify-between items-center">
+                    <p className="text-[10px] font-bold text-muted-foreground italic uppercase">
+                      Clique em um item para ver mais opções ou editar.
+                    </p>
+                    <Button variant="outline" size="sm" className="font-black text-xs uppercase tracking-widest px-6" onClick={() => setIsUFDetailOpen(false)}>
+                      Fechar
+                    </Button>
+                  </div>
+                </div>
               )}
             </DialogContent>
           </Dialog>

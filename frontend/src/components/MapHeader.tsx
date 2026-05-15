@@ -8,7 +8,7 @@ import { REP_COLOR_PALETTE } from "@/data/representatives";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { ThemeToggle } from "./ThemeToggle";
 import { API_BASE_URL } from "@/lib/api-base";
@@ -20,6 +20,7 @@ interface UserNotification {
   targetAll?: boolean;
   targetUserIds?: number[] | null;
   createdAt: string;
+  seen?: boolean;
 }
 
 interface MapHeaderProps {
@@ -34,6 +35,8 @@ interface MapHeaderProps {
   onToggleClientes?: () => void;
   showHeatmap?: boolean;
   onToggleHeatmap?: () => void;
+  showUsuarios?: boolean;
+  onToggleUsuarios?: () => void;
   onSearchEnter?: (q: string) => void;
   suggestions?: SearchSuggestion[];
   onSelectSuggestion?: (item: SearchSuggestion) => void;
@@ -49,13 +52,14 @@ export default function MapHeader({
   selectedUF, onSelectUF, 
   searchQuery, onSearchChange, isAuthenticated, role, logout,
   showClientes, onToggleClientes, showHeatmap, onToggleHeatmap,
+  showUsuarios, onToggleUsuarios,
   onSearchEnter, suggestions, onSelectSuggestion,
   users = [], clients = [], filtroUsuario, onFilterUser, onSelectClient,
   minimal = false
 }: MapHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { userName, userId, token, tokenVersion, assigned_state } = useAuth();
+  const { userName, userId, token, tokenVersion, assigned_state, assigned_states, role: authRole } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -67,17 +71,9 @@ export default function MapHeader({
 
   // ── Notifications Logic ──
   const currentUserId = userId || Number(localStorage.getItem('userId') || 0) || null;
-  const seenKey = currentUserId ? `seen_notifications_user_${currentUserId}` : 'seen_notifications_guest';
   const fullUserName = userName || localStorage.getItem('userName') || 'Usuário';
   const userCargo = localStorage.getItem('cargo') || localStorage.getItem('tipo') || role || 'usuário';
   const userPhoto = localStorage.getItem('photo') || '';
-  const seenIds = useMemo(() => {
-    try {
-      return new Set<number>(JSON.parse(localStorage.getItem(seenKey) || '[]'));
-    } catch {
-      return new Set<number>();
-    }
-  }, [seenKey, showNotifications]);
 
   const myNotifications = useMemo(() => {
     return notifications
@@ -85,15 +81,21 @@ export default function MapHeader({
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [notifications]);
 
-  const unreadCount = myNotifications.filter(n => !seenIds.has(n.id)).length;
+  const unreadCount = myNotifications.filter(n => !n.seen).length;
 
-  const markAsRead = (id: number) => {
+  const markAsRead = async (id: number) => {
+    if (!token) return;
     try {
-      const raw = JSON.parse(localStorage.getItem(seenKey) || '[]') as number[];
-      if (raw.includes(id)) return;
-      localStorage.setItem(seenKey, JSON.stringify([id, ...raw].slice(0, 200)));
-    } catch {
-      localStorage.setItem(seenKey, JSON.stringify([id]));
+      await fetch(`${API_BASE_URL}/api/notifications/${id}/seen`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      // Atualiza o estado local para refletir a mudança imediatamente
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, seen: true } : n));
+    } catch (error) {
+      console.error('Error marking as seen on server:', error);
     }
   };
 
@@ -159,6 +161,9 @@ export default function MapHeader({
               <ShieldCheck className="w-4 h-4" />
               Sobre o Sistema
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Informações sobre os desenvolvedores e a versão do sistema Mapa Território.
+            </DialogDescription>
           </DialogHeader>
           
           <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto max-h-[70vh] custom-scrollbar">
@@ -229,11 +234,14 @@ export default function MapHeader({
             <select
               value={selectedUF || ""}
               onChange={(e) => onSelectUF?.(e.target.value || null)}
-              disabled={!!assigned_state && role !== 'admin'}
+              disabled={(!!assigned_state || (assigned_states && assigned_states.length > 0)) && authRole !== 'admin'}
               className="appearance-none bg-secondary text-foreground text-[10px] sm:text-sm pl-2 sm:pl-3 pr-6 sm:pr-8 py-1.5 sm:py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {!assigned_state && <option value="">Todos os Estados</option>}
-              {UF_DATA.sort((a, b) => a.sigla.localeCompare(b.sigla)).map((uf) => (
+              {(!assigned_state && (!assigned_states || assigned_states.length === 0)) && <option value="">Todos os Estados</option>}
+              {UF_DATA
+                .filter(uf => authRole === 'admin' || !assigned_states || assigned_states.length === 0 || assigned_states.includes(uf.sigla))
+                .sort((a, b) => a.sigla.localeCompare(b.sigla))
+                .map((uf) => (
                 <option key={uf.sigla} value={uf.sigla}>
                   {uf.sigla} - {uf.nome}
                 </option>
@@ -303,6 +311,15 @@ export default function MapHeader({
                 <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 <span className="hidden md:inline text-xs font-semibold">Calor</span>
               </Button>
+              <Button
+                variant={showUsuarios ? "default" : "ghost"}
+                size="sm"
+                onClick={onToggleUsuarios}
+                className={`h-8 gap-1.5 sm:gap-2 px-2 sm:px-3 ${showUsuarios ? 'bg-blue-600 text-white shadow-sm hover:bg-blue-700' : 'text-muted-foreground hover:bg-background'}`}
+              >
+                <UserCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden md:inline text-xs font-semibold">Usuários</span>
+              </Button>
               <div className="w-[1px] h-4 bg-border/40 mx-0.5" />
 
               <Popover>
@@ -331,11 +348,14 @@ export default function MapHeader({
                         <select
                           value={selectedUF || ""}
                           onChange={(e) => onSelectUF?.(e.target.value || null)}
-                          disabled={!!assigned_state && role !== 'admin'}
+                          disabled={(!!assigned_state || (assigned_states && assigned_states.length > 0)) && authRole !== 'admin'}
                           className="w-full appearance-none bg-secondary text-foreground text-xs pl-3 pr-8 py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
                         >
-                          {!assigned_state && <option value="">Todos os Estados</option>}
-                          {UF_DATA.sort((a, b) => a.sigla.localeCompare(b.sigla)).map((uf) => (
+                          {(!assigned_state && (!assigned_states || assigned_states.length === 0)) && <option value="">Todos os Estados</option>}
+                          {UF_DATA
+                            .filter(uf => authRole === 'admin' || !assigned_states || assigned_states.length === 0 || assigned_states.includes(uf.sigla))
+                            .sort((a, b) => a.sigla.localeCompare(b.sigla))
+                            .map((uf) => (
                             <option key={uf.sigla} value={uf.sigla}>
                               {uf.sigla} - {uf.nome}
                             </option>
@@ -524,13 +544,16 @@ export default function MapHeader({
                     <div className="py-10 text-center text-xs text-muted-foreground">Nenhuma notificação</div>
                   ) : (
                     myNotifications.map((n) => (
-                      <div key={n.id} className="px-4 py-3 hover:bg-secondary/40 transition-colors">
-                        <p className="text-xs font-semibold text-foreground">{n.title}</p>
+                      <div key={n.id} className={`px-4 py-3 hover:bg-secondary/40 transition-colors relative ${!n.seen ? 'bg-primary/[0.03] border-l-2 border-l-primary' : ''}`}>
+                        <div className="flex justify-between items-start gap-2">
+                          <p className={`text-xs font-semibold ${!n.seen ? 'text-foreground' : 'text-muted-foreground'}`}>{n.title}</p>
+                          {!n.seen && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-1" />}
+                        </div>
                         <div
                           className="text-[11px] text-muted-foreground mt-1 line-clamp-2"
                           dangerouslySetInnerHTML={{ __html: n.message }}
                         />
-                        <p className="text-[10px] text-muted-foreground mt-2">
+                        <p className="text-[10px] text-muted-foreground/60 mt-2">
                           {new Date(n.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                         </p>
                       </div>

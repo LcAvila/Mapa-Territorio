@@ -12,6 +12,15 @@ const PUBLIC_USER_FIELDS = {
   cep: true, logradouro: true, numero: true, 
   complemento: true, bairro_end: true, cidade: true, estado_end: true, photo: true, 
   created_at: true, default_workspace: true, inactivity_limit: true,
+  assigned_state: true,
+  territories: {
+    select: {
+      id: true,
+      uf: true,
+      municipio: true,
+      modo: true
+    }
+  },
   notif_email: true, notif_sms: true, notif_push: true,
   last_active: true,
   token_version: true
@@ -91,6 +100,27 @@ router.put('/me', authenticate, async (req: AuthRequest, res) => {
     res.json({ message: 'Perfil atualizado com sucesso', user });
   } catch (error) {
     res.status(500).json({ message: 'Erro ao atualizar perfil' });
+  }
+});
+
+router.get('/users/map', authenticate, async (req, res) => {
+  try {
+    const fields = { id: true, username: true, full_name: true, colorIndex: true, isVago: true };
+    
+    let users = [];
+    try {
+      const fetchPromise = prisma.user.findMany({ select: fields, orderBy: { id: 'asc' } });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 3000));
+      users = await Promise.race([fetchPromise, timeoutPromise]) as any[];
+    } catch (e) {
+      console.warn(`[AUTH] Prisma failed to fetch map users. Falling back to HTTP.`);
+      const { data, error } = await supabaseAdmin.from('users').select('id, username, full_name, colorIndex, isVago');
+      if (!error) users = data || [];
+    }
+    
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao listar usuários para o mapa' });
   }
 });
 

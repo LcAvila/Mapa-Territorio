@@ -17,6 +17,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [tipo, setTipo] = useState<string | null>(localStorage.getItem('tipo'));
     const [estado_end, setEstadoEnd] = useState<string | null>(localStorage.getItem('estado_end'));
     const [assigned_state, setAssignedState] = useState<string | null>(localStorage.getItem('assigned_state'));
+    const [assigned_states, setAssignedStates] = useState<string[]>(() => {
+        const stored = localStorage.getItem('assigned_states');
+        return stored ? JSON.parse(stored) : [];
+    });
     const [defaultWorkspace, setDefaultWorkspace] = useState<string | null>(localStorage.getItem('defaultWorkspace'));
     const [inactivityLimit, setInactivityLimit] = useState<number | null>(() => {
         const stored = localStorage.getItem('inactivityLimit');
@@ -24,8 +28,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     const clearLocalAuth = () => {
-        ['token', 'role', 'userId', 'userName', 'tipo', 'estado_end', 'assigned_state', 'defaultWorkspace', 'inactivityLimit', 'tokenVersion', 'lastActivityTime'].forEach(k => localStorage.removeItem(k));
+        ['token', 'role', 'userId', 'userName', 'tipo', 'estado_end', 'assigned_state', 'assigned_states', 'defaultWorkspace', 'inactivityLimit', 'tokenVersion', 'lastActivityTime'].forEach(k => localStorage.removeItem(k));
         setToken(null); setRole(null); setUserId(null); setUserName(null); setTipo(null); setEstadoEnd(null); setAssignedState(null);
+        setAssignedStates([]);
         setDefaultWorkspace(null); setInactivityLimit(null); setTokenVersion(null);
     };
 
@@ -52,7 +57,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .then(async r => {
                     if (r.ok) {
                         const userData = await r.json();
-                        login(existingToken, userData.id, userData.role, userData.full_name, userData.tipo, userData.estado_end, userData.default_workspace, userData.inactivity_limit, userData.token_version, userData.assigned_state);
+                        const assigned_states = userData.territories
+                            ? Array.from(new Set(userData.territories.filter((t: any) => !t.municipio).map((t: any) => t.uf))) as string[]
+                            : [];
+                        login(existingToken, userData.id, userData.role, userData.full_name, userData.tipo, userData.estado_end, userData.default_workspace, userData.inactivity_limit, userData.token_version, userData.assigned_state, assigned_states);
                     } else if (r.status === 401) {
                         // Token invalid on backend (e.g. email changed or kicked)
                         clearLocalAuth();
@@ -99,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return stored ? Number(stored) : null;
     });
 
-    const login = (newToken: string, newUserId: number, newRole: string, newUserName?: string, newTipo?: string, newEstadoEnd?: string, newDefaultWorkspace?: string, newInactivityLimit?: number, newTokenVersion?: number, newAssignedState?: string) => {
+    const login = (newToken: string, newUserId: number, newRole: string, newUserName?: string, newTipo?: string, newEstadoEnd?: string, newDefaultWorkspace?: string, newInactivityLimit?: number, newTokenVersion?: number, newAssignedState?: string, newAssignedStates?: string[]) => {
         setToken(newToken);
         setRole(newRole);
         setUserId(newUserId);
@@ -107,6 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setTipo(newTipo || null);
         setEstadoEnd(newEstadoEnd || null);
         setAssignedState(newAssignedState || null);
+        setAssignedStates(newAssignedStates || []);
         setDefaultWorkspace(newDefaultWorkspace || null);
         setInactivityLimit(newInactivityLimit || null);
         setTokenVersion(newTokenVersion || 0);
@@ -119,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (newTipo) localStorage.setItem('tipo', newTipo);
         if (newEstadoEnd) localStorage.setItem('estado_end', newEstadoEnd);
         if (newAssignedState) localStorage.setItem('assigned_state', newAssignedState);
+        if (newAssignedStates) localStorage.setItem('assigned_states', JSON.stringify(newAssignedStates));
         if (newDefaultWorkspace) localStorage.setItem('defaultWorkspace', newDefaultWorkspace);
         if (newInactivityLimit) localStorage.setItem('inactivityLimit', String(newInactivityLimit));
         if (newTokenVersion) localStorage.setItem('tokenVersion', String(newTokenVersion));

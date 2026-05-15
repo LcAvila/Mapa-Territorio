@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context-core";
 import BrazilMap from "@/components/BrazilMap";
 import MapHeader from "@/components/MapHeader";
@@ -16,12 +17,23 @@ import { RouteWaypoint } from "@/hooks/use-routing";
 import Loader from "@/components/Loader";
 import { HelpCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { API_BASE_URL } from "@/lib/api-base";
+
+const normalizeName = (s: string) => 
+  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 
 const Index = () => {
-  const { isAuthenticated, role, userId, assigned_state, logout } = useAuth();
+  const { isAuthenticated, role, userId, token, assigned_state, assigned_states, logout } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  const [selectedUF, setSelectedUF] = useState<string | null>(assigned_state || null);
+  const [selectedUF, setSelectedUF] = useState<string | null>(() => {
+    // If not admin and has assigned states, default to the first one or null
+    if (role !== 'admin' && assigned_states && assigned_states.length > 0) {
+      return assigned_states[0];
+    }
+    return assigned_state || null;
+  });
   const [filtroUsuario, setFiltroUsuario] = useState<string | null>(null);
   const [modo, setModo] = useState<"planejamento" | "atendimento">("atendimento");
   const [mostrarVagos, setMostrarVagos] = useState(false);
@@ -30,7 +42,19 @@ const Index = () => {
   const [municipioCodeForBairros, setMunicipioCodeForBairros] = useState<number | null>(null);
   const [showClientes, setShowClientes] = useState(true);
   const [showHeatmap, setShowHeatmap] = useState(false);
+  const [showUsuarios, setShowUsuarios] = useState(role !== 'admin');
   const [flyToLocation, setFlyToLocation] = useState<{ center: [number, number]; zoom: number } | null>(null);
+
+  // Auto-zoom to assigned state on login for non-admins
+  useEffect(() => {
+    if (role !== 'admin' && assigned_states && assigned_states.length > 0 && !flyToLocation) {
+      const firstUF = assigned_states[0];
+      const ufInfo = getUFBySigla(firstUF);
+      if (ufInfo) {
+        setFlyToLocation({ center: ufInfo.center, zoom: ufInfo.zoom + 1 });
+      }
+    }
+  }, [role, assigned_states]);
   
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const [searchResultGeo, setSearchResultGeo] = useState<GeoJSONFeature | null>(null);
@@ -51,13 +75,19 @@ const Index = () => {
   );
 
   const handleSelectUF = useCallback((uf: string | null) => {
+    // Permission check for non-admins
+    if (role !== 'admin' && assigned_states && assigned_states.length > 0 && uf && !assigned_states.includes(uf)) {
+      toast.error(`Você não tem permissão para acessar o estado ${uf}`);
+      return;
+    }
+
     setSelectedUF(uf);
     setSelectedMunicipio(null);
     setMunicipioCodeForBairros(null); // Clear neighborhoods on UF change
     if (uf === null) {
       setFiltroUsuario(null);
     }
-  }, []);
+  }, [role, assigned_states]);
 
   const handleSelectMunicipio = useCallback(async (nome: string, uf: string, ibgeCode?: number) => {
     setSelectedMunicipio({ nome, uf, id: ibgeCode });
@@ -90,6 +120,10 @@ const Index = () => {
   }, []);
 
   const handleContextMenuMunicipio = useCallback((nome: string, uf: string, x: number, y: number) => {
+    if (!nome && !uf) {
+      setContextMenu(null);
+      return;
+    }
     setContextMenu({ x, y, type: 'municipio', nome, uf });
   }, []);
 
@@ -205,7 +239,72 @@ const Index = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const { token } = useAuth();
+  const handleUnclaimMunicipio = useCallback(async (municipio: string, uf: string) => {
+    if (!token) return;
+    const toastId = toast.loading(`Desvinculando ${municipio}...`);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/territories/unclaim`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ municipio, uf, modo })
+      });
+
+      if (res.ok) {
+        toast.success(`Você não é mais responsável por ${municipio}`, { id: toastId });
+        queryClient.invalidateQueries({ queryKey: ["api", "territories"] });
+      } else {
+        const err = await res.json();
+        toast.error(err.message || 'Erro ao desvincular', { id: toastId });
+      }
+    } catch (error) {
+      toast.error('Erro de conexão', { id: toastId });
+    }
+  }, [token, queryClient, modo]);
+
+  const handleTakeScreenshot = useCallback(async () => {
+    const toastId = toast.loading('Preparando captura de tela...');
+    try {
+      // Small delay to close menu before screenshot
+      await new Promise(r => setTimeout(r, 300));
+      
+      const mainElement = document.querySelector('main');
+      if (!mainElement) throw new Error('Elemento não encontrado');
+      
+      // Use dynamic import for html2canvas
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(mainElement as HTMLElement, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#0a0a0c',
+        scale: 2 // High quality
+      });
+      
+      const image = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = image;
+      link.download = `Mapa_Territorio_${new Date().toISOString().split('T')[0]}.png`;
+      link.click();
+      
+      toast.success('Captura de tela salva com sucesso!', { id: toastId });
+    } catch (error) {
+      console.error('Screenshot error:', error);
+      toast.error('Erro ao tirar print. Verifique se o navegador suporta esta função.', { id: toastId });
+    }
+  }, []);
+
+  const handleClearAllFilters = useCallback(() => {
+    setShowClientes(false);
+    setShowHeatmap(false);
+    setShowUsuarios(false);
+    setFiltroUsuario(null);
+    setSearchQuery("");
+    setSearchResultGeo(null);
+    toast.info('Todos os filtros foram removidos');
+  }, []);
+
   const { data: apiUsers = [], isLoading: loadingUsers } = useApiUsers(true);
   const { data: apiTerritories = [], isLoading: loadingTerritories } = useApiTerritories(true);
   const { data: apiClientes = [], isLoading: loadingClientes } = useApiClientes(filtroUsuario);
@@ -297,6 +396,8 @@ const Index = () => {
         onToggleClientes={() => setShowClientes(!showClientes)}
         showHeatmap={showHeatmap}
         onToggleHeatmap={() => setShowHeatmap(!showHeatmap)}
+        showUsuarios={showUsuarios}
+        onToggleUsuarios={() => setShowUsuarios(!showUsuarios)}
         onSearchEnter={handleAddressSearch}
         suggestions={suggestions}
         onSelectSuggestion={handleSelectSuggestion}
@@ -309,10 +410,11 @@ const Index = () => {
       <main className="flex-1 relative overflow-hidden flex">
         <BrazilMap
           selectedUF={selectedUF}
-          modo={modo}
-          filtroUsuario={filtroUsuario}
-          mostrarVagos={mostrarVagos}
-          onSelectUF={handleSelectUF}
+        modo={modo}
+        filtroUsuario={filtroUsuario}
+        assignedStates={assigned_states}
+        mostrarVagos={mostrarVagos}
+        onSelectUF={handleSelectUF}
           onSelectMunicipio={handleSelectMunicipio}
           searchQuery={searchQuery}
           municipioCodeForBairros={municipioCodeForBairros}
@@ -321,6 +423,9 @@ const Index = () => {
           onDeactivateBairros={() => setMunicipioCodeForBairros(null)}
           showClientes={showClientes}
           showHeatmap={showHeatmap}
+          showUsuarios={showUsuarios}
+          onContextMenuState={handleContextMenuState}
+          onContextMenuMunicipio={handleContextMenuMunicipio}
           flyToLocation={flyToLocation}
           searchResultGeo={searchResultGeo}
           selectedClients={selectedClients}
@@ -449,7 +554,16 @@ const Index = () => {
       {/* Right-click context menu */}
       {contextMenu && (
         <MapContextMenu
-          menu={contextMenu}
+          menu={{
+            ...contextMenu,
+            isClaimed: apiTerritories.some(t => 
+              t.municipio &&
+              normalizeName(t.municipio) === normalizeName(contextMenu.nome) && 
+              t.uf === contextMenu.uf && 
+              t.userId === userId &&
+              t.modo === modo
+            )
+          }}
           onClose={closeContextMenu}
           onSelectState={() => handleSelectUF(contextMenu.uf)}
           onViewDetails={() => {
@@ -464,6 +578,31 @@ const Index = () => {
             navigator.clipboard.writeText(contextMenu.nome);
             toast.success(`"${contextMenu.nome}" copiado!`);
           }}
+          onClaim={async () => {
+            const toastId = toast.loading(`Reivindicando ${contextMenu.nome}...`);
+            try {
+              const res = await fetch(`${API_BASE_URL}/api/admin/territories/claim`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ municipio: contextMenu.nome, uf: contextMenu.uf, modo })
+              });
+              if (res.ok) {
+                toast.success(`${contextMenu.nome} agora é seu!`, { id: toastId });
+                queryClient.invalidateQueries({ queryKey: ["api", "territories"] });
+              } else {
+                const err = await res.json();
+                toast.error(err.message || 'Erro ao reivindicar', { id: toastId });
+              }
+            } catch {
+              toast.error('Erro de conexão', { id: toastId });
+            }
+          }}
+          onUnclaim={() => handleUnclaimMunicipio(contextMenu.nome, contextMenu.uf)}
+          onClearFilters={handleClearAllFilters}
+          onTakeScreenshot={handleTakeScreenshot}
         />
       )}
     </div>

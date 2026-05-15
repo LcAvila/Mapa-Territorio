@@ -8,42 +8,66 @@ const router = Router();
 // Get notification history
 router.get('/', authenticate, requirePermission('notifications', 'view'), async (req: AuthRequest, res) => {
   try {
-    console.log(`[NOTIF] User ${req.user?.id} requesting notifications history`);
+    const currentUserId = Number(req.user?.id || 0);
+    console.log(`[NOTIF] User ${currentUserId} requesting notifications history`);
     
     let allNotifications: any[] = [];
     try {
-      const queryPromise = prisma.$queryRawUnsafe(`
-        SELECT "id", "title", "message", "targetAll", "targetUserIds", "senderName", "createdAt"
-        FROM "notifications"
-        ORDER BY "createdAt" DESC
-        LIMIT 80
-      `);
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
-      allNotifications = await Promise.race([queryPromise, timeoutPromise]) as any[];
+      const prismaAny = prisma as any;
+      
+      // 1. Buscar notificações
+      const notificationsRaw = await prismaAny.notification.findMany({
+        take: 80,
+        orderBy: { createdAt: 'desc' }
+      });
+
+      // 2. Buscar IDs das notificações que este usuário já viu (Fallback Robusto)
+      let seenIds: number[] = [];
+      try {
+        const seenRecords = await prismaAny.notificationSeen.findMany({
+          where: { userId: currentUserId },
+          select: { notificationId: true }
+        });
+        seenIds = seenRecords.map((r: any) => r.notificationId);
+      } catch (err) {
+        console.warn('[NOTIF] Prisma relation failed, trying raw query for seen status');
+        try {
+          const rawSeen: any[] = await prisma.$queryRawUnsafe(
+            'SELECT "notificationId" FROM "notification_seen" WHERE "userId" = $1',
+            currentUserId
+          );
+          seenIds = rawSeen.map(r => Number(r.notificationId));
+        } catch (rawErr) {
+          console.error('[NOTIF] All seen-check fallbacks failed', rawErr);
+        }
+      }
+      
+      allNotifications = notificationsRaw.map((n: any) => ({
+        ...n,
+        seen: seenIds.includes(n.id)
+      }));
     } catch (e) {
       console.warn('[NOTIF] Prisma failed or timed out. Falling back to HTTP.');
       const { data, error } = await (req as any).supabaseAdmin
         .from('notifications')
-        .select('*')
+        .select('*, notification_seen(id)')
         .order('createdAt', { ascending: false })
         .limit(80);
       
       if (error) throw error;
-      allNotifications = data || [];
+      allNotifications = (data || []).map((n: any) => ({
+        ...n,
+        seen: (n.notification_seen || []).some((s: any) => s.userId === currentUserId)
+      }));
     }
     
-    const currentUserId = Number(req.user?.id || 0);
     const isAdminLike = req.user?.role === 'admin' || req.user?.role === 'supervisor';
 
     const notifications = isAdminLike
       ? allNotifications
       : allNotifications.filter((n) => {
           if (n.targetAll) return true;
-          const raw = n.targetUserIds;
-          if (!raw || !currentUserId) return false;
-          
-          // Trata JSONB do Postgres ou Array do JS
-          const targetIds = Array.isArray(raw) ? raw : [];
+          const targetIds = Array.isArray(n.targetUserIds) ? n.targetUserIds : [];
           return targetIds.map((id: any) => Number(id)).includes(currentUserId);
         });
 
@@ -51,6 +75,72 @@ router.get('/', authenticate, requirePermission('notifications', 'view'), async 
   } catch (error) {
     console.error('Error fetching notifications:', error);
     res.status(500).json({ message: 'Erro ao buscar notificações' });
+  }
+});
+
+// Mark notification as seen
+router.post('/:id/seen', authenticate, async (req: AuthRequest, res) => {
+  const notificationId = Number(req.params.id);
+  const userId = Number(req.user?.id);
+
+  if (!notificationId || !userId) {
+    return res.status(400).json({ message: 'ID da notificação e usuário são obrigatórios' });
+  }
+
+  try {
+    const prismaAny = prisma as any;
+    console.log(`[NOTIF] Marking notification ${notificationId} as seen for user ${userId}`);
+    
+    // Check if the model exists before calling upsert
+    if (prismaAny.notificationSeen) {
+      await prismaAny.notificationSeen.upsert({
+        where: {
+          notificationId_userId: {
+            notificationId,
+            userId
+          }
+        },
+        update: {}, 
+        create: {
+          notificationId,
+          userId
+        }
+      });
+    } else {
+      console.warn('[NOTIF] notificationSeen model not found in Prisma client, using raw query fallback');
+      await prisma.$executeRawUnsafe(
+        'INSERT INTO "notification_seen" ("notificationId", "userId", "seenAt") VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING',
+        notificationId, userId
+      );
+    }
+
+    res.json({ message: 'Notificação marcada como vista' });
+  } catch (error: any) {
+    console.error('Error marking notification as seen:', error);
+    // Fallback total para raw query se o upsert falhar por qualquer motivo de schema
+    try {
+      console.log('[NOTIF] Upsert failed, trying final raw query fallbacks');
+      
+      // Tenta primeiro com o nome mapeado no schema
+      try {
+        await prisma.$executeRawUnsafe(
+          'INSERT INTO "notification_seen" ("notificationId", "userId", "seenAt") VALUES ($1, $2, NOW()) ON CONFLICT ("notificationId", "userId") DO NOTHING',
+          notificationId, userId
+        );
+        return res.json({ message: 'Notificação marcada como vista (fallback 1)' });
+      } catch (err1) {
+        console.warn('[NOTIF] Fallback 1 failed, trying fallback 2 (PascalCase table name)');
+        // Tenta com o nome padrão do Prisma se o map falhar
+        await prisma.$executeRawUnsafe(
+          'INSERT INTO "NotificationSeen" ("notificationId", "userId", "seenAt") VALUES ($1, $2, NOW()) ON CONFLICT ("notificationId", "userId") DO NOTHING',
+          notificationId, userId
+        );
+        return res.json({ message: 'Notificação marcada como vista (fallback 2)' });
+      }
+    } catch (innerError) {
+      console.error('Final fallback failed:', innerError);
+    }
+    res.status(500).json({ message: 'Erro ao marcar notificação como vista', details: error.message });
   }
 });
 

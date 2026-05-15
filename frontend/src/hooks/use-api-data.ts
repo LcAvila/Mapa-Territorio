@@ -27,10 +27,13 @@ export function useApiUsers(enabled: boolean) {
   const isAdminLike = role === 'admin' || role === 'supervisor';
 
   return useQuery<SystemUser[]>({
-    queryKey: ["api", "users", !!token],
+    queryKey: ["api", "users", !!token, isAdminLike],
     queryFn: async () => {
-      if (!token || !isAdminLike) return [];
-      const res = await fetch(`${API_BASE}/api/admin/users`, {
+      if (!token) return [];
+      
+      const endpoint = isAdminLike ? `${API_BASE}/api/admin/users` : `${API_BASE}/api/auth/users/map`;
+      
+      const res = await fetch(endpoint, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'x-user-token-version': String(tokenVersion || 0)
@@ -39,8 +42,8 @@ export function useApiUsers(enabled: boolean) {
       return res.ok ? res.json() : [];
     },
     staleTime: 30_000,
-    refetchInterval: (token && isAdminLike) ? 60_000 : false,
-    enabled: enabled && !!token && isAdminLike
+    refetchInterval: token ? 60_000 : false,
+    enabled: enabled && !!token
   });
 }
 

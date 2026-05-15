@@ -94,7 +94,8 @@ app.use('/api/route-planning', routePlanningRoutes);
 
 async function bootstrap() {
   // Inicia o servidor PRIMEIRO, independente do banco
-  app.listen(PORT, () => {
+  // Usamos Number(PORT) e '0.0.0.0' para garantir que o container receba conexões externas
+  app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(pc.cyan("──────────────────────────────────────────────────"));
     console.log(pc.bold(pc.magenta("🚀 MAPA TERRITÓRIO - BACKEND")));
     console.log(pc.cyan("──────────────────────────────────────────────────"));
@@ -109,29 +110,32 @@ async function bootstrap() {
   });
 
   // Seed do admin em background — não bloqueia o servidor
-  try {
-    const adminExists = await prisma.user.findUnique({ where: { username: 'admin' } });
-    if (!adminExists) {
-      const bcrypt = require('bcryptjs');
-      const adminPassword = await bcrypt.hash('admin123', 10);
-      await prisma.user.create({
-        data: {
-          username: 'admin',
-          password: adminPassword,
-          role: 'admin',
-          tipo: 'admin',
-          full_name: 'Administrador'
-        }
-      });
-      console.log(pc.green("✅ Admin master criado com sucesso."));
-    } else {
-      console.log(pc.green("✅ Banco de dados conectado com sucesso."));
+  (async () => {
+    try {
+      console.log(pc.gray("⏳ Verificando conexão com o banco em background..."));
+      const adminExists = await prisma.user.findUnique({ where: { username: 'admin' } });
+      if (!adminExists) {
+        const bcrypt = require('bcryptjs');
+        const adminPassword = await bcrypt.hash('admin123', 10);
+        await prisma.user.create({
+          data: {
+            username: 'admin',
+            password: adminPassword,
+            role: 'admin',
+            tipo: 'admin',
+            full_name: 'Administrador'
+          }
+        });
+        console.log(pc.green("✅ Admin master criado com sucesso."));
+      } else {
+        console.log(pc.green("✅ Banco de dados conectado com sucesso."));
+      }
+    } catch (e) {
+      console.warn(pc.yellow("⚠️  Não foi possível conectar ao banco de dados na inicialização."));
+      console.warn(pc.yellow("   O servidor está online e usará redundância HTTP para rotas essenciais."));
+      console.warn(pc.gray("   Verifique a conexão com o Supabase se precisar de migrações."));
     }
-  } catch (e) {
-    console.warn(pc.yellow("⚠️  Não foi possível conectar ao banco de dados na inicialização."));
-    console.warn(pc.yellow("   O servidor está online, mas as rotas que dependem do banco podem falhar."));
-    console.warn(pc.gray("   Verifique a conexão com o Supabase e reinicie o servidor."));
-  }
+  })();
 }
 
 bootstrap()

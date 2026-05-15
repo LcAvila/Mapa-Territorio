@@ -134,6 +134,14 @@ const PUBLIC_USER_FIELDS = {
   default_screen: true,
   area_atuacao: true,
   base_logistica: true,
+  territories: {
+    select: {
+      id: true,
+      uf: true,
+      municipio: true,
+      modo: true
+    }
+  },
   managedUsers: {
     select: {
       id: true,
@@ -743,10 +751,67 @@ router.get('/territories', requirePermission('territories', 'view'), async (req,
   }
 });
 
+router.post('/territories', authenticate, requirePermission('territories', 'edit'), async (req: any, res) => {
+  const { municipio, uf, userId, modo } = req.body;
+  
+  if (!uf || !userId) return res.status(400).json({ message: 'UF e Usuário são obrigatórios' });
+
+  try {
+    // 1. Verificar se já existe a mesma atribuição
+    const existing = await prisma.territory.findFirst({
+      where: {
+        municipio: municipio ? { equals: municipio, mode: 'insensitive' } : null,
+        uf: { equals: uf, mode: 'insensitive' },
+        userId: Number(userId),
+        modo: modo || 'planejamento'
+      }
+    });
+
+    if (existing) {
+      return res.status(409).json({ message: 'Esta atribuição já existe para este usuário.' });
+    }
+
+    // 2. Criar o território
+    const territory = await prisma.territory.create({
+      data: { 
+        municipio: municipio || null, 
+        uf, 
+        userId: Number(userId), 
+        modo: modo || 'planejamento' 
+      }
+    });
+
+    await logUserActivity(req.user.id, 'assign_territory', `Atribuiu ${municipio || 'Estado'} ${uf} ao usuário ${userId}`, req, 'Territory', String(territory.id));
+    res.status(201).json(territory);
+  } catch (error) {
+    console.error('Error assigning territory:', error);
+    res.status(500).json({ message: 'Erro ao atribuir território' });
+  }
+});
+
+router.delete('/territories/:id', authenticate, requirePermission('territories', 'edit'), async (req: any, res) => {
+  const id = Number(req.params.id);
+  
+  try {
+    const existing = await prisma.territory.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ message: 'Território não encontrado' });
+
+    await prisma.territory.delete({ where: { id } });
+
+    await logUserActivity(req.user.id, 'delete_territory', `Removeu atribuição de território ID: ${id}`, req, 'Territory', String(id));
+    res.json({ message: 'Atribuição removida com sucesso' });
+  } catch (error) {
+    console.error('Error deleting territory:', error);
+    res.status(500).json({ message: 'Erro ao remover território' });
+  }
+});
+
 router.post('/territories/claim', authenticate, async (req: any, res) => {
-  const { municipio, uf } = req.body;
+  const { municipio, uf, modo } = req.body;
   
   if (!municipio || !uf) return res.status(400).json({ message: 'Município e UF são obrigatórios' });
+
+  const targetModo = modo || 'planejamento';
 
   let user: any = null;
   try {
@@ -766,17 +831,19 @@ router.post('/territories/claim', authenticate, async (req: any, res) => {
   }
 
   try {
-    // 2. Verificar se o município já está ocupado com fallback HTTP se necessário
-    let existing: any = null;
+    // 2. Verificar se o usuário já reivindicou este município neste modo
+    let alreadyClaimed: any = null;
     try {
       const findPromise = prisma.territory.findFirst({
         where: {
           municipio: { equals: municipio, mode: 'insensitive' },
-          uf: { equals: uf, mode: 'insensitive' }
+          uf: { equals: uf, mode: 'insensitive' },
+          userId: user.id,
+          modo: targetModo
         }
       });
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
-      existing = await Promise.race([findPromise, timeoutPromise]);
+      alreadyClaimed = await Promise.race([findPromise, timeoutPromise]);
     } catch (e) {
       console.warn('[CLAIM] Prisma failed to find territory, checking via HTTP');
       const { data } = await supabaseAdmin
@@ -784,41 +851,70 @@ router.post('/territories/claim', authenticate, async (req: any, res) => {
         .select('*')
         .ilike('municipio', municipio)
         .ilike('uf', uf)
+        .eq('userId', user.id)
+        .eq('modo', targetModo)
         .single();
-      existing = data;
+      alreadyClaimed = data;
     }
 
-    if (existing && existing.userId) {
-      return res.status(409).json({ message: 'Este município já foi reivindicado por outro usuário.' });
+    if (alreadyClaimed) {
+      return res.status(409).json({ message: 'Você já reivindicou este município.' });
     }
 
-    // 3. Criar ou atualizar o território com fallback HTTP
+    // 3. Criar o território (sempre cria um novo registro para permitir múltiplos usuários)
     try {
-      if (existing) {
-        await prisma.territory.update({
-          where: { id: existing.id },
-          data: { userId: user.id, modo: 'planejamento' }
-        });
-      } else {
-        await prisma.territory.create({
-          data: { municipio, uf, userId: user.id, modo: 'planejamento' }
-        });
-      }
+      await prisma.territory.create({
+        data: { municipio, uf, userId: user.id, modo: targetModo }
+      });
     } catch (e) {
       console.warn('[CLAIM] Prisma failed to save territory, using HTTP fallback');
-      const payload = { municipio, uf, userId: user.id, modo: 'planejamento' };
-      if (existing) {
-        await supabaseAdmin.from('territories').update(payload).eq('id', existing.id);
-      } else {
-        await supabaseAdmin.from('territories').insert(payload);
-      }
+      const payload = { municipio, uf, userId: user.id, modo: targetModo };
+      await supabaseAdmin.from('territories').insert(payload);
     }
 
-    logUserActivity(user.id, 'claim_territory', `Reivindicou o município ${municipio} - ${uf}`, req, 'Territory').catch(() => {});
+    logUserActivity(user.id, 'claim_territory', `Reivindicou o município ${municipio} - ${uf} (${targetModo})`, req, 'Territory').catch(() => {});
     res.json({ message: 'Município reivindicado com sucesso!' });
   } catch (error) {
     console.error('Error claiming territory:', error);
     res.status(500).json({ message: 'Erro ao reivindicar município' });
+  }
+});
+
+router.delete('/territories/unclaim', authenticate, async (req: any, res) => {
+  const { municipio, uf, modo } = req.body;
+  const user = req.user;
+
+  if (!municipio || !uf) {
+    return res.status(400).json({ message: 'Município e UF são obrigatórios' });
+  }
+
+  const targetModo = modo || 'planejamento';
+
+  try {
+    // Verificar se a atribuição existe para este usuário neste modo
+    const territory = await prisma.territory.findFirst({
+      where: {
+        municipio: { equals: municipio, mode: 'insensitive' },
+        uf: { equals: uf, mode: 'insensitive' },
+        userId: user.id,
+        modo: targetModo
+      }
+    });
+
+    if (!territory) {
+      return res.status(404).json({ message: 'Você não possui este território vinculado.' });
+    }
+
+    // Remover a atribuição
+    await prisma.territory.delete({
+      where: { id: territory.id }
+    });
+
+    logUserActivity(user.id, 'unclaim_territory', `Deixou de reivindicar o município ${municipio} - ${uf} (${targetModo})`, req, 'Territory').catch(() => {});
+    res.json({ message: 'Território desvinculado com sucesso!' });
+  } catch (error) {
+    console.error('Error unclaiming territory:', error);
+    res.status(500).json({ message: 'Erro ao desvincular território' });
   }
 });
 
