@@ -22,18 +22,35 @@ import { API_BASE_URL } from "@/lib/api-base";
 const normalizeName = (s: string) => 
   s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 
-const Index = () => {
+  const Index = () => {
   const { isAuthenticated, role, userId, token, assigned_state, assigned_states, logout } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [selectedUF, setSelectedUF] = useState<string | null>(() => {
-    // If not admin and has assigned states, default to the first one or null
-    if (role !== 'admin' && assigned_states && assigned_states.length > 0) {
-      return assigned_states[0];
+  // Reset local filters and state when user changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      setFiltroUsuario(null);
+      setSearchQuery("");
+      setSearchResultGeo(null);
+      setSelectedMunicipio(null);
+      setMunicipioCodeForBairros(null);
+      setSelectedClients([]);
+      setFlyToLocation(null);
+      
+      // Clear react-query cache to prevent seeing old data
+      queryClient.clear();
+      
+      // Default UF based on role
+      if (role !== 'admin' && assigned_states && assigned_states.length > 0) {
+        setSelectedUF(assigned_states[0]);
+      } else {
+        setSelectedUF(null);
+      }
     }
-    return assigned_state || null;
-  });
+  }, [userId, role, queryClient]);
+
+  const [selectedUF, setSelectedUF] = useState<string | null>(null);
   const [filtroUsuario, setFiltroUsuario] = useState<string | null>(null);
   const [modo, setModo] = useState<"planejamento" | "atendimento">("atendimento");
   const [mostrarVagos, setMostrarVagos] = useState(false);

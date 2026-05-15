@@ -527,45 +527,116 @@ export default function Admin() {
 
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
 
-  // ── Brand / Personalização ────────────────────────────────────────────────
-  const [brandLogo, setBrandLogo] = useState<string>(() => localStorage.getItem('brand_logo') || '/Logo.png');
-  const [brandName, setBrandName] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Território');
-  const [brandNameDraft, setBrandNameDraft] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Território');
-
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { toast.error('Selecione um arquivo de imagem'); return; }
-    if (file.size > 2 * 1024 * 1024) { toast.error('Imagem muito grande (máx. 2 MB)'); return; }
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const b64 = ev.target?.result as string;
-      setBrandLogo(b64);
-      localStorage.setItem('brand_logo', b64);
-      toast.success('Logo atualizada com sucesso!');
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleSaveBrandName = () => {
-    const name = brandNameDraft.trim() || 'Mapa Território';
-    setBrandName(name);
-    localStorage.setItem('brand_name', name);
-    toast.success('Nome da empresa salvo!');
-  };
-
-  const handleRemoveLogo = () => {
-    setBrandLogo('');
-    localStorage.removeItem('brand_logo');
-    toast.success('Logo removida');
-  };
-
   // ── Auth & Permissions ──────────────────────────────────────────────────
   const authHeaders = useMemo(() => ({
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
     'x-user-token-version': String(tokenVersion || 0)
   }), [token, tokenVersion]);
+
+  // ── Brand / Personalização ────────────────────────────────────────────────
+  const [brandLogo, setBrandLogo] = useState<string>(() => localStorage.getItem('brand_logo') || '/Logo.png');
+  const [brandName, setBrandName] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Território');
+  const [brandNameDraft, setBrandNameDraft] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Território');
+  const [brandLogoHeightLogin, setBrandLogoHeightLogin] = useState<number>(() => Number(localStorage.getItem('brand_logo_height_login')) || 80);
+  const [brandLogoHeightNavbar, setBrandLogoHeightNavbar] = useState<number>(() => Number(localStorage.getItem('brand_logo_height_navbar')) || 40);
+
+  const fetchSystemSettings = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/admin/settings`, { headers: authHeaders });
+      if (res.ok) {
+        const settings = await res.json();
+        if (settings.brand_logo) {
+          setBrandLogo(settings.brand_logo);
+          localStorage.setItem('brand_logo', settings.brand_logo);
+        }
+        if (settings.brand_name) {
+          setBrandName(settings.brand_name);
+          setBrandNameDraft(settings.brand_name);
+          localStorage.setItem('brand_name', settings.brand_name);
+        }
+        if (settings.brand_logo_height_login) {
+          setBrandLogoHeightLogin(Number(settings.brand_logo_height_login));
+          localStorage.setItem('brand_logo_height_login', settings.brand_logo_height_login);
+        }
+        if (settings.brand_logo_height_navbar) {
+          setBrandLogoHeightNavbar(Number(settings.brand_logo_height_navbar));
+          localStorage.setItem('brand_logo_height_navbar', settings.brand_logo_height_navbar);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching system settings:', error);
+    }
+  }, [authHeaders]);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Selecione um arquivo de imagem'); return; }
+    if (file.size > 2 * 1024 * 1024) { toast.error('Imagem muito grande (máx. 2 MB)'); return; }
+    
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const b64 = ev.target?.result as string;
+      try {
+        const res = await fetch(`${API}/api/admin/settings`, {
+          method: 'PUT',
+          headers: authHeaders,
+          body: JSON.stringify({ brand_logo: b64 })
+        });
+        if (res.ok) {
+          setBrandLogo(b64);
+          localStorage.setItem('brand_logo', b64);
+          toast.success('Logo do sistema atualizada!');
+          window.dispatchEvent(new Event('storage'));
+        } else {
+          toast.error('Erro ao salvar logo no servidor');
+        }
+      } catch (error) {
+        toast.error('Erro de conexão ao salvar logo');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveBrandName = async () => {
+    const name = brandNameDraft.trim() || 'Mapa Território';
+    try {
+      const res = await fetch(`${API}/api/admin/settings`, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify({ brand_name: name })
+      });
+      if (res.ok) {
+        setBrandName(name);
+        localStorage.setItem('brand_name', name);
+        toast.success('Nome da empresa salvo!');
+        window.dispatchEvent(new Event('storage'));
+      } else {
+        toast.error('Erro ao salvar nome no servidor');
+      }
+    } catch (error) {
+      toast.error('Erro de conexão ao salvar nome');
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    try {
+      const res = await fetch(`${API}/api/admin/settings`, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify({ brand_logo: '/Logo.png' })
+      });
+      if (res.ok) {
+        setBrandLogo('/Logo.png');
+        localStorage.setItem('brand_logo', '/Logo.png');
+        toast.success('Logo resetada para o padrão');
+        window.dispatchEvent(new Event('storage'));
+      }
+    } catch {
+      toast.error('Erro ao resetar logo');
+    }
+  };
 
   // ── LocalStorage state ────────────────────────────────────────────────────
   const [groups, setGroups] = useState<Group[]>(() => LS.get('admin_groups', []));
@@ -1203,8 +1274,9 @@ export default function Admin() {
       fetchAll();
       fetchMyPermissions();
       fetchNotifications();
+      fetchSystemSettings();
     }
-  }, [initialLoadDone, fetchAll, fetchMyPermissions, fetchNotifications]);
+  }, [initialLoadDone, fetchAll, fetchMyPermissions, fetchNotifications, fetchSystemSettings]);
 
 
   useEffect(() => {
@@ -2600,6 +2672,71 @@ export default function Admin() {
                           <div className="flex flex-col gap-2">
                             <Input value={brandNameDraft} onChange={e => setBrandNameDraft(e.target.value)} placeholder="Ex: Mapa Território" />
                             <Button onClick={handleSaveBrandName} size="sm" className="gap-2 self-start"><Save className="w-3.5 h-3.5" /> Salvar Nome</Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="h-px bg-border/20 my-2" />
+
+                      {/* Ajuste de Tamanhos */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Altura na Tela de Login</Label>
+                            <span className="text-[10px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded">{brandLogoHeightLogin}px</span>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <input 
+                              type="range" 
+                              min="40" 
+                              max="300" 
+                              step="5"
+                              value={brandLogoHeightLogin} 
+                              onChange={async (e) => {
+                                const val = Number(e.target.value);
+                                setBrandLogoHeightLogin(val);
+                                try {
+                                  await fetch(`${API}/api/admin/settings`, {
+                                    method: 'PUT',
+                                    headers: authHeaders,
+                                    body: JSON.stringify({ brand_logo_height_login: val })
+                                  });
+                                  localStorage.setItem('brand_logo_height_login', String(val));
+                                  window.dispatchEvent(new Event('storage'));
+                                } catch {}
+                              }} 
+                              className="flex-1 accent-primary" 
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Altura na Navbar</Label>
+                            <span className="text-[10px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded">{brandLogoHeightNavbar}px</span>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <input 
+                              type="range" 
+                              min="20" 
+                              max="80" 
+                              step="2"
+                              value={brandLogoHeightNavbar} 
+                              onChange={async (e) => {
+                                const val = Number(e.target.value);
+                                setBrandLogoHeightNavbar(val);
+                                try {
+                                  await fetch(`${API}/api/admin/settings`, {
+                                    method: 'PUT',
+                                    headers: authHeaders,
+                                    body: JSON.stringify({ brand_logo_height_navbar: val })
+                                  });
+                                  localStorage.setItem('brand_logo_height_navbar', String(val));
+                                  window.dispatchEvent(new Event('storage'));
+                                } catch {}
+                              }} 
+                              className="flex-1 accent-primary" 
+                            />
                           </div>
                         </div>
                       </div>

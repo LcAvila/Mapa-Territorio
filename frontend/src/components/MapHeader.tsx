@@ -69,6 +69,44 @@ export default function MapHeader({
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const [brandLogo, setBrandLogo] = React.useState(localStorage.getItem('brand_logo') || '/Logo.png');
+  const [brandName, setBrandName] = React.useState(localStorage.getItem('brand_name') || 'Mapa Território');
+  const [brandLogoHeight, setBrandLogoHeight] = React.useState(Number(localStorage.getItem('brand_logo_height_navbar')) || 40);
+
+  React.useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/admin/settings`);
+        if (res.ok) {
+          const settings = await res.json();
+          if (settings.brand_logo) {
+            setBrandLogo(settings.brand_logo);
+            localStorage.setItem('brand_logo', settings.brand_logo);
+          }
+          if (settings.brand_name) {
+            setBrandName(settings.brand_name);
+            localStorage.setItem('brand_name', settings.brand_name);
+          }
+          if (settings.brand_logo_height_navbar) {
+            setBrandLogoHeight(Number(settings.brand_logo_height_navbar));
+            localStorage.setItem('brand_logo_height_navbar', settings.brand_logo_height_navbar);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching settings:', error);
+      }
+    };
+    fetchSettings();
+
+    const handleStorage = () => {
+      setBrandLogo(localStorage.getItem('brand_logo') || '/Logo.png');
+      setBrandName(localStorage.getItem('brand_name') || 'Mapa Território');
+      setBrandLogoHeight(Number(localStorage.getItem('brand_logo_height_navbar')) || 40);
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
   // ── Notifications Logic ──
   const currentUserId = userId || Number(localStorage.getItem('userId') || 0) || null;
   const fullUserName = userName || localStorage.getItem('userName') || 'Usuário';
@@ -159,7 +197,7 @@ export default function MapHeader({
       {/* Logo / Brand */}
       <div className="flex items-center gap-2 shrink-0 cursor-pointer group" onClick={() => setShowAboutModal(true)}>
         <div className="relative">
-          <img src="/Logo.png" alt="Logo" className="h-7 sm:h-10 w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
+          <img src={brandLogo} alt="Logo" style={{ height: `${brandLogoHeight}px`, width: 'auto' }} className="w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
           <div className="absolute inset-0 bg-primary/10 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
         </div>
       </div>
@@ -172,15 +210,15 @@ export default function MapHeader({
               Sobre o Sistema
             </DialogTitle>
             <DialogDescription className="sr-only">
-              Informações sobre os desenvolvedores e a versão do sistema Mapa Território.
+              Informações sobre os desenvolvedores e a versão do sistema {brandName}.
             </DialogDescription>
           </DialogHeader>
           
           <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto max-h-[70vh] custom-scrollbar">
             <div className="flex flex-col items-center text-center space-y-3 pb-4 border-b border-border">
-              <img src="/Logo.png" alt="Logo" className="h-10 sm:h-12 w-auto object-contain" />
+              <img src={brandLogo} alt="Logo" className="h-10 sm:h-12 w-auto object-contain" />
               <div>
-                <h3 className="text-base sm:text-lg font-black tracking-tight text-foreground">Mapa Território</h3>
+                <h3 className="text-base sm:text-lg font-black tracking-tight text-foreground">{brandName}</h3>
                 <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Versão 2.4.0 • Enterprise</p>
               </div>
             </div>

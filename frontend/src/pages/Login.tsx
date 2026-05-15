@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/auth-context-core';
 import { Eye, EyeOff, User, Lock, Loader2, ShieldCheck, ChevronRight } from 'lucide-react';
@@ -15,8 +15,44 @@ export default function Login() {
     const { login } = useAuth();
     const navigate = useNavigate();
 
-    const brandName = localStorage.getItem('brand_name') || 'Mapa Território';
-    const brandLogo = localStorage.getItem('brand_logo') || '/Logo.png';
+    const [brandName, setBrandName] = useState(localStorage.getItem('brand_name') || 'Mapa Território');
+    const [brandLogo, setBrandLogo] = useState(localStorage.getItem('brand_logo') || '/Logo.png');
+    const [brandLogoHeight, setBrandLogoHeight] = useState(Number(localStorage.getItem('brand_logo_height_login')) || 80);
+
+    useEffect(() => {
+        const fetchSettings = async () => {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/admin/settings`);
+                if (res.ok) {
+                    const settings = await res.json();
+                    if (settings.brand_logo) {
+                        setBrandLogo(settings.brand_logo);
+                        localStorage.setItem('brand_logo', settings.brand_logo);
+                    }
+                    if (settings.brand_name) {
+                        setBrandName(settings.brand_name);
+                        localStorage.setItem('brand_name', settings.brand_name);
+                    }
+                    if (settings.brand_logo_height_login) {
+                        setBrandLogoHeight(Number(settings.brand_logo_height_login));
+                        localStorage.setItem('brand_logo_height_login', settings.brand_logo_height_login);
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching settings:', error);
+            }
+        };
+        fetchSettings();
+        
+        // Listen for storage events to update logo in real-time if changed in another tab
+        const handleStorage = () => {
+            setBrandName(localStorage.getItem('brand_name') || 'Mapa Território');
+            setBrandLogo(localStorage.getItem('brand_logo') || '/Logo.png');
+            setBrandLogoHeight(Number(localStorage.getItem('brand_logo_height_login')) || 80);
+        };
+        window.addEventListener('storage', handleStorage);
+        return () => window.removeEventListener('storage', handleStorage);
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -75,7 +111,7 @@ export default function Login() {
             {/* Left Side: Visual Space Content */}
             <section className="login-visual">
                 <header className="login-visual-brand">
-                    <img src={brandLogo} alt="Logo" className="login-brand-logo-img" />
+                    <img src={brandLogo} alt="Logo" className="login-brand-logo-img" style={{ height: `${brandLogoHeight}px`, width: 'auto' }} />
                 </header>
 
                 <div className="login-visual-content">

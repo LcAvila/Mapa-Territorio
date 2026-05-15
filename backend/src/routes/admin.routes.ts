@@ -1132,7 +1132,7 @@ router.put('/users/:id/config', requirePermission('users', 'edit'), async (req, 
   }
 });
 
-router.put('/users/:id/notif-prefs', requirePermission('users', 'edit'), async (req, res) => {
+router.put('/users/:id/notif-prefs', requirePermission('users', 'edit'), async (req: any, res) => {
   const userId = Number(req.params.id);
   const { notif_email, notif_sms, notif_push } = req.body;
   try {
@@ -1146,6 +1146,38 @@ router.put('/users/:id/notif-prefs', requirePermission('users', 'edit'), async (
     res.json({ message: 'Preferências atualizadas', user });
   } catch (error) {
     res.status(500).json({ message: 'Erro ao atualizar notificações' });
+  }
+});
+
+// ── SYSTEM SETTINGS ─────────────────────────────────────────────────────────
+
+router.get('/settings', async (req, res) => {
+  try {
+    const configs = await prisma.configSistema.findMany();
+    const configMap = configs.reduce((acc, c) => ({ ...acc, [c.parametro]: c.valor }), {});
+    res.json(configMap);
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao buscar configurações do sistema' });
+  }
+});
+
+router.put('/settings', requireAdmin, async (req: any, res) => {
+  const settings = req.body; // { brand_name?: string, brand_logo?: string }
+  
+  try {
+    for (const [parametro, valor] of Object.entries(settings)) {
+      await prisma.configSistema.upsert({
+        where: { parametro },
+        update: { valor: String(valor) },
+        create: { parametro, valor: String(valor) }
+      });
+    }
+
+    await logUserActivity(req.user.id, 'system_settings_update', 'Atualizou configurações globais do sistema', req, 'ConfigSistema');
+    res.json({ message: 'Configurações do sistema atualizadas com sucesso' });
+  } catch (error) {
+    console.error('Error updating system settings:', error);
+    res.status(500).json({ message: 'Erro ao atualizar configurações do sistema' });
   }
 });
 
