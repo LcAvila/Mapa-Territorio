@@ -399,8 +399,16 @@ export default function BrazilMap({
 
   const filteredStatesGeo = useMemo(() => {
     if (!statesGeo) return null;
-    if (role === 'admin' || assignedStates.length === 0) return statesGeo;
     
+    // Admins see everything
+    if (role === 'admin') return statesGeo;
+    
+    // Non-admins with no assigned states should see NOTHING (isolation)
+    if (!assignedStates || assignedStates.length === 0) {
+      return { ...statesGeo, features: [] } as GeoJSONFeatureCollection;
+    }
+    
+    // Show ONLY assigned states
     return {
       ...statesGeo,
       features: (statesGeo.features as GeoJSONFeature[]).filter(f => {
@@ -536,6 +544,20 @@ export default function BrazilMap({
     const isSelected = uf && selectedUF === uf.sigla;
     const hideSelection = isMapMoving && isSelected;
 
+    // Se o usuário não tem permissão para este estado, ele deve ficar visualmente inativo
+    const isAllowed = role === 'admin' || (uf && assignedStates && assignedStates.includes(uf.sigla));
+
+    if (!isAllowed) {
+      return {
+        fillColor: "hsl(220, 15%, 5%)",
+        weight: 0.1,
+        opacity: 0,
+        color: "transparent",
+        fillOpacity: 0,
+        interactive: false
+      };
+    }
+
     // If showUsuarios is active, show state color based on assignments
     if (showUsuarios && uf) {
       const stateTerritories = apiTerritories.filter(t => t.uf === uf.sigla);
@@ -625,18 +647,23 @@ export default function BrazilMap({
 
   const stateOutlineStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
-    const uf = getUFByCode(Number(f?.properties?.codarea));
+    const ufCode = Number(f?.properties?.codarea);
+    const uf = getUFByCode(ufCode);
     const isSel = uf && selectedUF === uf.sigla;
     const hideSelection = isMapMoving && isSel;
+
+    // Se o usuário não tem permissão para este estado, ele não deve nem ser "interativo" (não disparar eventos de mouse)
+    const isAllowed = role === 'admin' || (uf && assignedStates && assignedStates.includes(uf.sigla));
 
     return {
       fillColor: "transparent" as const,
       weight: isSel ? 2 : 0.5,
       opacity: isSel ? 1 : 0.2,
       color: isSel && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : "hsl(220, 15%, 25%)",
-      fillOpacity: 0
+      fillOpacity: 0,
+      interactive: isAllowed 
     };
-  }, [selectedUF, isMapMoving]);
+  }, [selectedUF, isMapMoving, role, assignedStates]);
 
   const targetMunicipioStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
@@ -684,9 +711,28 @@ export default function BrazilMap({
     const uf = getUFByCode(ufCode);
     if (!uf) return;
 
+    // Check if interaction is allowed
+    // Se o usuário tiver um estado vinculado, ele SÓ pode interagir com esse estado.
+    const isAllowed = role === 'admin' || (assignedStates && assignedStates.length > 0 && assignedStates.includes(uf.sigla));
+
     if (layer instanceof L.Path) {
-      const el = layer.getElement();
-      if (el) el.classList.add('map-hover-effect');
+      const el = layer.getElement() as HTMLElement | null;
+      if (el) {
+        el.classList.add('map-hover-effect');
+        if (!isAllowed) {
+          el.style.cursor = 'default';
+          el.style.pointerEvents = 'none';
+          el.style.filter = 'grayscale(1) opacity(0.05)'; // Almost invisible
+        } else {
+          el.style.pointerEvents = 'auto';
+          el.style.cursor = 'pointer';
+          el.style.filter = 'none';
+        }
+      }
+    }
+
+    if (!isAllowed) {
+      return;
     }
 
     (layer as L.Path).on({
@@ -713,7 +759,7 @@ export default function BrazilMap({
         onContextMenuState?.(uf.nome, uf.sigla, e.originalEvent.clientX, e.originalEvent.clientY);
       },
     });
-  }, [stateStyle, onSelectUF, onContextMenuState, statesMetadata]);
+  }, [stateStyle, onSelectUF, onContextMenuState, statesMetadata, role, assignedStates]);
 
   const onEachMunicipio = useCallback((feature: unknown, layer: L.Layer) => {
     const f = feature as GeoJSONFeature;
@@ -870,6 +916,20 @@ export default function BrazilMap({
     handleBack();
   }, [handleBack]);
 
+  const minZoom = useMemo(() => {
+    if (role === 'admin' || !assignedStates || assignedStates.length === 0) return 3;
+    return (ufInfo?.zoom || 4);
+  }, [role, assignedStates, ufInfo]);
+
+  const maxBounds = useMemo(() => {
+    if (role === 'admin' || !assignedStates || assignedStates.length === 0 || !filteredStatesGeo) return undefined;
+    try {
+      return L.geoJSON(filteredStatesGeo).getBounds().pad(0.1);
+    } catch (e) {
+      return undefined;
+    }
+  }, [role, assignedStates, filteredStatesGeo]);
+
   return (
     <div className="w-full h-full relative overflow-hidden bg-background">
       <MapContainer
@@ -879,11 +939,13 @@ export default function BrazilMap({
         scrollWheelZoom={true}
         dragging={true}
         doubleClickZoom={false}
-      boxZoom={true}
+        boxZoom={true}
         keyboard={true}
         attributionControl={false}
         style={{ background: "hsl(220, 20%, 8%)" }}
-        minZoom={3}
+        minZoom={minZoom}
+        maxBounds={maxBounds}
+        maxBoundsViscosity={1.0}
       >
         <AttributionControl prefix={false} />
         <MapController center={center} zoom={zoom} flyToLocation={flyToLocation} selectedUF={selectedUF} />
@@ -934,23 +996,13 @@ export default function BrazilMap({
         )}
 
         {/* States layer (Level 1) */}
-          {filteredStatesGeo && !selectedUF && (
+          {filteredStatesGeo && (
             <Pane name="basePane" style={{ zIndex: 100 }}>
               <GeoJSON 
-                key={`states-${assignedStates.join(',')}-${statesMetadata?.length || 0}-${showUsuarios}-${apiTerritories.length}`} 
+                key={`states-${assignedStates.join(',')}-${statesMetadata?.length || 0}-${showUsuarios}-${apiTerritories.length}-${selectedUF}`} 
                 data={filteredStatesGeo} 
-                style={stateStyle} 
+                style={selectedUF ? stateOutlineStyle : stateStyle} 
                 onEachFeature={onEachState} 
-              />
-            </Pane>
-          )}
-          {filteredStatesGeo && selectedUF && (
-            <Pane name="basePane" style={{ zIndex: 100 }}>
-              <GeoJSON 
-                key={`states-outline-${selectedUF}`} 
-                data={filteredStatesGeo} 
-                style={stateOutlineStyle} 
-                interactive={false}
               />
             </Pane>
           )}

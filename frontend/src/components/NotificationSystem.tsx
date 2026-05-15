@@ -44,6 +44,8 @@ export default function NotificationSystem() {
       });
       if (res.ok) {
         console.log(`[NOTIF] Marked ${id} as seen on server`);
+      } else if (res.status === 404) {
+        console.warn(`[NOTIF] Notification ${id} no longer exists on server`);
       }
     } catch (error) {
       console.error('Error marking as seen on server:', error);

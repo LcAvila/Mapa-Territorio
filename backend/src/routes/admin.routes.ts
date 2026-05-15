@@ -789,6 +789,71 @@ router.post('/territories', authenticate, requirePermission('territories', 'edit
   }
 });
 
+router.delete('/territories/unclaim', authenticate, async (req: any, res) => {
+  const { municipio, uf, modo } = req.body;
+  const user = req.user;
+
+  if (!municipio || !uf) {
+    return res.status(400).json({ message: 'Município e UF são obrigatórios' });
+  }
+
+  const targetModo = modo || 'planejamento';
+
+  try {
+    // 1. Impedir que o usuário desvincule o estado inteiro se este for o seu assigned_state
+    if (user.role !== 'admin' && !municipio && user.assigned_state === uf) {
+      return res.status(403).json({ message: `Você não tem permissão para desvincular seu estado principal (${uf}).` });
+    }
+
+    // 2. Se for um supervisor/usuário comum tentando desvincular algo que NÃO é dele, 
+    // precisamos checar a permissão do módulo 'territories'.
+    // Mas se for o próprio usuário desvinculando o DELE, permitimos sempre.
+    
+    // Verificar se a atribuição existe para este usuário neste modo
+    const territory = await prisma.territory.findFirst({
+      where: {
+        municipio: municipio ? { equals: municipio, mode: 'insensitive' } : null,
+        uf: { equals: uf, mode: 'insensitive' },
+        userId: user.id,
+        modo: targetModo
+      }
+    });
+
+    if (!territory) {
+      // Se não é do próprio usuário, ele precisa de permissão de admin/supervisor para remover de outros
+      if (user.role !== 'admin') {
+         return res.status(403).json({ message: 'Você não possui este território vinculado e não tem permissão para remover de outros.' });
+      }
+      
+      // Se for admin, tenta achar o território de qualquer um para deletar
+      const anyTerritory = await prisma.territory.findFirst({
+        where: {
+          municipio: municipio ? { equals: municipio, mode: 'insensitive' } : null,
+          uf: { equals: uf, mode: 'insensitive' },
+          modo: targetModo
+        }
+      });
+
+      if (!anyTerritory) {
+        return res.status(404).json({ message: 'Território não encontrado.' });
+      }
+
+      await prisma.territory.delete({ where: { id: anyTerritory.id } });
+    } else {
+      // Se o território é dele, remove sem problemas
+      await prisma.territory.delete({
+        where: { id: territory.id }
+      });
+    }
+
+    logUserActivity(user.id, 'unclaim_territory', `Deixou de reivindicar o ${municipio ? 'município ' + municipio : 'estado'} - ${uf} (${targetModo})`, req, 'Territory').catch(() => {});
+    res.json({ message: 'Território desvinculado com sucesso!' });
+  } catch (error) {
+    console.error('Error unclaiming territory:', error);
+    res.status(500).json({ message: 'Erro ao desvincular território' });
+  }
+});
+
 router.delete('/territories/:id', authenticate, requirePermission('territories', 'edit'), async (req: any, res) => {
   const id = Number(req.params.id);
   
@@ -797,11 +862,9 @@ router.delete('/territories/:id', authenticate, requirePermission('territories',
     if (!existing) return res.status(404).json({ message: 'Território não encontrado' });
 
     await prisma.territory.delete({ where: { id } });
-
-    await logUserActivity(req.user.id, 'delete_territory', `Removeu atribuição de território ID: ${id}`, req, 'Territory', String(id));
-    res.json({ message: 'Atribuição removida com sucesso' });
+    await logUserActivity(req.user.id, 'unassign_territory', `Removeu atribuição de território ID ${id}`, req, 'Territory', String(id));
+    res.json({ message: 'Território removido com sucesso' });
   } catch (error) {
-    console.error('Error deleting territory:', error);
     res.status(500).json({ message: 'Erro ao remover território' });
   }
 });
@@ -877,44 +940,6 @@ router.post('/territories/claim', authenticate, async (req: any, res) => {
   } catch (error) {
     console.error('Error claiming territory:', error);
     res.status(500).json({ message: 'Erro ao reivindicar município' });
-  }
-});
-
-router.delete('/territories/unclaim', authenticate, async (req: any, res) => {
-  const { municipio, uf, modo } = req.body;
-  const user = req.user;
-
-  if (!municipio || !uf) {
-    return res.status(400).json({ message: 'Município e UF são obrigatórios' });
-  }
-
-  const targetModo = modo || 'planejamento';
-
-  try {
-    // Verificar se a atribuição existe para este usuário neste modo
-    const territory = await prisma.territory.findFirst({
-      where: {
-        municipio: { equals: municipio, mode: 'insensitive' },
-        uf: { equals: uf, mode: 'insensitive' },
-        userId: user.id,
-        modo: targetModo
-      }
-    });
-
-    if (!territory) {
-      return res.status(404).json({ message: 'Você não possui este território vinculado.' });
-    }
-
-    // Remover a atribuição
-    await prisma.territory.delete({
-      where: { id: territory.id }
-    });
-
-    logUserActivity(user.id, 'unclaim_territory', `Deixou de reivindicar o município ${municipio} - ${uf} (${targetModo})`, req, 'Territory').catch(() => {});
-    res.json({ message: 'Território desvinculado com sucesso!' });
-  } catch (error) {
-    console.error('Error unclaiming territory:', error);
-    res.status(500).json({ message: 'Erro ao desvincular território' });
   }
 });
 

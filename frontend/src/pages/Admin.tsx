@@ -100,7 +100,15 @@ import SpaceButton from '../components/admin/SpaceButton';
 import { API_BASE_URL } from '@/lib/api-base';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
-interface Territory { id: number; municipio: string; uf: string; modo: string; userId?: number; }
+interface Territory { 
+  id: number; 
+  municipio: string; 
+  uf: string; 
+  modo: string; 
+  userId?: number; 
+  userIds?: number[]; 
+  clientCount?: number; 
+}
 
 interface UserType {
   id: number;
@@ -508,13 +516,7 @@ export default function Admin() {
   const [isTerritoryDetailOpen, setIsTerritoryDetailOpen] = useState(false);
   const [isUFDetailOpen, setIsUFDetailOpen] = useState(false);
   const [selectedUFDetail, setSelectedUFDetail] = useState<string | null>(null);
-  const [selectedTerritory, setSelectedTerritory] = useState<{
-    id: number;
-    municipio: string;
-    uf: string;
-    userIds: number[];
-    clientCount: number;
-  } | null>(null);
+  const [selectedTerritory, setSelectedTerritory] = useState<Territory | null>(null);
 
   // Estados para o Modal Detalhado de UF
   const [isRemovingUser, setIsRemovingUser] = useState(false);
@@ -2877,9 +2879,9 @@ export default function Admin() {
                                     </TableCell>
                                     <TableCell>
                                       <div className="flex flex-wrap gap-1">
-                                        {s.userIds.length === 0 ? (
+                                        {s.userIds && s.userIds.length === 0 ? (
                                           <span className="text-[10px] text-muted-foreground italic">Sem usuário</span>
-                                        ) : s.userIds.slice(0, 3).map(id => {
+                                        ) : s.userIds && s.userIds.slice(0, 3).map(id => {
                                           const u = users.find(u => u.id === id);
                                           return (
                                             <span key={id} className="text-[9px] px-1.5 py-0.5 rounded-md border border-border/50 bg-background/50 flex items-center gap-1 font-bold uppercase truncate max-w-[120px]">
@@ -2887,7 +2889,7 @@ export default function Admin() {
                                             </span>
                                           );
                                         })}
-                                        {s.userIds.length > 3 && (
+                                        {s.userIds && s.userIds.length > 3 && (
                                           <span className="text-[9px] font-bold text-primary/60">+{s.userIds.length - 3}</span>
                                         )}
                                       </div>
@@ -2905,7 +2907,15 @@ export default function Admin() {
                                 key={t.id} 
                                 className="p-4 active:bg-secondary/20 transition-colors flex items-center justify-between gap-4"
                                 onClick={() => {
-                                  setSelectedTerritory(t);
+                                  setSelectedTerritory({
+                                    id: t.id,
+                                    municipio: t.municipio,
+                                    uf: t.uf,
+                                    modo: t.modo,
+                                    userId: t.userId,
+                                    userIds: t.userId ? [t.userId] : [],
+                                    clientCount: 0 
+                                  });
                                   setIsTerritoryDetailOpen(true);
                                 }}
                               >
@@ -2914,22 +2924,21 @@ export default function Admin() {
                                     <span className="text-[10px] font-black text-primary bg-primary/10 px-1.5 py-0.5 rounded uppercase">
                                       {t.uf}
                                     </span>
-                                    <span className="text-[10px] text-muted-foreground font-bold">{t.clientCount} Clientes</span>
+                                    <span className="text-[10px] text-muted-foreground font-bold">Território</span>
                                   </div>
                                   <h4 className="text-sm font-bold text-foreground truncate">{t.municipio || 'Estado Inteiro'}</h4>
                                   <div className="flex flex-wrap gap-1 mt-1.5">
-                                    {t.userIds.slice(0, 2).map(id => {
-                                      const u = users.find(u => u.id === id);
-                                      return (
-                                        <span key={id} className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border/40">
-                                          {u ? u.username : `ID: ${id}`}
-                                        </span>
-                                      );
-                                    })}
-                                    {t.userIds.length > 2 && (
-                                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border/40">
-                                        +{t.userIds.length - 2}
-                                      </span>
+                                    {t.userId ? (
+                                      (() => {
+                                        const u = users.find(u => u.id === t.userId);
+                                        return (
+                                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border/40">
+                                            {u ? u.username : `ID: ${t.userId}`}
+                                          </span>
+                                        );
+                                      })()
+                                    ) : (
+                                      <span className="text-[9px] text-muted-foreground italic">Sem usuário</span>
                                     )}
                                   </div>
                                 </div>
@@ -4179,9 +4188,6 @@ export default function Admin() {
                           <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest opacity-60">Gestão de Territórios Estaduais</p>
                         </div>
                       </div>
-                      <Button variant="ghost" size="icon" className="rounded-full hover:bg-background/50" onClick={() => setIsUFDetailOpen(false)}>
-                        <X className="w-5 h-5" />
-                      </Button>
                     </div>
 
                     <div className="grid grid-cols-3 gap-4 mt-6">

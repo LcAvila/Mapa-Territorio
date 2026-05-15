@@ -86,14 +86,20 @@ export default function MapHeader({
   const markAsRead = async (id: number) => {
     if (!token) return;
     try {
-      await fetch(`${API_BASE_URL}/api/notifications/${id}/seen`, {
+      const res = await fetch(`${API_BASE_URL}/api/notifications/${id}/seen`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      // Atualiza o estado local para refletir a mudança imediatamente
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, seen: true } : n));
+      
+      if (res.ok) {
+        // Atualiza o estado local para refletir a mudança imediatamente
+        setNotifications(prev => prev.map(n => n.id === id ? { ...n, seen: true } : n));
+      } else if (res.status === 404) {
+        // Se a notificação não existe mais no servidor, remove do estado local
+        setNotifications(prev => prev.filter(n => n.id !== id));
+      }
     } catch (error) {
       console.error('Error marking as seen on server:', error);
     }
@@ -125,9 +131,13 @@ export default function MapHeader({
 
   React.useEffect(() => {
     if (!showNotifications) return;
-    // mark all currently visible notifications as read when opening the center
-    myNotifications.forEach(n => markAsRead(n.id));
-  }, [showNotifications, myNotifications]);
+    
+    // Only mark unread notifications as read
+    const unreadNotifications = myNotifications.filter(n => !n.seen);
+    if (unreadNotifications.length > 0) {
+      unreadNotifications.forEach(n => markAsRead(n.id));
+    }
+  }, [showNotifications]); // Removed myNotifications from dependencies to avoid loop
 
   const handleRefresh = () => {
     setIsRefreshing(true);

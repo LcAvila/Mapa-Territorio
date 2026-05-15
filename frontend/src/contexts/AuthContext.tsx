@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     if (r.ok) {
                         const userData = await r.json();
                         const assigned_states = userData.territories
-                            ? Array.from(new Set(userData.territories.filter((t: any) => !t.municipio).map((t: any) => t.uf))) as string[]
+                            ? Array.from(new Set(userData.territories.map((t: any) => t.uf))) as string[]
                             : [];
                         login(existingToken, userData.id, userData.role, userData.full_name, userData.tipo, userData.estado_end, userData.default_workspace, userData.inactivity_limit, userData.token_version, userData.assigned_state, assigned_states);
                     } else if (r.status === 401) {
@@ -191,6 +191,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             tipo,
             estado_end,
             assigned_state,
+            assigned_states,
             defaultWorkspace,
             inactivityLimit,
             tokenVersion,

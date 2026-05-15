@@ -89,6 +89,17 @@ router.post('/:id/seen', authenticate, async (req: AuthRequest, res) => {
 
   try {
     const prismaAny = prisma as any;
+    
+    // Check if notification exists first to avoid foreign key violations
+    const exists = await prismaAny.notification.findUnique({
+      where: { id: notificationId },
+      select: { id: true }
+    });
+
+    if (!exists) {
+      return res.status(404).json({ message: 'Notificação não encontrada' });
+    }
+
     console.log(`[NOTIF] Marking notification ${notificationId} as seen for user ${userId}`);
     
     // Check if the model exists before calling upsert

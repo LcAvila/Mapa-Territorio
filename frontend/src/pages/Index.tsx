@@ -47,14 +47,34 @@ const Index = () => {
 
   // Auto-zoom to assigned state on login for non-admins
   useEffect(() => {
-    if (role !== 'admin' && assigned_states && assigned_states.length > 0 && !flyToLocation) {
+    // Only run if user is not admin and has assigned states
+    if (role && role !== 'admin' && assigned_states && assigned_states.length > 0) {
       const firstUF = assigned_states[0];
       const ufInfo = getUFBySigla(firstUF);
+      
       if (ufInfo) {
-        setFlyToLocation({ center: ufInfo.center, zoom: ufInfo.zoom + 1 });
+        console.log(`[ZOOM] Initial setup for assigned state: ${firstUF}`);
+        
+        // Force state selection
+        setSelectedUF(firstUF);
+        
+        // Set location immediately
+        const targetLocation = { center: ufInfo.center, zoom: ufInfo.zoom };
+        setFlyToLocation(targetLocation);
+        
+        // Multiple aggressive attempts to ensure the map controller catches it
+        const attempts = [100, 500, 1500, 3000, 5000];
+        const timers = attempts.map(delay => 
+          setTimeout(() => {
+            console.log(`[ZOOM] Re-triggering zoom to ${firstUF} (${delay}ms)`);
+            setFlyToLocation({...targetLocation});
+          }, delay)
+        );
+        
+        return () => timers.forEach(t => clearTimeout(t));
       }
     }
-  }, [role, assigned_states]);
+  }, [role, assigned_states?.join(',')]); // Use stringified array to ensure dependency trigger
   
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const [searchResultGeo, setSearchResultGeo] = useState<GeoJSONFeature | null>(null);
@@ -373,8 +393,12 @@ const Index = () => {
     setFlyToLocation(null);
     setSearchQuery("");
     setSelectedClients([]); // Clear client selection
-    if (selectedUF) handleSelectUF(null);
-  }, [handleSelectUF, selectedUF]);
+    
+    // Only deselect UF if admin (non-admins should stay focused on their state)
+    if (role === 'admin' && selectedUF) {
+      handleSelectUF(null);
+    }
+  }, [handleSelectUF, selectedUF, role]);
 
   const ufInfo = useMemo(() => selectedUF ? getUFBySigla(selectedUF) : null, [selectedUF]);
 
