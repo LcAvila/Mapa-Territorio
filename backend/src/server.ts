@@ -70,8 +70,9 @@ const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // Notification polling/realtime fallback can be frequent; do not rate-limit this route.
-    return req.path.startsWith('/api/notifications');
+    // Com app.use('/api/', limiter), req.path é relativo (ex.: /notifications).
+    const p = req.path || req.url || '';
+    return p.startsWith('/notifications') || p.includes('/notifications');
   },
 });
 app.use('/api/', globalLimiter);

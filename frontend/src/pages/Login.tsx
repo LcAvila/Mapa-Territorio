@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from '@/lib/api-base';
+import { buildAssignedStates } from '@/lib/user-territory';
 
 export default function Login() {
     const [username, setUsername] = useState('');
@@ -75,6 +76,10 @@ export default function Login() {
 
             if (response.ok) {
                 const userData = await response.json();
+                const assigned_states = buildAssignedStates(
+                    userData.assigned_state,
+                    userData.territories
+                );
                 login(
                     authData.session?.access_token || '',
                     userData.id,
@@ -84,7 +89,9 @@ export default function Login() {
                     userData.estado_end,
                     userData.default_screen || 'mapa',
                     userData.inactivity_limit,
-                    userData.token_version
+                    userData.token_version,
+                    userData.assigned_state,
+                    assigned_states
                 );
                 toast.success(`Bem-vindo de volta!`);
                 setTimeout(() => navigate('/'), 400);

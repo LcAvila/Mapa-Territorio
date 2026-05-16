@@ -76,9 +76,16 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
             .single();
         
         if (error || !httpUser) return res.status(404).json({ message: 'Usuário não encontrado via HTTP' });
-        
-        // Map fields to match PUBLIC_USER_FIELDS
-        user = httpUser;
+
+        const { data: httpTerritories } = await supabaseAdmin
+            .from('territories')
+            .select('id, uf, municipio, modo')
+            .eq('userId', userId);
+
+        user = {
+            ...httpUser,
+            territories: httpTerritories || [],
+        };
     }
 
     res.json(user);

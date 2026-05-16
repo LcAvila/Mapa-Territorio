@@ -3,6 +3,7 @@ import { AuthContext } from './auth-context-core';
 import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { API_BASE_URL } from '@/lib/api-base';
+import { buildAssignedStates } from '@/lib/user-territory';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);
@@ -57,9 +58,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .then(async r => {
                     if (r.ok) {
                         const userData = await r.json();
-                        const assigned_states = userData.territories
-                            ? Array.from(new Set(userData.territories.map((t: any) => t.uf))) as string[]
-                            : [];
+                        const assigned_states = buildAssignedStates(
+                            userData.assigned_state,
+                            userData.territories
+                        );
                         login(existingToken, userData.id, userData.role, userData.full_name, userData.tipo, userData.estado_end, userData.default_workspace, userData.inactivity_limit, userData.token_version, userData.assigned_state, assigned_states);
                     } else if (r.status === 401) {
                         // Token invalid on backend (e.g. email changed or kicked)
@@ -127,8 +129,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (newUserName) localStorage.setItem('userName', newUserName);
         if (newTipo) localStorage.setItem('tipo', newTipo);
         if (newEstadoEnd) localStorage.setItem('estado_end', newEstadoEnd);
-        if (newAssignedState) localStorage.setItem('assigned_state', newAssignedState);
-        if (newAssignedStates) localStorage.setItem('assigned_states', JSON.stringify(newAssignedStates));
+        if (newAssignedState) {
+            localStorage.setItem('assigned_state', newAssignedState);
+        } else {
+            localStorage.removeItem('assigned_state');
+        }
+        localStorage.setItem('assigned_states', JSON.stringify(newAssignedStates || []));
         if (newDefaultWorkspace) localStorage.setItem('defaultWorkspace', newDefaultWorkspace);
         if (newInactivityLimit) localStorage.setItem('inactivityLimit', String(newInactivityLimit));
         if (newTokenVersion) localStorage.setItem('tokenVersion', String(newTokenVersion));

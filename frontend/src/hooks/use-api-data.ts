@@ -71,7 +71,7 @@ export function useApiTerritories(enabled: boolean) {
     },
     staleTime: 30_000,
     refetchInterval: token ? 60_000 : false,
-    enabled: true  // always enabled; token check inside queryFn
+    enabled: enabled && !!token,
   });
 }
 

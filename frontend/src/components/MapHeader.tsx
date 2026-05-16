@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck, Users, Flame, Filter, X, UserCheck, Check, RefreshCw, ShieldCheck, BadgeCheck } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context-core";
 import { UF_DATA } from "@/data/uf-codes";
-import { SystemUser, Cliente, SearchSuggestion } from "@/hooks/use-api-data";
+import { SystemUser, Cliente, SearchSuggestion, useApiTerritories } from "@/hooks/use-api-data";
 import { REP_COLOR_PALETTE } from "@/data/representatives";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { toast } from "sonner";
 import { ThemeToggle } from "./ThemeToggle";
 import { API_BASE_URL } from "@/lib/api-base";
+import { buildAssignedStates } from "@/lib/user-territory";
 
 interface UserNotification {
   id: number;
@@ -60,6 +61,17 @@ export default function MapHeader({
   const navigate = useNavigate();
   const location = useLocation();
   const { userName, userId, token, tokenVersion, assigned_state, assigned_states, role: authRole } = useAuth();
+  const { data: apiTerritories = [] } = useApiTerritories(!!token);
+  const allowedStates = useMemo(() => {
+    const fromAuth = buildAssignedStates(assigned_state, assigned_states);
+    if (fromAuth.length > 0) return fromAuth;
+    const myUfs = apiTerritories
+      .filter((t) => t.userId === userId)
+      .map((t) => t.uf)
+      .filter(Boolean);
+    return buildAssignedStates(assigned_state, myUfs);
+  }, [assigned_state, assigned_states, apiTerritories, userId]);
+  const hasStateRestriction = authRole !== 'admin' && allowedStates.length > 0;
   const [showNotifications, setShowNotifications] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -282,12 +294,12 @@ export default function MapHeader({
             <select
               value={selectedUF || ""}
               onChange={(e) => onSelectUF?.(e.target.value || null)}
-              disabled={(!!assigned_state || (assigned_states && assigned_states.length > 0)) && authRole !== 'admin'}
+              disabled={hasStateRestriction}
               className="appearance-none bg-secondary text-foreground text-[10px] sm:text-sm pl-2 sm:pl-3 pr-6 sm:pr-8 py-1.5 sm:py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {(!assigned_state && (!assigned_states || assigned_states.length === 0)) && <option value="">Todos os Estados</option>}
+              {!hasStateRestriction && <option value="">Todos os Estados</option>}
               {UF_DATA
-                .filter(uf => authRole === 'admin' || !assigned_states || assigned_states.length === 0 || assigned_states.includes(uf.sigla))
+                .filter(uf => authRole === 'admin' || allowedStates.length === 0 || allowedStates.includes(uf.sigla))
                 .sort((a, b) => a.sigla.localeCompare(b.sigla))
                 .map((uf) => (
                 <option key={uf.sigla} value={uf.sigla}>
@@ -396,12 +408,12 @@ export default function MapHeader({
                         <select
                           value={selectedUF || ""}
                           onChange={(e) => onSelectUF?.(e.target.value || null)}
-                          disabled={(!!assigned_state || (assigned_states && assigned_states.length > 0)) && authRole !== 'admin'}
+                          disabled={hasStateRestriction}
                           className="w-full appearance-none bg-secondary text-foreground text-xs pl-3 pr-8 py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
                         >
-                          {(!assigned_state && (!assigned_states || assigned_states.length === 0)) && <option value="">Todos os Estados</option>}
+                          {!hasStateRestriction && <option value="">Todos os Estados</option>}
                           {UF_DATA
-                            .filter(uf => authRole === 'admin' || !assigned_states || assigned_states.length === 0 || assigned_states.includes(uf.sigla))
+                            .filter(uf => authRole === 'admin' || allowedStates.length === 0 || allowedStates.includes(uf.sigla))
                             .sort((a, b) => a.sigla.localeCompare(b.sigla))
                             .map((uf) => (
                             <option key={uf.sigla} value={uf.sigla}>

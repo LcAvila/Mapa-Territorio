@@ -99,6 +99,11 @@ import MiniMapBrasil from '../components/admin/MiniMapBrasil';
 import UserProfileManager from '../components/admin/users/UserProfileManager';
 import SpaceButton from '../components/admin/SpaceButton';
 import { API_BASE_URL } from '@/lib/api-base';
+import {
+  deriveParentActiveBg,
+  deriveSidebarHoverBg,
+  isLegacyGreenSidebarColor,
+} from '@/lib/sidebar-colors';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 interface Territory { 
@@ -282,6 +287,7 @@ function SidebarContent({
   expandedMenus, 
   setExpandedMenus,
   theme,
+  sidebarBgColor,
   sidebarStyles
 }: {
   displayPhoto: string;
@@ -294,6 +300,7 @@ function SidebarContent({
   expandedMenus: string[];
   setExpandedMenus: React.Dispatch<React.SetStateAction<string[]>>;
   theme: string;
+  sidebarBgColor?: string;
   sidebarStyles: {
     textColor?: string;
     textActiveColor?: string;
@@ -302,7 +309,28 @@ function SidebarContent({
     parentActiveBgColor?: string;
   }
 }) {
-  const isCustom = theme !== 'dark' && (sidebarStyles.textColor || sidebarStyles.textActiveColor || sidebarStyles.hoverColor || sidebarStyles.activeBgColor || sidebarStyles.parentActiveBgColor);
+  const hasCustomSidebarBg = !!(sidebarBgColor && theme !== 'dark');
+  const parentExplicit = sidebarStyles.parentActiveBgColor;
+  const parentIsStaleGreen =
+    hasCustomSidebarBg &&
+    !!parentExplicit &&
+    isLegacyGreenSidebarColor(parentExplicit) &&
+    !isLegacyGreenSidebarColor(sidebarBgColor!);
+  const resolvedParentActiveBg = parentIsStaleGreen
+    ? deriveParentActiveBg(sidebarBgColor!)
+    : parentExplicit || (hasCustomSidebarBg ? deriveParentActiveBg(sidebarBgColor!) : undefined);
+  const resolvedHoverBg =
+    sidebarStyles.hoverColor ||
+    (hasCustomSidebarBg ? deriveSidebarHoverBg(sidebarBgColor!) : undefined);
+
+  const isCustom =
+    theme !== 'dark' &&
+    (hasCustomSidebarBg ||
+      sidebarStyles.textColor ||
+      sidebarStyles.textActiveColor ||
+      sidebarStyles.hoverColor ||
+      sidebarStyles.activeBgColor ||
+      sidebarStyles.parentActiveBgColor);
 
   return (
     <>
@@ -350,11 +378,11 @@ function SidebarContent({
               backgroundColor: sidebarStyles.activeBgColor || undefined,
             } : isParentActive ? {
               color: sidebarStyles.textActiveColor || undefined,
-              backgroundColor: sidebarStyles.parentActiveBgColor || undefined,
+              backgroundColor: resolvedParentActiveBg || undefined,
             } : {
               color: sidebarStyles.textColor || undefined,
             }),
-            '--nav-hover-bg': sidebarStyles.hoverColor || 'rgba(255,255,255,0.05)'
+            '--nav-hover-bg': resolvedHoverBg || 'rgba(255,255,255,0.05)'
           } as any : {};
 
           return (
@@ -404,7 +432,7 @@ function SidebarContent({
                       } : {
                         color: sidebarStyles.textColor || undefined,
                       }),
-                      '--nav-hover-bg': sidebarStyles.hoverColor || 'rgba(255,255,255,0.05)'
+                      '--nav-hover-bg': resolvedHoverBg || 'rgba(255,255,255,0.05)'
                     } as any : {};
 
                     return (
@@ -703,8 +731,19 @@ export default function Admin() {
           localStorage.setItem('brand_sidebar_active_bg_color', settings.brand_sidebar_active_bg_color || '');
         }
         if (settings.brand_sidebar_parent_active_bg_color !== undefined) {
-          setBrandSidebarParentActiveBgColor(settings.brand_sidebar_parent_active_bg_color || '');
-          localStorage.setItem('brand_sidebar_parent_active_bg_color', settings.brand_sidebar_parent_active_bg_color || '');
+          const mainBg = settings.brand_sidebar_color || '';
+          const parentBg = settings.brand_sidebar_parent_active_bg_color || '';
+          const staleParentGreen =
+            mainBg &&
+            !isLegacyGreenSidebarColor(mainBg) &&
+            isLegacyGreenSidebarColor(parentBg);
+          if (staleParentGreen) {
+            setBrandSidebarParentActiveBgColor('');
+            localStorage.removeItem('brand_sidebar_parent_active_bg_color');
+          } else {
+            setBrandSidebarParentActiveBgColor(parentBg);
+            localStorage.setItem('brand_sidebar_parent_active_bg_color', parentBg);
+          }
         }
         if (settings.brand_button_bg_color !== undefined) {
           setBrandButtonBgColor(settings.brand_button_bg_color || '');
@@ -839,6 +878,25 @@ export default function Admin() {
   };
 
   const handleSaveSidebarStyle = async (key: string, value: string) => {
+    // Ao trocar o fundo principal, remove verde legado do item pai (senão fica desalinhado)
+    if (key === 'brand_sidebar_color' && value) {
+      const parentStored =
+        brandSidebarParentActiveBgColor || localStorage.getItem('brand_sidebar_parent_active_bg_color') || '';
+      if (!parentStored || isLegacyGreenSidebarColor(parentStored)) {
+        setBrandSidebarParentActiveBgColor('');
+        localStorage.removeItem('brand_sidebar_parent_active_bg_color');
+        try {
+          await fetch(`${API}/api/admin/settings`, {
+            method: 'PUT',
+            headers: authHeaders,
+            body: JSON.stringify({ brand_sidebar_parent_active_bg_color: '' }),
+          });
+        } catch {
+          /* preview local já aplicado */
+        }
+      }
+    }
+
     // Immediate preview by updating local state
     if (key === 'brand_sidebar_color') setBrandSidebarColor(value);
     if (key === 'brand_sidebar_text_color') setBrandSidebarTextColor(value);
@@ -2128,6 +2186,7 @@ export default function Admin() {
           expandedMenus={expandedMenus}
           setExpandedMenus={setExpandedMenus}
           theme={theme}
+          sidebarBgColor={brandSidebarColor}
           sidebarStyles={{
             textColor: brandSidebarTextColor,
             textActiveColor: brandSidebarTextActiveColor,
@@ -2168,6 +2227,7 @@ export default function Admin() {
                       expandedMenus={expandedMenus}
                       setExpandedMenus={setExpandedMenus}
                       theme={theme}
+                      sidebarBgColor={brandSidebarColor}
                       sidebarStyles={{
                         textColor: brandSidebarTextColor,
                         textActiveColor: brandSidebarTextActiveColor,
@@ -3214,28 +3274,32 @@ export default function Admin() {
                             <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                               <Palette className="w-3.5 h-3.5 text-primary" /> Fundo Principal
                             </Label>
-                            <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+                            <div className="flex flex-wrap gap-1.5">
                               {[
-                                { name: 'Padrão', color: '#155e21' },
-                                { name: 'Noite', color: '#0f172a' },
+                                { name: 'Padrão (verde)', color: '#155e21' },
+                                { name: 'Amarelo Compactor', color: '#FFCC00' },
+                                { name: 'Vermelho Compactor', color: '#E4002B' },
+                                { name: 'Azul Compactor', color: '#0057B8' },
                                 { name: 'Oceano', color: '#155e75' },
                                 { name: 'Floresta', color: '#065f46' },
-                                { name: 'Indigo', color: '#3730a3' },
-                                { name: 'Vinho', color: '#9f1239' },
-                                { name: 'Chocolate', color: '#7c2d12' },
+                                { name: 'Índigo', color: '#3730a3' },
+                                { name: 'Coral', color: '#ea580c' },
+                                { name: 'Roxo', color: '#5b21b6' },
+                                { name: 'Noite', color: '#0f172a' },
                                 { name: 'Grafite', color: '#334155' },
                                 { name: 'Ardósia', color: '#1e293b' },
-                                { name: 'Obsidiana', color: '#020617' }
                               ].map(item => (
                                 <button
                                   key={item.color}
                                   type="button"
                                   onClick={() => handleSaveSidebarStyle('brand_sidebar_color', item.color)}
-                                  className={`group relative w-full aspect-square rounded-lg transition-all duration-300 hover:scale-110 flex items-center justify-center ${brandSidebarColor === item.color ? 'ring-2 ring-primary ring-offset-2 ring-offset-background shadow-lg' : 'hover:ring-2 hover:ring-border'}`}
+                                  className={`group relative w-5 h-5 shrink-0 rounded-sm transition-all hover:scale-105 flex items-center justify-center ${brandSidebarColor === item.color ? 'ring-1 ring-primary ring-offset-1 ring-offset-background' : 'hover:ring-1 hover:ring-border'}`}
                                   style={{ backgroundColor: item.color }}
                                   title={item.name}
                                 >
-                                  {brandSidebarColor === item.color && <Check className="w-4 h-4 text-white" />}
+                                  {brandSidebarColor === item.color && (
+                                    <Check className={`w-2.5 h-2.5 ${item.color === '#FFCC00' ? 'text-black/70' : 'text-white'}`} />
+                                  )}
                                 </button>
                               ))}
                             </div>

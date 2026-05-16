@@ -18,37 +18,39 @@ import Loader from "@/components/Loader";
 import { HelpCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { API_BASE_URL } from "@/lib/api-base";
+import { buildAssignedStates, assignedStatesKey } from "@/lib/user-territory";
 
 const normalizeName = (s: string) => 
   s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 
   const Index = () => {
-  const { isAuthenticated, role, userId, token, assigned_state, assigned_states, logout } = useAuth();
+  const { isAuthenticated, role, userId, token, assigned_state, assigned_states, logout, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // Reset local filters and state when user changes
-  useEffect(() => {
-    if (isAuthenticated) {
-      setFiltroUsuario(null);
-      setSearchQuery("");
-      setSearchResultGeo(null);
-      setSelectedMunicipio(null);
-      setMunicipioCodeForBairros(null);
-      setSelectedClients([]);
-      setFlyToLocation(null);
-      
-      // Clear react-query cache to prevent seeing old data
-      queryClient.clear();
-      
-      // Default UF based on role
-      if (role !== 'admin' && assigned_states && assigned_states.length > 0) {
-        setSelectedUF(assigned_states[0]);
-      } else {
-        setSelectedUF(null);
-      }
-    }
-  }, [userId, role, queryClient]);
+  const { data: apiTerritories = [], isLoading: loadingTerritories } = useApiTerritories(!!token);
+
+  const effectiveAssignedStates = useMemo(() => {
+    if (role === 'admin') return [];
+    const fromAuth = buildAssignedStates(assigned_state, assigned_states);
+    if (fromAuth.length > 0) return fromAuth;
+    const myUfs = apiTerritories
+      .filter((t) => t.userId === userId)
+      .map((t) => t.uf)
+      .filter(Boolean);
+    return buildAssignedStates(assigned_state, myUfs);
+  }, [role, assigned_state, assigned_states, apiTerritories, userId]);
+
+  const effectiveAssignedStatesKey = useMemo(() => {
+    if (role === 'admin') return '';
+    const fromAuth = buildAssignedStates(assigned_state, assigned_states);
+    if (fromAuth.length > 0) return assignedStatesKey(fromAuth);
+    const myUfs = apiTerritories
+      .filter((t) => t.userId === userId)
+      .map((t) => t.uf)
+      .filter(Boolean);
+    return assignedStatesKey(buildAssignedStates(assigned_state, myUfs));
+  }, [role, assigned_state, assigned_states, apiTerritories, userId]);
 
   const [selectedUF, setSelectedUF] = useState<string | null>(null);
   const [filtroUsuario, setFiltroUsuario] = useState<string | null>(null);
@@ -62,36 +64,50 @@ const normalizeName = (s: string) =>
   const [showUsuarios, setShowUsuarios] = useState(role !== 'admin');
   const [flyToLocation, setFlyToLocation] = useState<{ center: [number, number]; zoom: number } | null>(null);
 
+  // Reset local filters when user changes (not when territories refetch)
+  useEffect(() => {
+    if (!isAuthenticated || !userId) return;
+
+    setFiltroUsuario(null);
+    setSearchQuery("");
+    setSearchResultGeo(null);
+    setSelectedMunicipio(null);
+    setMunicipioCodeForBairros(null);
+    setSelectedClients([]);
+    setFlyToLocation(null);
+    queryClient.clear();
+
+    const states = buildAssignedStates(assigned_state, assigned_states);
+    if (role !== 'admin' && states.length > 0) {
+      setSelectedUF(states[0]);
+    } else {
+      setSelectedUF(null);
+    }
+  }, [userId, role, isAuthenticated, queryClient, assigned_state, assigned_states]);
+
   // Auto-zoom to assigned state on login for non-admins
   useEffect(() => {
-    // Only run if user is not admin and has assigned states
-    if (role && role !== 'admin' && assigned_states && assigned_states.length > 0) {
-      const firstUF = assigned_states[0];
-      const ufInfo = getUFBySigla(firstUF);
-      
-      if (ufInfo) {
-        console.log(`[ZOOM] Initial setup for assigned state: ${firstUF}`);
-        
-        // Force state selection
-        setSelectedUF(firstUF);
-        
-        // Set location immediately
-        const targetLocation = { center: ufInfo.center, zoom: ufInfo.zoom };
-        setFlyToLocation(targetLocation);
-        
-        // Multiple aggressive attempts to ensure the map controller catches it
-        const attempts = [100, 500, 1500, 3000, 5000];
-        const timers = attempts.map(delay => 
-          setTimeout(() => {
-            console.log(`[ZOOM] Re-triggering zoom to ${firstUF} (${delay}ms)`);
-            setFlyToLocation({...targetLocation});
-          }, delay)
-        );
-        
-        return () => timers.forEach(t => clearTimeout(t));
+    if (!role || role === 'admin' || !effectiveAssignedStatesKey) return;
+
+    const firstUF = effectiveAssignedStatesKey.split(',')[0];
+    const ufInfo = getUFBySigla(firstUF);
+    if (!ufInfo) return;
+
+    const targetLocation = { center: ufInfo.center, zoom: ufInfo.zoom };
+
+    setSelectedUF((prev) => (prev === firstUF ? prev : firstUF));
+    setFlyToLocation((prev) => {
+      if (
+        prev &&
+        prev.center[0] === targetLocation.center[0] &&
+        prev.center[1] === targetLocation.center[1] &&
+        prev.zoom === targetLocation.zoom
+      ) {
+        return prev;
       }
-    }
-  }, [role, assigned_states?.join(',')]); // Use stringified array to ensure dependency trigger
+      return targetLocation;
+    });
+  }, [role, effectiveAssignedStatesKey]);
   
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const [searchResultGeo, setSearchResultGeo] = useState<GeoJSONFeature | null>(null);
@@ -125,7 +141,7 @@ const normalizeName = (s: string) =>
 
   const handleSelectUF = useCallback((uf: string | null) => {
     // Permission check for non-admins
-    if (role !== 'admin' && assigned_states && assigned_states.length > 0 && uf && !assigned_states.includes(uf)) {
+    if (role !== 'admin' && effectiveAssignedStates.length > 0 && uf && !effectiveAssignedStates.includes(uf)) {
       toast.error(`Você não tem permissão para acessar o estado ${uf}`);
       return;
     }
@@ -136,7 +152,7 @@ const normalizeName = (s: string) =>
     if (uf === null) {
       setFiltroUsuario(null);
     }
-  }, [role, assigned_states]);
+  }, [role, effectiveAssignedStates]);
 
   const handleSelectMunicipio = useCallback(async (nome: string, uf: string, ibgeCode?: number) => {
     setSelectedMunicipio({ nome, uf, id: ibgeCode });
@@ -355,10 +371,10 @@ const normalizeName = (s: string) =>
   }, []);
 
   const { data: apiUsers = [], isLoading: loadingUsers } = useApiUsers(true);
-  const { data: apiTerritories = [], isLoading: loadingTerritories } = useApiTerritories(true);
-  const { data: apiClientes = [], isLoading: loadingClientes } = useApiClientes(filtroUsuario);
+  const clientFilter = role === 'admin' ? filtroUsuario : (filtroUsuario ?? userId ?? null);
+  const { data: apiClientes = [], isLoading: loadingClientes } = useApiClientes(clientFilter);
 
-  const isLoading = loadingUsers || loadingTerritories || loadingClientes;
+  const isLoading = authLoading || loadingUsers || loadingTerritories || loadingClientes;
 
   // Auto-zoom to filtered users' clients bounding box
   useEffect(() => {
@@ -465,7 +481,7 @@ const normalizeName = (s: string) =>
           selectedUF={selectedUF}
         modo={modo}
         filtroUsuario={filtroUsuario}
-        assignedStates={assigned_states}
+        assignedStates={effectiveAssignedStates}
         mostrarVagos={mostrarVagos}
         onSelectUF={handleSelectUF}
           onSelectMunicipio={handleSelectMunicipio}
