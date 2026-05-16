@@ -80,6 +80,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { useTheme } from '@/contexts/ThemeContext';
 import Loader from '@/components/Loader';
 import { REP_COLOR_PALETTE, getNextColorIndex, getRepColor, type SystemUser } from '@/data/representatives';
 import { UF_DATA } from '@/data/uf-codes';
@@ -540,6 +541,9 @@ export default function Admin() {
   const [brandNameDraft, setBrandNameDraft] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Território');
   const [brandLogoHeightLogin, setBrandLogoHeightLogin] = useState<number>(() => Number(localStorage.getItem('brand_logo_height_login')) || 80);
   const [brandLogoHeightNavbar, setBrandLogoHeightNavbar] = useState<number>(() => Number(localStorage.getItem('brand_logo_height_navbar')) || 40);
+  const [brandSidebarColor, setBrandSidebarColor] = useState<string>(() => localStorage.getItem('brand_sidebar_color') || '');
+  const [brandFavicon, setBrandFavicon] = useState<string>(() => localStorage.getItem('brand_favicon') || '/favicon.ico');
+  const { theme } = useTheme();
 
   const fetchSystemSettings = useCallback(async () => {
     try {
@@ -562,6 +566,14 @@ export default function Admin() {
         if (settings.brand_logo_height_navbar) {
           setBrandLogoHeightNavbar(Number(settings.brand_logo_height_navbar));
           localStorage.setItem('brand_logo_height_navbar', settings.brand_logo_height_navbar);
+        }
+        if (settings.brand_sidebar_color !== undefined) {
+          setBrandSidebarColor(settings.brand_sidebar_color || '');
+          localStorage.setItem('brand_sidebar_color', settings.brand_sidebar_color || '');
+        }
+        if (settings.brand_favicon) {
+          setBrandFavicon(settings.brand_favicon);
+          localStorage.setItem('brand_favicon', settings.brand_favicon);
         }
       }
     } catch (error) {
@@ -635,6 +647,90 @@ export default function Admin() {
       }
     } catch {
       toast.error('Erro ao resetar logo');
+    }
+  };
+
+  const handleSaveSidebarColor = async (color: string) => {
+    try {
+      const res = await fetch(`${API}/api/admin/settings`, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify({ brand_sidebar_color: color })
+      });
+      if (res.ok) {
+        setBrandSidebarColor(color);
+        localStorage.setItem('brand_sidebar_color', color);
+        toast.success('Cor da sidebar atualizada!');
+        window.dispatchEvent(new Event('storage'));
+      }
+    } catch {
+      toast.error('Erro ao salvar cor da sidebar');
+    }
+  };
+
+  const handleRemoveSidebarColor = async () => {
+    try {
+      const res = await fetch(`${API}/api/admin/settings`, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify({ brand_sidebar_color: '' })
+      });
+      if (res.ok) {
+        setBrandSidebarColor('');
+        localStorage.setItem('brand_sidebar_color', '');
+        toast.success('Cor da sidebar resetada para o padrão');
+        window.dispatchEvent(new Event('storage'));
+      }
+    } catch {
+      toast.error('Erro ao resetar cor da sidebar');
+    }
+  };
+
+  const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Selecione um arquivo de imagem'); return; }
+    if (file.size > 1 * 1024 * 1024) { toast.error('Favicon muito grande (máx. 1 MB)'); return; }
+    
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const b64 = ev.target?.result as string;
+      try {
+        const res = await fetch(`${API}/api/admin/settings`, {
+          method: 'PUT',
+          headers: authHeaders,
+          body: JSON.stringify({ brand_favicon: b64 })
+        });
+        if (res.ok) {
+          setBrandFavicon(b64);
+          localStorage.setItem('brand_favicon', b64);
+          toast.success('Favicon atualizado!');
+          window.dispatchEvent(new Event('storage'));
+        } else {
+          toast.error('Erro ao salvar favicon no servidor');
+        }
+      } catch (error) {
+        toast.error('Erro de conexão ao salvar favicon');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveFavicon = async () => {
+    try {
+      const res = await fetch(`${API}/api/admin/settings`, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify({ brand_favicon: '/favicon.ico' })
+      });
+      if (res.ok) {
+        setBrandFavicon('/favicon.ico');
+        localStorage.setItem('brand_favicon', '/favicon.ico');
+        toast.success('Favicon resetado para o padrão');
+        window.dispatchEvent(new Event('storage'));
+      }
+    } catch {
+      toast.error('Erro ao resetar favicon');
     }
   };
 
@@ -1171,6 +1267,17 @@ export default function Admin() {
       if (res.ok) setGroupsData(await res.json());
     } catch (error) { console.error('Error fetching groups:', error); }
   }, [authHeaders]);
+
+  useEffect(() => {
+    document.title = brandName;
+  }, [brandName]);
+
+  useEffect(() => {
+    const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+    if (link) {
+      link.href = brandFavicon;
+    }
+  }, [brandFavicon]);
 
   const fetchUserTypes = useCallback(async () => {
     try {
@@ -1796,7 +1903,10 @@ export default function Admin() {
     <div className="admin-layout">
 
       {/* ━━ SIDEBAR (Desktop) ━━ */}
-      <aside className="admin-sidebar hidden lg:flex">
+      <aside 
+        className="admin-sidebar hidden lg:flex"
+        style={brandSidebarColor && theme !== 'dark' ? { background: brandSidebarColor } : {}}
+      >
         <SidebarContent 
           displayPhoto={displayPhoto}
           displayName={displayName}
@@ -1825,7 +1935,10 @@ export default function Admin() {
                   </button>
                 </SheetTrigger>
                 <SheetContent side="left" className="p-0 w-[280px] bg-sidebar border-r-border/50">
-                  <div className="h-full flex flex-col overflow-hidden bg-gradient-to-b from-[hsl(var(--admin-sidebar-bg))] to-[hsl(var(--admin-sidebar-bg-end))]">
+                  <div 
+                    className="h-full flex flex-col overflow-hidden bg-gradient-to-b from-[hsl(var(--admin-sidebar-bg))] to-[hsl(var(--admin-sidebar-bg-end))]"
+                    style={brandSidebarColor && theme !== 'dark' ? { background: brandSidebarColor } : {}}
+                  >
                     <SidebarContent 
                       displayPhoto={displayPhoto}
                       displayName={displayName}
@@ -2630,53 +2743,220 @@ export default function Admin() {
                   <h2 className="text-lg font-bold">Personalização do Sistema</h2>
                 </div>
                 
-                <div className="max-w-3xl">
-                  <Card className="border-border/40">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="text-sm">Identidade Visual</CardTitle>
-                      <CardDescription className="text-xs">Configure a logo e o nome da sua empresa no sistema.</CardDescription>
+                <div className="max-w-4xl">
+                  <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl overflow-hidden">
+                    <CardHeader className="p-5 sm:p-6 border-b border-border/10">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-primary/15 rounded-xl flex items-center justify-center shrink-0 border border-primary/20 shadow-inner">
+                          <Palette className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-sm sm:text-base uppercase tracking-widest font-black">Identidade Visual</CardTitle>
+                          <CardDescription className="text-[10px] sm:text-xs">Configure a logo, o favicon e o nome do seu sistema.</CardDescription>
+                        </div>
+                      </div>
                     </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {/* Logo Upload */}
-                        <div className="space-y-3">
-                          <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Logo da Empresa</Label>
-                          <div className="flex items-center gap-4">
-                            <div className="w-20 h-20 rounded-xl border-2 border-dashed border-border flex items-center justify-center bg-secondary/30 relative overflow-hidden group">
+                    <CardContent className="p-5 sm:p-8 space-y-10">
+
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                        {/* Logo Section */}
+                        <div className="space-y-4">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-xs font-black text-foreground uppercase tracking-wider">Logo da Empresa</label>
+                            <p className="text-[10px] text-muted-foreground leading-relaxed">Menu lateral e login.</p>
+                          </div>
+
+                          <div className="flex flex-col items-center gap-4">
+                            <div className="w-full aspect-square max-w-[160px] rounded-2xl border-2 border-dashed border-border/60 flex items-center justify-center bg-secondary/20 relative overflow-hidden group shadow-inner">
                               {brandLogo ? (
                                 <>
-                                  <img src={brandLogo} alt="Logo" className="w-full h-full object-contain p-2" />
-                                  <div className="absolute inset-0 bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                    <Button variant="destructive" size="icon" className="w-7 h-7 rounded-full" onClick={handleRemoveLogo}>
-                                      <Trash2 className="w-3.5 h-3.5" />
+                                  <img src={brandLogo} alt="Logo" className="w-full h-full object-contain p-4 transition-transform group-hover:scale-110 duration-500" />
+                                  <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-sm">
+                                    <Button variant="destructive" size="icon" className="w-10 h-10 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveLogo} title="Remover Logo">
+                                      <Trash2 className="w-5 h-5" />
                                     </Button>
                                   </div>
                                 </>
                               ) : (
-                                <ImageOff className="w-6 h-6 text-muted-foreground opacity-20" />
+                                <div className="text-center p-4">
+                                  <ImageOff className="w-6 h-6 text-muted-foreground/30 mx-auto mb-2" />
+                                  <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-40">Sem Logo</span>
+                                </div>
                               )}
                             </div>
-                            <div className="flex-1 space-y-1.5">
+                            
+                            <div className="w-full space-y-2">
                               <input type="file" id="logo-upload-sys" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-                              <Button variant="outline" size="sm" className="gap-2" onClick={() => document.getElementById('logo-upload-sys')?.click()}>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="w-full gap-2 h-10 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all text-[11px] uppercase tracking-wider" 
+                                onClick={() => document.getElementById('logo-upload-sys')?.click()}
+                              >
                                 <Upload className="w-3.5 h-3.5" /> Enviar Logo
                               </Button>
-                              <p className="text-[10px] text-muted-foreground">Máximo 2MB. Recomendado PNG transparente.</p>
                             </div>
                           </div>
                         </div>
 
-                        {/* Nome da Empresa */}
-                        <div className="space-y-3">
-                          <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Nome da Empresa</Label>
-                          <div className="flex flex-col gap-2">
-                            <Input value={brandNameDraft} onChange={e => setBrandNameDraft(e.target.value)} placeholder="Ex: Mapa Território" />
-                            <Button onClick={handleSaveBrandName} size="sm" className="gap-2 self-start"><Save className="w-3.5 h-3.5" /> Salvar Nome</Button>
+                        {/* Favicon Section */}
+                        <div className="space-y-4">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-xs font-black text-foreground uppercase tracking-wider">Favicon do Sistema</label>
+                            <p className="text-[10px] text-muted-foreground leading-relaxed">Ícone da aba do navegador.</p>
+                          </div>
+
+                          <div className="flex flex-col items-center gap-4">
+                            <div className="w-full aspect-square max-w-[160px] rounded-2xl border-2 border-dashed border-border/60 flex items-center justify-center bg-secondary/20 relative overflow-hidden group shadow-inner">
+                              <img 
+                                src={brandFavicon} 
+                                alt="Favicon Preview" 
+                                className="w-16 h-16 object-contain transition-transform group-hover:scale-110"
+                                onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.ico' }}
+                              />
+                              <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-sm">
+                                {brandFavicon !== '/favicon.ico' && (
+                                  <Button variant="destructive" size="icon" className="w-10 h-10 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveFavicon} title="Resetar Favicon">
+                                    <Trash2 className="w-5 h-5" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="w-full space-y-2">
+                              <input type="file" id="favicon-upload-sys" accept="image/*" className="hidden" onChange={handleFaviconUpload} />
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="w-full gap-2 h-10 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all text-[11px] uppercase tracking-wider" 
+                                onClick={() => document.getElementById('favicon-upload-sys')?.click()}
+                              >
+                                <Upload className="w-3.5 h-3.5" /> Mudar Favicon
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Name Section */}
+                        <div className="space-y-4">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-xs font-black text-foreground uppercase tracking-wider">Nome do Sistema</label>
+                            <p className="text-[10px] text-muted-foreground leading-relaxed">Título da aba e identificação.</p>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div className="flex flex-col gap-3">
+                              <Input 
+                                value={brandNameDraft} 
+                                onChange={e => setBrandNameDraft(e.target.value)} 
+                                placeholder="Ex: Mapa Território" 
+                                className="h-12 font-bold text-base bg-background/50 border-border/60 focus:border-primary/50 transition-all" 
+                              />
+                              <Button onClick={handleSaveBrandName} className="w-full gap-2 h-12 font-black uppercase tracking-widest shadow-lg shadow-primary/20">
+                                <Save className="w-4 h-4" /> Salvar Nome
+                              </Button>
+                            </div>
+
+                            <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
+                              <p className="text-[10px] text-primary/70 font-medium leading-relaxed italic">
+                                O nome acima será usado como o título principal da aba do navegador ao lado do seu favicon.
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>
 
-                      <div className="h-px bg-border/20 my-2" />
+                      <div className="h-px bg-gradient-to-r from-transparent via-border/40 to-transparent" />
+
+                      {/* Sidebar Color Section */}
+                      <div className="space-y-4">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs sm:text-sm font-black text-foreground uppercase tracking-wider">Cor da Sidebar</label>
+                          <p className="text-[10px] sm:text-xs text-muted-foreground leading-relaxed">Personalize a cor de fundo da sidebar (apenas modo claro).</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2">
+                          {/* Cores Pré-definidas */}
+                          <div className="space-y-4">
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                              <Palette className="w-3 h-3" /> Cores Sugeridas
+                            </Label>
+                            <div className="grid grid-cols-5 gap-3">
+                              {[
+                                { name: 'Padrão', color: '#155e21' },
+                                { name: 'Noite', color: '#0f172a' },
+                                { name: 'Oceano', color: '#155e75' },
+                                { name: 'Floresta', color: '#065f46' },
+                                { name: 'Indigo', color: '#3730a3' },
+                                { name: 'Vinho', color: '#9f1239' },
+                                { name: 'Chocolate', color: '#7c2d12' },
+                                { name: 'Grafite', color: '#334155' },
+                                { name: 'Ardósia', color: '#1e293b' },
+                                { name: 'Obsidiana', color: '#020617' }
+                              ].map(item => (
+                                <button
+                                  key={item.color}
+                                  type="button"
+                                  onClick={() => handleSaveSidebarColor(item.color)}
+                                  className={`group relative w-10 h-10 rounded-xl transition-all duration-300 hover:scale-110 flex items-center justify-center ${brandSidebarColor === item.color ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'hover:ring-2 hover:ring-border'}`}
+                                  style={{ backgroundColor: item.color }}
+                                  title={item.name}
+                                >
+                                  {brandSidebarColor === item.color && <Check className="w-5 h-5 text-white" />}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Cor Customizada */}
+                          <div className="space-y-4">
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                              <Settings className="w-3 h-3" /> Ajuste Fino
+                            </Label>
+                            <div className="flex flex-col gap-3">
+                              <div className="flex gap-3">
+                                <div className="relative group">
+                                  <Input 
+                                    type="color" 
+                                    value={brandSidebarColor?.startsWith('#') ? brandSidebarColor : '#155e21'} 
+                                    onChange={e => handleSaveSidebarColor(e.target.value)}
+                                    className="w-14 h-14 p-1 bg-background border-border rounded-xl cursor-pointer shadow-sm group-hover:border-primary/50 transition-all"
+                                  />
+                                  <div className="absolute -top-2 -right-2 bg-primary text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                    <Plus className="w-3 h-3" />
+                                  </div>
+                                </div>
+                                <div className="flex-1 space-y-2">
+                                  <Input 
+                                    type="text"
+                                    value={brandSidebarColor}
+                                    onChange={e => setBrandSidebarColor(e.target.value)}
+                                    onBlur={() => brandSidebarColor && handleSaveSidebarColor(brandSidebarColor)}
+                                    placeholder="HEX, RGB ou RGBA"
+                                    className="h-14 font-mono text-sm uppercase bg-background/50 border-border/60 focus:border-primary/50 transition-all"
+                                  />
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center justify-between pt-1">
+                                <p className="text-[10px] text-muted-foreground italic">Ex: #155e21, rgb(21, 94, 33) ou rgba(21, 94, 33, 0.9)</p>
+                                {brandSidebarColor && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-8 gap-2 text-destructive hover:bg-destructive/10 font-bold uppercase text-[10px]"
+                                    onClick={handleRemoveSidebarColor}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" /> Remover Personalização
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="h-px bg-gradient-to-r from-transparent via-border/40 to-transparent" />
 
                       {/* Ajuste de Tamanhos */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2">
@@ -3719,102 +3999,6 @@ export default function Admin() {
           )}
 
           {/* ━━ PERSONALIZAÇÃO ━━ */}
-          {activeTab === 'personal' && canAccess('settings') && (
-            <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl overflow-hidden">
-                <CardHeader className="p-5 sm:p-6 border-b border-border/10">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary/15 rounded-xl flex items-center justify-center shrink-0 border border-primary/20 shadow-inner">
-                      <Palette className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-sm sm:text-base uppercase tracking-widest font-black">Identidade Visual</CardTitle>
-                      <CardDescription className="text-[10px] sm:text-xs">Configure a logo e o nome do seu sistema.</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-5 sm:p-8 space-y-8">
-
-                  {/* Logo Upload Section */}
-                  <div className="space-y-4">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs sm:text-sm font-black text-foreground uppercase tracking-wider">Logo da Empresa</label>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground leading-relaxed">Esta logo aparecerá no menu lateral e na tela de login.</p>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 pt-2">
-                      <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-2xl border-2 border-dashed border-border/60 flex items-center justify-center bg-secondary/20 relative overflow-hidden group shadow-inner">
-                        {brandLogo ? (
-                          <>
-                            <img src={brandLogo} alt="Logo" className="w-full h-full object-contain p-4 transition-transform group-hover:scale-110 duration-500" />
-                            <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-sm">
-                              <Button variant="destructive" size="icon" className="w-10 h-10 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveLogo} title="Remover Logo">
-                                <Trash2 className="w-5 h-5" />
-                              </Button>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="text-center p-4">
-                            <div className="w-12 h-12 bg-secondary/50 rounded-full flex items-center justify-center mx-auto mb-2">
-                              <ImageOff className="w-6 h-6 text-muted-foreground/30" />
-                            </div>
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tighter opacity-40">Sem Logo</span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex-1 w-full space-y-4">
-                        <div className="bg-primary/5 p-4 rounded-xl border border-primary/10">
-                          <p className="text-[10px] sm:text-[11px] text-primary/80 font-medium leading-relaxed">
-                            <span className="font-black uppercase mr-1">Dica:</span>
-                            Use imagens em <span className="font-bold">PNG</span> ou <span className="font-bold">SVG</span> com fundo transparente para um melhor acabamento visual.
-                          </p>
-                        </div>
-                        
-                        <div className="flex flex-col gap-2">
-                          <input type="file" id="logo-upload" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-                          <Button 
-                            variant="outline" 
-                            className="gap-2 h-11 sm:h-12 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all" 
-                            onClick={() => document.getElementById('logo-upload')?.click()}
-                          >
-                            <Upload className="w-4 h-4" /> Enviar Nova Logo
-                          </Button>
-                          <p className="text-[9px] text-muted-foreground text-center sm:text-left font-medium uppercase tracking-tighter opacity-50">
-                            Máximo: 2MB • JPG, PNG ou SVG
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="h-px bg-gradient-to-r from-transparent via-border/40 to-transparent" />
-
-                  {/* Brand Name Section */}
-                  <div className="space-y-4">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs sm:text-sm font-black text-foreground uppercase tracking-wider">Nome do Sistema</label>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground leading-relaxed">Como o sistema será identificado pelos usuários.</p>
-                    </div>
-                    
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <Input 
-                        value={brandNameDraft} 
-                        onChange={e => setBrandNameDraft(e.target.value)} 
-                        placeholder="Ex: Mapa Território" 
-                        className="flex-1 h-11 sm:h-12 font-bold text-base sm:text-lg bg-background/50" 
-                      />
-                      <Button onClick={handleSaveBrandName} className="gap-2 h-11 sm:h-12 px-8 font-black uppercase tracking-widest shadow-lg shadow-primary/20">
-                        <Save className="w-4 h-4" /> Salvar
-                      </Button>
-                    </div>
-                  </div>
-
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
           {/* ━━ BASE CLIENTE (Standalone) ━━ */}
           {activeTab === 'baserotas' && (
             <BaseClientePanel 

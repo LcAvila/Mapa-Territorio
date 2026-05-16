@@ -102,6 +102,18 @@ const normalizeName = (s: string) =>
   // Client selection state
   const [selectedClients, setSelectedClients] = useState<Cliente[]>([]);
 
+  // Brand/Favicon dynamic update
+  useEffect(() => {
+    const brandName = localStorage.getItem('brand_name') || 'Mapa Território';
+    const brandFavicon = localStorage.getItem('brand_favicon') || '/favicon.ico';
+    
+    document.title = brandName;
+    const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+    if (link) {
+      link.href = brandFavicon;
+    }
+  }, []);
+
   // Routing state
   const [showRouting, setShowRouting] = useState(false);
   const [routeWaypoints, setRouteWaypoints] = useState<RouteWaypoint[]>([]);
