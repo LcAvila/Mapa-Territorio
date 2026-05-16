@@ -271,7 +271,19 @@ function CustomSelect({ options, value, onChange, placeholder, disabled = false,
   );
 }
 
-function SidebarContent({ displayPhoto, displayName, displayEmail, displayTipo, navItems, activeTab, setActiveTab, expandedMenus, setExpandedMenus }: {
+function SidebarContent({ 
+  displayPhoto, 
+  displayName, 
+  displayEmail, 
+  displayTipo, 
+  navItems, 
+  activeTab, 
+  setActiveTab, 
+  expandedMenus, 
+  setExpandedMenus,
+  theme,
+  sidebarStyles
+}: {
   displayPhoto: string;
   displayName: string;
   displayEmail: string;
@@ -281,7 +293,17 @@ function SidebarContent({ displayPhoto, displayName, displayEmail, displayTipo, 
   setActiveTab: (id: TabId) => void;
   expandedMenus: string[];
   setExpandedMenus: React.Dispatch<React.SetStateAction<string[]>>;
+  theme: string;
+  sidebarStyles: {
+    textColor?: string;
+    textActiveColor?: string;
+    hoverColor?: string;
+    activeBgColor?: string;
+    parentActiveBgColor?: string;
+  }
 }) {
+  const isCustom = theme !== 'dark' && (sidebarStyles.textColor || sidebarStyles.textActiveColor || sidebarStyles.hoverColor || sidebarStyles.activeBgColor || sidebarStyles.parentActiveBgColor);
+
   return (
     <>
       {/* User Profile */}
@@ -293,12 +315,19 @@ function SidebarContent({ displayPhoto, displayName, displayEmail, displayTipo, 
           }
         </div>
         <div className="flex flex-col items-center min-w-0">
-          <p className="admin-sidebar-username truncate w-full">{displayName.toUpperCase()}</p>
-          <p className="text-[10px] text-muted-foreground/80 font-bold uppercase tracking-widest truncate mt-0.5">
+          <p 
+            className="admin-sidebar-username truncate w-full"
+            style={isCustom && sidebarStyles.textColor ? { color: sidebarStyles.textColor } : {}}
+          >
+            {displayName.toUpperCase()}
+          </p>
+          <p 
+            className="text-[10px] text-muted-foreground/80 font-bold uppercase tracking-widest truncate mt-0.5"
+            style={isCustom && sidebarStyles.textColor ? { color: sidebarStyles.textColor, opacity: 0.7 } : {}}
+          >
             {displayTipo}
           </p>
         </div>
-        {/* displayEmail removed as per user's visual request focused on Name and Type */}
       </div>
 
       {/* Navigation */}
@@ -315,10 +344,24 @@ function SidebarContent({ displayPhoto, displayName, displayEmail, displayTipo, 
             isParentActive ? 'parent-active' : '',
           ].filter(Boolean).join(' ');
 
+          const customItemStyle = isCustom ? {
+            ...(isDirectActive ? {
+              color: sidebarStyles.textActiveColor || undefined,
+              backgroundColor: sidebarStyles.activeBgColor || undefined,
+            } : isParentActive ? {
+              color: sidebarStyles.textActiveColor || undefined,
+              backgroundColor: sidebarStyles.parentActiveBgColor || undefined,
+            } : {
+              color: sidebarStyles.textColor || undefined,
+            }),
+            '--nav-hover-bg': sidebarStyles.hoverColor || 'rgba(255,255,255,0.05)'
+          } as any : {};
+
           return (
             <div key={item.id}>
               <button
                 className={itemClass}
+                style={customItemStyle}
                 onClick={() => {
                   if (item.subItems) {
                     setExpandedMenus(prev =>
@@ -329,14 +372,20 @@ function SidebarContent({ displayPhoto, displayName, displayEmail, displayTipo, 
                   }
                 }}
               >
-                <Icon className="nav-icon" />
+                <Icon className="nav-icon" style={isCustom && (isDirectActive || isParentActive) && sidebarStyles.textActiveColor ? { color: sidebarStyles.textActiveColor } : {}} />
                 <span className="nav-label">{item.label}</span>
                 {item.count !== undefined && (
                   <span className={`admin-nav-badge${item.badge ? ' danger' : ''}`}>{item.count}</span>
                 )}
                 {item.subItems && (
                   <ChevronDown
-                    style={{ width: 14, height: 14, flexShrink: 0, opacity: 0.6 }}
+                    style={{ 
+                      width: 14, 
+                      height: 14, 
+                      flexShrink: 0, 
+                      opacity: 0.6,
+                      ...(isCustom && (isDirectActive || isParentActive) && sidebarStyles.textActiveColor ? { color: sidebarStyles.textActiveColor } : {})
+                    }}
                     className={`admin-chevron${isExpanded ? ' open' : ''}`}
                   />
                 )}
@@ -347,13 +396,25 @@ function SidebarContent({ displayPhoto, displayName, displayEmail, displayTipo, 
                   {item.subItems.map((sub: any) => {
                     const SubIcon = sub.icon;
                     const subActive = activeTab === sub.id;
+
+                    const customSubStyle = isCustom ? {
+                      ...(subActive ? {
+                        color: sidebarStyles.textActiveColor || undefined,
+                        backgroundColor: sidebarStyles.activeBgColor || undefined,
+                      } : {
+                        color: sidebarStyles.textColor || undefined,
+                      }),
+                      '--nav-hover-bg': sidebarStyles.hoverColor || 'rgba(255,255,255,0.05)'
+                    } as any : {};
+
                     return (
                       <button
                         key={sub.id}
                         className={`admin-nav-subitem${subActive ? ' active' : ''}`}
+                        style={customSubStyle}
                         onClick={() => setActiveTab(sub.id)}
                       >
-                        <SubIcon className="nav-icon" />
+                        <SubIcon className="nav-icon" style={isCustom && subActive && sidebarStyles.textActiveColor ? { color: sidebarStyles.textActiveColor } : {}} />
                         <span style={{ flex: 1 }}>{sub.label}</span>
                         {sub.count !== undefined && (
                           <span className="admin-nav-badge">{sub.count}</span>
@@ -516,7 +577,9 @@ export default function Admin() {
   const [isTerritoryMapOpen, setIsTerritoryMapOpen] = useState(false);
   const [isTerritoryDetailOpen, setIsTerritoryDetailOpen] = useState(false);
   const [isUFDetailOpen, setIsUFDetailOpen] = useState(false);
+  const [systemTab, setSystemTab] = useState<'visual' | 'sidebar' | 'buttons'>('visual');
   const [selectedUFDetail, setSelectedUFDetail] = useState<string | null>(null);
+
   const [selectedTerritory, setSelectedTerritory] = useState<Territory | null>(null);
 
   // Estados para o Modal Detalhado de UF
@@ -542,8 +605,60 @@ export default function Admin() {
   const [brandLogoHeightLogin, setBrandLogoHeightLogin] = useState<number>(() => Number(localStorage.getItem('brand_logo_height_login')) || 80);
   const [brandLogoHeightNavbar, setBrandLogoHeightNavbar] = useState<number>(() => Number(localStorage.getItem('brand_logo_height_navbar')) || 40);
   const [brandSidebarColor, setBrandSidebarColor] = useState<string>(() => localStorage.getItem('brand_sidebar_color') || '');
+  const [brandSidebarTextColor, setBrandSidebarTextColor] = useState<string>(() => localStorage.getItem('brand_sidebar_text_color') || '');
+  const [brandSidebarTextActiveColor, setBrandSidebarTextActiveColor] = useState<string>(() => localStorage.getItem('brand_sidebar_text_active_color') || '');
+  const [brandSidebarHoverColor, setBrandSidebarHoverColor] = useState<string>(() => localStorage.getItem('brand_sidebar_hover_color') || '');
+  const [brandSidebarActiveBgColor, setBrandSidebarActiveBgColor] = useState<string>(() => localStorage.getItem('brand_sidebar_active_bg_color') || '');
+  const [brandSidebarParentActiveBgColor, setBrandSidebarParentActiveBgColor] = useState<string>(() => localStorage.getItem('brand_sidebar_parent_active_bg_color') || '');
+  const [brandButtonBgColor, setBrandButtonBgColor] = useState<string>(() => localStorage.getItem('brand_button_bg_color') || '');
+  const [brandButtonTextColor, setBrandButtonTextColor] = useState<string>(() => localStorage.getItem('brand_button_text_color') || '');
+  const [brandButtonHoverBgColor, setBrandButtonHoverBgColor] = useState<string>(() => localStorage.getItem('brand_button_hover_bg_color') || '');
+  const [brandButtonHoverTextColor, setBrandButtonHoverTextColor] = useState<string>(() => localStorage.getItem('brand_button_hover_text_color') || '');
   const [brandFavicon, setBrandFavicon] = useState<string>(() => localStorage.getItem('brand_favicon') || '/favicon.ico');
   const { theme } = useTheme();
+
+  // Dynamic Button Styles Injection
+  const buttonStyles = useMemo(() => {
+    if (theme === 'dark') return '';
+    let styles = '';
+    if (brandButtonBgColor) {
+      styles += `
+        .admin-content button.bg-primary, 
+        .admin-content .bg-primary,
+        .admin-sidebar button.bg-primary { 
+          background-color: ${brandButtonBgColor} !important; 
+        }
+      `;
+    }
+    if (brandButtonTextColor) {
+      styles += `
+        .admin-content button.bg-primary, 
+        .admin-content .bg-primary,
+        .admin-sidebar button.bg-primary { 
+          color: ${brandButtonTextColor} !important; 
+        }
+      `;
+    }
+    if (brandButtonHoverBgColor) {
+      styles += `
+        .admin-content button.bg-primary:hover, 
+        .admin-content .bg-primary:hover,
+        .admin-sidebar button.bg-primary:hover { 
+          background-color: ${brandButtonHoverBgColor} !important; 
+        }
+      `;
+    }
+    if (brandButtonHoverTextColor) {
+      styles += `
+        .admin-content button.bg-primary:hover, 
+        .admin-content .bg-primary:hover,
+        .admin-sidebar button.bg-primary:hover { 
+          color: ${brandButtonHoverTextColor} !important; 
+        }
+      `;
+    }
+    return styles;
+  }, [theme, brandButtonBgColor, brandButtonTextColor, brandButtonHoverBgColor, brandButtonHoverTextColor]);
 
   const fetchSystemSettings = useCallback(async () => {
     try {
@@ -570,6 +685,42 @@ export default function Admin() {
         if (settings.brand_sidebar_color !== undefined) {
           setBrandSidebarColor(settings.brand_sidebar_color || '');
           localStorage.setItem('brand_sidebar_color', settings.brand_sidebar_color || '');
+        }
+        if (settings.brand_sidebar_text_color !== undefined) {
+          setBrandSidebarTextColor(settings.brand_sidebar_text_color || '');
+          localStorage.setItem('brand_sidebar_text_color', settings.brand_sidebar_text_color || '');
+        }
+        if (settings.brand_sidebar_text_active_color !== undefined) {
+          setBrandSidebarTextActiveColor(settings.brand_sidebar_text_active_color || '');
+          localStorage.setItem('brand_sidebar_text_active_color', settings.brand_sidebar_text_active_color || '');
+        }
+        if (settings.brand_sidebar_hover_color !== undefined) {
+          setBrandSidebarHoverColor(settings.brand_sidebar_hover_color || '');
+          localStorage.setItem('brand_sidebar_hover_color', settings.brand_sidebar_hover_color || '');
+        }
+        if (settings.brand_sidebar_active_bg_color !== undefined) {
+          setBrandSidebarActiveBgColor(settings.brand_sidebar_active_bg_color || '');
+          localStorage.setItem('brand_sidebar_active_bg_color', settings.brand_sidebar_active_bg_color || '');
+        }
+        if (settings.brand_sidebar_parent_active_bg_color !== undefined) {
+          setBrandSidebarParentActiveBgColor(settings.brand_sidebar_parent_active_bg_color || '');
+          localStorage.setItem('brand_sidebar_parent_active_bg_color', settings.brand_sidebar_parent_active_bg_color || '');
+        }
+        if (settings.brand_button_bg_color !== undefined) {
+          setBrandButtonBgColor(settings.brand_button_bg_color || '');
+          localStorage.setItem('brand_button_bg_color', settings.brand_button_bg_color || '');
+        }
+        if (settings.brand_button_text_color !== undefined) {
+          setBrandButtonTextColor(settings.brand_button_text_color || '');
+          localStorage.setItem('brand_button_text_color', settings.brand_button_text_color || '');
+        }
+        if (settings.brand_button_hover_bg_color !== undefined) {
+          setBrandButtonHoverBgColor(settings.brand_button_hover_bg_color || '');
+          localStorage.setItem('brand_button_hover_bg_color', settings.brand_button_hover_bg_color || '');
+        }
+        if (settings.brand_button_hover_text_color !== undefined) {
+          setBrandButtonHoverTextColor(settings.brand_button_hover_text_color || '');
+          localStorage.setItem('brand_button_hover_text_color', settings.brand_button_hover_text_color || '');
         }
         if (settings.brand_favicon) {
           setBrandFavicon(settings.brand_favicon);
@@ -650,39 +801,97 @@ export default function Admin() {
     }
   };
 
-  const handleSaveSidebarColor = async (color: string) => {
+  const handleSaveSidebarStyleBatch = async () => {
     try {
       const res = await fetch(`${API}/api/admin/settings`, {
         method: 'PUT',
         headers: authHeaders,
-        body: JSON.stringify({ brand_sidebar_color: color })
+        body: JSON.stringify({
+          brand_sidebar_color: brandSidebarColor,
+          brand_sidebar_text_color: brandSidebarTextColor,
+          brand_sidebar_text_active_color: brandSidebarTextActiveColor,
+          brand_sidebar_hover_color: brandSidebarHoverColor,
+          brand_sidebar_active_bg_color: brandSidebarActiveBgColor,
+          brand_sidebar_parent_active_bg_color: brandSidebarParentActiveBgColor,
+          brand_button_bg_color: brandButtonBgColor,
+          brand_button_text_color: brandButtonTextColor,
+          brand_button_hover_bg_color: brandButtonHoverBgColor,
+          brand_button_hover_text_color: brandButtonHoverTextColor,
+        })
       });
       if (res.ok) {
-        setBrandSidebarColor(color);
-        localStorage.setItem('brand_sidebar_color', color);
-        toast.success('Cor da sidebar atualizada!');
+        localStorage.setItem('brand_sidebar_color', brandSidebarColor);
+        localStorage.setItem('brand_sidebar_text_color', brandSidebarTextColor);
+        localStorage.setItem('brand_sidebar_text_active_color', brandSidebarTextActiveColor);
+        localStorage.setItem('brand_sidebar_hover_color', brandSidebarHoverColor);
+        localStorage.setItem('brand_sidebar_active_bg_color', brandSidebarActiveBgColor);
+        localStorage.setItem('brand_sidebar_parent_active_bg_color', brandSidebarParentActiveBgColor);
+        localStorage.setItem('brand_button_bg_color', brandButtonBgColor);
+        localStorage.setItem('brand_button_text_color', brandButtonTextColor);
+        localStorage.setItem('brand_button_hover_bg_color', brandButtonHoverBgColor);
+        localStorage.setItem('brand_button_hover_text_color', brandButtonHoverTextColor);
+        toast.success('Estilos do sistema salvos com sucesso!');
         window.dispatchEvent(new Event('storage'));
       }
     } catch {
-      toast.error('Erro ao salvar cor da sidebar');
+      toast.error('Erro ao salvar estilos do sistema');
     }
   };
 
-  const handleRemoveSidebarColor = async () => {
+  const handleSaveSidebarStyle = async (key: string, value: string) => {
+    // Immediate preview by updating local state
+    if (key === 'brand_sidebar_color') setBrandSidebarColor(value);
+    if (key === 'brand_sidebar_text_color') setBrandSidebarTextColor(value);
+    if (key === 'brand_sidebar_text_active_color') setBrandSidebarTextActiveColor(value);
+    if (key === 'brand_sidebar_hover_color') setBrandSidebarHoverColor(value);
+    if (key === 'brand_sidebar_active_bg_color') setBrandSidebarActiveBgColor(value);
+    if (key === 'brand_sidebar_parent_active_bg_color') setBrandSidebarParentActiveBgColor(value);
+    if (key === 'brand_button_bg_color') setBrandButtonBgColor(value);
+    if (key === 'brand_button_text_color') setBrandButtonTextColor(value);
+    if (key === 'brand_button_hover_bg_color') setBrandButtonHoverBgColor(value);
+    if (key === 'brand_button_hover_text_color') setBrandButtonHoverTextColor(value);
+    
+    // For predefined colors, we can save immediately as it's a single click
+    if (!value.startsWith('rgba') && value.length <= 7) {
+      try {
+        await fetch(`${API}/api/admin/settings`, {
+          method: 'PUT',
+          headers: authHeaders,
+          body: JSON.stringify({ [key]: value })
+        });
+        localStorage.setItem(key, value);
+        window.dispatchEvent(new Event('storage'));
+      } catch (error) {
+        console.error('Error saving predefined color:', error);
+      }
+    }
+  };
+
+  const handleRemoveSidebarStyle = async (key: string) => {
     try {
       const res = await fetch(`${API}/api/admin/settings`, {
         method: 'PUT',
         headers: authHeaders,
-        body: JSON.stringify({ brand_sidebar_color: '' })
+        body: JSON.stringify({ [key]: '' })
       });
       if (res.ok) {
-        setBrandSidebarColor('');
-        localStorage.setItem('brand_sidebar_color', '');
-        toast.success('Cor da sidebar resetada para o padrão');
+        localStorage.setItem(key, '');
+        toast.success('Estilo resetado para o padrão');
         window.dispatchEvent(new Event('storage'));
+
+        if (key === 'brand_sidebar_color') setBrandSidebarColor('');
+        if (key === 'brand_sidebar_text_color') setBrandSidebarTextColor('');
+        if (key === 'brand_sidebar_text_active_color') setBrandSidebarTextActiveColor('');
+        if (key === 'brand_sidebar_hover_color') setBrandSidebarHoverColor('');
+        if (key === 'brand_sidebar_active_bg_color') setBrandSidebarActiveBgColor('');
+        if (key === 'brand_sidebar_parent_active_bg_color') setBrandSidebarParentActiveBgColor('');
+        if (key === 'brand_button_bg_color') setBrandButtonBgColor('');
+        if (key === 'brand_button_text_color') setBrandButtonTextColor('');
+        if (key === 'brand_button_hover_bg_color') setBrandButtonHoverBgColor('');
+        if (key === 'brand_button_hover_text_color') setBrandButtonHoverTextColor('');
       }
     } catch {
-      toast.error('Erro ao resetar cor da sidebar');
+      toast.error('Erro ao resetar estilo da sidebar');
     }
   };
 
@@ -859,6 +1068,7 @@ export default function Admin() {
     {
       id: 'settings' as const, label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
         { id: 'system' as const, label: 'Editar sistema', icon: Settings },
+        { id: 'user_types' as const, label: 'Tipos de Usuário', icon: ShieldCheck },
         { id: 'audit' as const, label: 'Auditoria', icon: ScrollText },
       ]
     }
@@ -1901,15 +2111,15 @@ export default function Admin() {
     <ConfirmDialog open={confirmDialog.open} title={confirmDialog.title} description={confirmDialog.description} confirmLabel="Confirmar" onConfirm={confirmDialog.onConfirm} onCancel={closeConfirm} />
 
     <div className="admin-layout">
-
+      {buttonStyles && <style>{buttonStyles}</style>}
       {/* ━━ SIDEBAR (Desktop) ━━ */}
       <aside 
         className="admin-sidebar hidden lg:flex"
         style={brandSidebarColor && theme !== 'dark' ? { background: brandSidebarColor } : {}}
       >
         <SidebarContent 
-          displayPhoto={displayPhoto}
-          displayName={displayName}
+          displayPhoto={displayPhoto} 
+          displayName={displayName} 
           displayEmail={displayEmail}
           displayTipo={displayTipo}
           navItems={navItems}
@@ -1917,6 +2127,14 @@ export default function Admin() {
           setActiveTab={setActiveTab}
           expandedMenus={expandedMenus}
           setExpandedMenus={setExpandedMenus}
+          theme={theme}
+          sidebarStyles={{
+            textColor: brandSidebarTextColor,
+            textActiveColor: brandSidebarTextActiveColor,
+            hoverColor: brandSidebarHoverColor,
+            activeBgColor: brandSidebarActiveBgColor,
+            parentActiveBgColor: brandSidebarParentActiveBgColor
+          }}
         />
       </aside>
 
@@ -1940,8 +2158,8 @@ export default function Admin() {
                     style={brandSidebarColor && theme !== 'dark' ? { background: brandSidebarColor } : {}}
                   >
                     <SidebarContent 
-                      displayPhoto={displayPhoto}
-                      displayName={displayName}
+                      displayPhoto={displayPhoto} 
+                      displayName={displayName} 
                       displayEmail={displayEmail}
                       displayTipo={displayTipo}
                       navItems={navItems}
@@ -1949,6 +2167,14 @@ export default function Admin() {
                       setActiveTab={(id) => { setActiveTab(id); setIsMobileMenuOpen(false); }}
                       expandedMenus={expandedMenus}
                       setExpandedMenus={setExpandedMenus}
+                      theme={theme}
+                      sidebarStyles={{
+                        textColor: brandSidebarTextColor,
+                        textActiveColor: brandSidebarTextActiveColor,
+                        hoverColor: brandSidebarHoverColor,
+                        activeBgColor: brandSidebarActiveBgColor,
+                        parentActiveBgColor: brandSidebarParentActiveBgColor
+                      }}
                     />
                   </div>
                 </SheetContent>
@@ -2735,15 +2961,44 @@ export default function Admin() {
 
           {/* ━━ SISTEMA (Personalização e Tipos de Usuário) ━━ */}
           {activeTab === 'system' && (canEdit('settings') || role === 'admin') && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              {/* Seção de Personalização */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 border-b border-border/40 pb-2">
-                  <Palette className="w-5 h-5 text-primary" />
-                  <h2 className="text-lg font-bold">Personalização do Sistema</h2>
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              {/* Navegação de Sub-Abas */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border/40 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center border border-primary/20 shadow-sm">
+                    <Settings className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black uppercase tracking-wider">Configurações do Sistema</h2>
+                    <p className="text-xs text-muted-foreground">Personalize a aparência e comportamento da plataforma.</p>
+                  </div>
                 </div>
-                
-                <div className="max-w-4xl">
+
+                <div className="flex items-center bg-secondary/30 p-1 rounded-xl border border-border/40 w-full sm:w-auto overflow-x-auto no-scrollbar">
+                  <button
+                    onClick={() => setSystemTab('visual')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${systemTab === 'visual' ? 'bg-background text-primary shadow-sm ring-1 ring-border/50' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    <Palette className="w-3.5 h-3.5" /> Identidade Visual
+                  </button>
+                  <button
+                    onClick={() => setSystemTab('sidebar')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${systemTab === 'sidebar' ? 'bg-background text-primary shadow-sm ring-1 ring-border/50' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    <LayoutDashboard className="w-3.5 h-3.5" /> Sidebar
+                  </button>
+                  <button
+                    onClick={() => setSystemTab('buttons')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${systemTab === 'buttons' ? 'bg-background text-primary shadow-sm ring-1 ring-border/50' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    <Grid3X3 className="w-3.5 h-3.5" /> Botões
+                  </button>
+                </div>
+              </div>
+
+              {/* Conteúdo da Sub-Aba: IDENTIDADE VISUAL */}
+              {systemTab === 'visual' && (
+                <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl overflow-hidden">
                     <CardHeader className="p-5 sm:p-6 border-b border-border/10">
                       <div className="flex items-center gap-3">
@@ -2756,45 +3011,103 @@ export default function Admin() {
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="p-5 sm:p-8 space-y-10">
-
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                    <CardContent className="p-4 sm:p-6 space-y-8">
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         {/* Logo Section */}
-                        <div className="space-y-4">
-                          <div className="flex flex-col gap-1">
-                            <label className="text-xs font-black text-foreground uppercase tracking-wider">Logo da Empresa</label>
-                            <p className="text-[10px] text-muted-foreground leading-relaxed">Menu lateral e login.</p>
+                        <div className="space-y-6">
+                          <div className="space-y-4">
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-black text-foreground uppercase tracking-wider">Logo da Empresa</label>
+                              <p className="text-[9px] text-muted-foreground leading-relaxed">Menu lateral e login.</p>
+                            </div>
+
+                            <div className="flex flex-col items-center gap-3">
+                              <div className="w-full aspect-video max-w-[180px] rounded-xl border-2 border-dashed border-border/60 flex items-center justify-center bg-secondary/20 relative overflow-hidden group shadow-inner">
+                                {brandLogo ? (
+                                  <>
+                                    <img src={brandLogo} alt="Logo" className="w-full h-full object-contain p-3 transition-transform group-hover:scale-110 duration-500" />
+                                    <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-sm">
+                                      <Button variant="destructive" size="icon" className="w-8 h-8 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveLogo} title="Remover Logo">
+                                        <Trash2 className="w-4 h-4" />
+                                      </Button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="text-center p-3">
+                                    <ImageOff className="w-5 h-5 text-muted-foreground/30 mx-auto mb-1" />
+                                    <span className="text-[9px] font-bold text-muted-foreground uppercase opacity-40">Sem Logo</span>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div className="w-full">
+                                <input type="file" id="logo-upload-sys" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  className="w-full gap-2 h-9 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all text-[10px] uppercase tracking-wider" 
+                                  onClick={() => document.getElementById('logo-upload-sys')?.click()}
+                                >
+                                  <Upload className="w-3 h-3" /> Enviar Logo
+                                </Button>
+                              </div>
+                            </div>
                           </div>
 
-                          <div className="flex flex-col items-center gap-4">
-                            <div className="w-full aspect-square max-w-[160px] rounded-2xl border-2 border-dashed border-border/60 flex items-center justify-center bg-secondary/20 relative overflow-hidden group shadow-inner">
-                              {brandLogo ? (
-                                <>
-                                  <img src={brandLogo} alt="Logo" className="w-full h-full object-contain p-4 transition-transform group-hover:scale-110 duration-500" />
-                                  <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-sm">
-                                    <Button variant="destructive" size="icon" className="w-10 h-10 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveLogo} title="Remover Logo">
-                                      <Trash2 className="w-5 h-5" />
-                                    </Button>
-                                  </div>
-                                </>
-                              ) : (
-                                <div className="text-center p-4">
-                                  <ImageOff className="w-6 h-6 text-muted-foreground/30 mx-auto mb-2" />
-                                  <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-40">Sem Logo</span>
-                                </div>
-                              )}
+                          {/* Ajuste de Tamanhos da Logo */}
+                          <div className="p-4 rounded-xl bg-secondary/20 border border-border/40 space-y-5">
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-foreground">Tamanho: Tela de Login</Label>
+                                <span className="text-[10px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded-md font-bold">{brandLogoHeightLogin}px</span>
+                              </div>
+                              <input 
+                                type="range" min="40" max="300" step="5"
+                                value={brandLogoHeightLogin} 
+                                onChange={async (e) => {
+                                  const val = Number(e.target.value);
+                                  setBrandLogoHeightLogin(val);
+                                  try {
+                                    await fetch(`${API}/api/admin/settings`, {
+                                      method: 'PUT',
+                                      headers: authHeaders,
+                                      body: JSON.stringify({ brand_logo_height_login: val })
+                                    });
+                                    localStorage.setItem('brand_logo_height_login', String(val));
+                                    window.dispatchEvent(new Event('storage'));
+                                  } catch {}
+                                }} 
+                                className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary" 
+                              />
+                              <p className="text-[8px] text-muted-foreground leading-tight italic">Ajusta a altura da logo centralizada na página de entrada.</p>
                             </div>
-                            
-                            <div className="w-full space-y-2">
-                              <input type="file" id="logo-upload-sys" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                className="w-full gap-2 h-10 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all text-[11px] uppercase tracking-wider" 
-                                onClick={() => document.getElementById('logo-upload-sys')?.click()}
-                              >
-                                <Upload className="w-3.5 h-3.5" /> Enviar Logo
-                              </Button>
+
+                            <div className="h-px bg-border/40" />
+
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-foreground">Tamanho: Navbar</Label>
+                                <span className="text-[10px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded-md font-bold">{brandLogoHeightNavbar}px</span>
+                              </div>
+                              <input 
+                                type="range" min="20" max="80" step="2"
+                                value={brandLogoHeightNavbar} 
+                                onChange={async (e) => {
+                                  const val = Number(e.target.value);
+                                  setBrandLogoHeightNavbar(val);
+                                  try {
+                                    await fetch(`${API}/api/admin/settings`, {
+                                      method: 'PUT',
+                                      headers: authHeaders,
+                                      body: JSON.stringify({ brand_logo_height_navbar: val })
+                                    });
+                                    localStorage.setItem('brand_logo_height_navbar', String(val));
+                                    window.dispatchEvent(new Event('storage'));
+                                  } catch {}
+                                }} 
+                                className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary" 
+                              />
+                              <p className="text-[8px] text-muted-foreground leading-tight italic">Ajusta a altura da logo que aparece no topo do menu lateral.</p>
                             </div>
                           </div>
                         </div>
@@ -2802,36 +3115,36 @@ export default function Admin() {
                         {/* Favicon Section */}
                         <div className="space-y-4">
                           <div className="flex flex-col gap-1">
-                            <label className="text-xs font-black text-foreground uppercase tracking-wider">Favicon do Sistema</label>
-                            <p className="text-[10px] text-muted-foreground leading-relaxed">Ícone da aba do navegador.</p>
+                            <label className="text-[11px] font-black text-foreground uppercase tracking-wider">Favicon do Sistema</label>
+                            <p className="text-[9px] text-muted-foreground leading-relaxed">Ícone da aba do navegador.</p>
                           </div>
 
-                          <div className="flex flex-col items-center gap-4">
-                            <div className="w-full aspect-square max-w-[160px] rounded-2xl border-2 border-dashed border-border/60 flex items-center justify-center bg-secondary/20 relative overflow-hidden group shadow-inner">
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="w-full aspect-video max-w-[180px] rounded-xl border-2 border-dashed border-border/60 flex items-center justify-center bg-secondary/20 relative overflow-hidden group shadow-inner">
                               <img 
                                 src={brandFavicon} 
                                 alt="Favicon Preview" 
-                                className="w-16 h-16 object-contain transition-transform group-hover:scale-110"
+                                className="w-12 h-12 object-contain transition-transform group-hover:scale-110"
                                 onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.ico' }}
                               />
                               <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-sm">
                                 {brandFavicon !== '/favicon.ico' && (
-                                  <Button variant="destructive" size="icon" className="w-10 h-10 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveFavicon} title="Resetar Favicon">
-                                    <Trash2 className="w-5 h-5" />
+                                  <Button variant="destructive" size="icon" className="w-8 h-8 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveFavicon} title="Resetar Favicon">
+                                    <Trash2 className="w-4 h-4" />
                                   </Button>
                                 )}
                               </div>
                             </div>
 
-                            <div className="w-full space-y-2">
+                            <div className="w-full">
                               <input type="file" id="favicon-upload-sys" accept="image/*" className="hidden" onChange={handleFaviconUpload} />
                               <Button 
                                 variant="outline" 
                                 size="sm"
-                                className="w-full gap-2 h-10 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all text-[11px] uppercase tracking-wider" 
+                                className="w-full gap-2 h-9 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all text-[10px] uppercase tracking-wider" 
                                 onClick={() => document.getElementById('favicon-upload-sys')?.click()}
                               >
-                                <Upload className="w-3.5 h-3.5" /> Mudar Favicon
+                                <Upload className="w-3 h-3" /> Mudar Favicon
                               </Button>
                             </div>
                           </div>
@@ -2840,8 +3153,8 @@ export default function Admin() {
                         {/* Name Section */}
                         <div className="space-y-4">
                           <div className="flex flex-col gap-1">
-                            <label className="text-xs font-black text-foreground uppercase tracking-wider">Nome do Sistema</label>
-                            <p className="text-[10px] text-muted-foreground leading-relaxed">Título da aba e identificação.</p>
+                            <label className="text-[11px] font-black text-foreground uppercase tracking-wider">Nome do Sistema</label>
+                            <p className="text-[9px] text-muted-foreground leading-relaxed">Título da aba e identificação.</p>
                           </div>
 
                           <div className="space-y-4">
@@ -2850,38 +3163,58 @@ export default function Admin() {
                                 value={brandNameDraft} 
                                 onChange={e => setBrandNameDraft(e.target.value)} 
                                 placeholder="Ex: Mapa Território" 
-                                className="h-12 font-bold text-base bg-background/50 border-border/60 focus:border-primary/50 transition-all" 
+                                className="h-10 font-bold text-sm bg-background/50 border-border/60 focus:border-primary/50 transition-all" 
                               />
-                              <Button onClick={handleSaveBrandName} className="w-full gap-2 h-12 font-black uppercase tracking-widest shadow-lg shadow-primary/20">
-                                <Save className="w-4 h-4" /> Salvar Nome
+                              <Button onClick={handleSaveBrandName} className="w-full gap-2 h-10 font-black uppercase tracking-widest shadow-lg shadow-primary/20 text-[10px]">
+                                <Save className="w-3.5 h-3.5" /> Salvar Nome
                               </Button>
                             </div>
 
-                            <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
-                              <p className="text-[10px] text-primary/70 font-medium leading-relaxed italic">
+                            <div className="p-3 rounded-xl bg-primary/5 border border-primary/10">
+                              <p className="text-[9px] text-primary/70 font-medium leading-relaxed italic">
                                 O nome acima será usado como o título principal da aba do navegador ao lado do seu favicon.
                               </p>
                             </div>
                           </div>
                         </div>
                       </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
 
-                      <div className="h-px bg-gradient-to-r from-transparent via-border/40 to-transparent" />
-
-                      {/* Sidebar Color Section */}
-                      <div className="space-y-4">
-                        <div className="flex flex-col gap-1">
-                          <label className="text-xs sm:text-sm font-black text-foreground uppercase tracking-wider">Cor da Sidebar</label>
-                          <p className="text-[10px] sm:text-xs text-muted-foreground leading-relaxed">Personalize a cor de fundo da sidebar (apenas modo claro).</p>
+              {/* Conteúdo da Sub-Aba: SIDEBAR */}
+              {systemTab === 'sidebar' && (
+                <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl overflow-hidden">
+                    <CardHeader className="p-5 sm:p-6 border-b border-border/10">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-primary/15 rounded-xl flex items-center justify-center shrink-0 border border-primary/20 shadow-inner">
+                            <LayoutDashboard className="w-5 h-5 text-primary" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-sm sm:text-base uppercase tracking-widest font-black">Estilos da Sidebar</CardTitle>
+                            <CardDescription className="text-[10px] sm:text-xs">Personalize cores de fundo, texto e estados de seleção.</CardDescription>
+                          </div>
                         </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2">
-                          {/* Cores Pré-definidas */}
+                        <Button 
+                          onClick={handleSaveSidebarStyleBatch} 
+                          className="gap-2 h-9 px-6 font-black uppercase tracking-widest shadow-lg shadow-primary/20 text-[10px]"
+                        >
+                          <Save className="w-3.5 h-3.5" /> Salvar Estilos
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                        {/* Lado Esquerdo: Cores de Fundo */}
+                        <div className="space-y-8">
                           <div className="space-y-4">
-                            <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                              <Palette className="w-3 h-3" /> Cores Sugeridas
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                              <Palette className="w-3.5 h-3.5 text-primary" /> Fundo Principal
                             </Label>
-                            <div className="grid grid-cols-5 gap-3">
+                            <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
                               {[
                                 { name: 'Padrão', color: '#155e21' },
                                 { name: 'Noite', color: '#0f172a' },
@@ -2897,300 +3230,355 @@ export default function Admin() {
                                 <button
                                   key={item.color}
                                   type="button"
-                                  onClick={() => handleSaveSidebarColor(item.color)}
-                                  className={`group relative w-10 h-10 rounded-xl transition-all duration-300 hover:scale-110 flex items-center justify-center ${brandSidebarColor === item.color ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'hover:ring-2 hover:ring-border'}`}
+                                  onClick={() => handleSaveSidebarStyle('brand_sidebar_color', item.color)}
+                                  className={`group relative w-full aspect-square rounded-lg transition-all duration-300 hover:scale-110 flex items-center justify-center ${brandSidebarColor === item.color ? 'ring-2 ring-primary ring-offset-2 ring-offset-background shadow-lg' : 'hover:ring-2 hover:ring-border'}`}
                                   style={{ backgroundColor: item.color }}
                                   title={item.name}
                                 >
-                                  {brandSidebarColor === item.color && <Check className="w-5 h-5 text-white" />}
+                                  {brandSidebarColor === item.color && <Check className="w-4 h-4 text-white" />}
                                 </button>
                               ))}
                             </div>
+                            
+                            <div className="flex items-center gap-3 pt-2">
+                              <div className="shrink-0">
+                                <Input 
+                                  type="color" 
+                                  value={brandSidebarColor?.startsWith('#') ? brandSidebarColor : '#155e21'} 
+                                  onChange={e => handleSaveSidebarStyle('brand_sidebar_color', e.target.value)}
+                                  className="w-10 h-10 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
+                                />
+                              </div>
+                              <div className="flex-1 relative">
+                                <Input 
+                                  type="text"
+                                  value={brandSidebarColor}
+                                  onChange={e => setBrandSidebarColor(e.target.value)}
+                                  placeholder="HEX, RGB ou RGBA"
+                                  className="h-10 font-mono text-xs uppercase bg-background/50 border-border/60"
+                                />
+                                {brandSidebarColor && (
+                                  <button onClick={() => handleRemoveSidebarStyle('brand_sidebar_color')} className="absolute right-3 top-1/2 -translate-y-1/2 text-destructive hover:opacity-70"><Trash2 className="w-3.5 h-3.5" /></button>
+                                )}
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Cor Customizada */}
+                          <div className="h-px bg-border/20" />
+
+                          {/* Cor do Item Pai Ativo */}
                           <div className="space-y-4">
-                            <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                              <Settings className="w-3 h-3" /> Ajuste Fino
-                            </Label>
-                            <div className="flex flex-col gap-3">
-                              <div className="flex gap-3">
-                                <div className="relative group">
-                                  <Input 
-                                    type="color" 
-                                    value={brandSidebarColor?.startsWith('#') ? brandSidebarColor : '#155e21'} 
-                                    onChange={e => handleSaveSidebarColor(e.target.value)}
-                                    className="w-14 h-14 p-1 bg-background border-border rounded-xl cursor-pointer shadow-sm group-hover:border-primary/50 transition-all"
-                                  />
-                                  <div className="absolute -top-2 -right-2 bg-primary text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                    <Plus className="w-3 h-3" />
-                                  </div>
-                                </div>
-                                <div className="flex-1 space-y-2">
-                                  <Input 
-                                    type="text"
-                                    value={brandSidebarColor}
-                                    onChange={e => setBrandSidebarColor(e.target.value)}
-                                    onBlur={() => brandSidebarColor && handleSaveSidebarColor(brandSidebarColor)}
-                                    placeholder="HEX, RGB ou RGBA"
-                                    className="h-14 font-mono text-sm uppercase bg-background/50 border-border/60 focus:border-primary/50 transition-all"
-                                  />
-                                </div>
+                            <div className="flex flex-col gap-1">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                                <Layers className="w-3.5 h-3.5 text-primary" /> Fundo: Aba Pai Ativa
+                              </Label>
+                              <p className="text-[9px] text-muted-foreground italic">Cor de fundo do menu pai quando um filho está selecionado.</p>
+                            </div>
+                            
+                            <div className="flex items-center gap-3">
+                              <div className="shrink-0">
+                                <Input 
+                                  type="color" 
+                                  value={brandSidebarParentActiveBgColor?.startsWith('#') ? brandSidebarParentActiveBgColor : '#1a7a2a'} 
+                                  onChange={e => handleSaveSidebarStyle('brand_sidebar_parent_active_bg_color', e.target.value)}
+                                  className="w-10 h-10 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
+                                />
                               </div>
-                              
-                              <div className="flex items-center justify-between pt-1">
-                                <p className="text-[10px] text-muted-foreground italic">Ex: #155e21, rgb(21, 94, 33) ou rgba(21, 94, 33, 0.9)</p>
-                                {brandSidebarColor && (
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="h-8 gap-2 text-destructive hover:bg-destructive/10 font-bold uppercase text-[10px]"
-                                    onClick={handleRemoveSidebarColor}
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" /> Remover Personalização
-                                  </Button>
+                              <div className="flex-1 relative">
+                                <Input 
+                                  type="text"
+                                  value={brandSidebarParentActiveBgColor}
+                                  onChange={e => setBrandSidebarParentActiveBgColor(e.target.value)}
+                                  placeholder="Ex: rgba(255, 255, 255, 0.1)"
+                                  className="h-10 font-mono text-xs uppercase bg-background/50 border-border/60"
+                                />
+                                {brandSidebarParentActiveBgColor && (
+                                  <button onClick={() => handleRemoveSidebarStyle('brand_sidebar_parent_active_bg_color')} className="absolute right-3 top-1/2 -translate-y-1/2 text-destructive hover:opacity-70"><Trash2 className="w-3.5 h-3.5" /></button>
                                 )}
                               </div>
                             </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="h-px bg-gradient-to-r from-transparent via-border/40 to-transparent" />
+                        {/* Lado Direito: Cores de Texto e Seleção */}
+                        <div className="space-y-6 bg-secondary/10 p-5 rounded-2xl border border-border/40">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
+                            {/* Cor do Texto */}
+                            <div className="space-y-2">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-foreground">Cor do Texto</Label>
+                              <div className="flex gap-2">
+                                <Input 
+                                  type="color" 
+                                  value={brandSidebarTextColor?.startsWith('#') ? brandSidebarTextColor : '#ffffff'} 
+                                  onChange={e => handleSaveSidebarStyle('brand_sidebar_text_color', e.target.value)}
+                                  className="w-9 h-9 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
+                                />
+                                <div className="relative flex-1">
+                                  <Input 
+                                    type="text"
+                                    value={brandSidebarTextColor}
+                                    onChange={e => setBrandSidebarTextColor(e.target.value)}
+                                    placeholder="Texto Base"
+                                    className="h-9 text-[10px] uppercase bg-background border-border/60 pr-8"
+                                  />
+                                  {brandSidebarTextColor && (
+                                    <button onClick={() => handleRemoveSidebarStyle('brand_sidebar_text_color')} className="absolute right-2 top-1/2 -translate-y-1/2 text-destructive hover:opacity-70"><X className="w-3 h-3" /></button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
 
-                      {/* Ajuste de Tamanhos */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2">
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Altura na Tela de Login</Label>
-                            <span className="text-[10px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded">{brandLogoHeightLogin}px</span>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <input 
-                              type="range" 
-                              min="40" 
-                              max="300" 
-                              step="5"
-                              value={brandLogoHeightLogin} 
-                              onChange={async (e) => {
-                                const val = Number(e.target.value);
-                                setBrandLogoHeightLogin(val);
-                                try {
-                                  await fetch(`${API}/api/admin/settings`, {
-                                    method: 'PUT',
-                                    headers: authHeaders,
-                                    body: JSON.stringify({ brand_logo_height_login: val })
-                                  });
-                                  localStorage.setItem('brand_logo_height_login', String(val));
-                                  window.dispatchEvent(new Event('storage'));
-                                } catch {}
-                              }} 
-                              className="flex-1 accent-primary" 
-                            />
-                          </div>
-                        </div>
+                            {/* Texto Selecionado */}
+                            <div className="space-y-2">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-foreground">Texto Selecionado</Label>
+                              <div className="flex gap-2">
+                                <Input 
+                                  type="color" 
+                                  value={brandSidebarTextActiveColor?.startsWith('#') ? brandSidebarTextActiveColor : '#ffffff'} 
+                                  onChange={e => handleSaveSidebarStyle('brand_sidebar_text_active_color', e.target.value)}
+                                  className="w-9 h-9 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
+                                />
+                                <div className="relative flex-1">
+                                  <Input 
+                                    type="text"
+                                    value={brandSidebarTextActiveColor}
+                                    onChange={e => setBrandSidebarTextActiveColor(e.target.value)}
+                                    placeholder="Texto Ativo"
+                                    className="h-9 text-[10px] uppercase bg-background border-border/60 pr-8"
+                                  />
+                                  {brandSidebarTextActiveColor && (
+                                    <button onClick={() => handleRemoveSidebarStyle('brand_sidebar_text_active_color')} className="absolute right-2 top-1/2 -translate-y-1/2 text-destructive hover:opacity-70"><X className="w-3 h-3" /></button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
 
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Altura na Navbar</Label>
-                            <span className="text-[10px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded">{brandLogoHeightNavbar}px</span>
+                            {/* Fundo do Hover */}
+                            <div className="space-y-2">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-foreground">Fundo do Hover</Label>
+                              <div className="flex gap-2">
+                                <Input 
+                                  type="color" 
+                                  value={brandSidebarHoverColor?.startsWith('#') ? brandSidebarHoverColor : '#ffffff'} 
+                                  onChange={e => handleSaveSidebarStyle('brand_sidebar_hover_color', e.target.value)}
+                                  className="w-9 h-9 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
+                                />
+                                <div className="relative flex-1">
+                                  <Input 
+                                    type="text"
+                                    value={brandSidebarHoverColor}
+                                    onChange={e => setBrandSidebarHoverColor(e.target.value)}
+                                    placeholder="Hover BG"
+                                    className="h-9 text-[10px] uppercase bg-background border-border/60 pr-8"
+                                  />
+                                  {brandSidebarHoverColor && (
+                                    <button onClick={() => handleRemoveSidebarStyle('brand_sidebar_hover_color')} className="absolute right-2 top-1/2 -translate-y-1/2 text-destructive hover:opacity-70"><X className="w-3 h-3" /></button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Fundo Selecionado */}
+                            <div className="space-y-2">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-foreground">Fundo Selecionado</Label>
+                              <div className="flex gap-2">
+                                <Input 
+                                  type="color" 
+                                  value={brandSidebarActiveBgColor?.startsWith('#') ? brandSidebarActiveBgColor : '#ffffff'} 
+                                  onChange={e => handleSaveSidebarStyle('brand_sidebar_active_bg_color', e.target.value)}
+                                  className="w-9 h-9 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
+                                />
+                                <div className="relative flex-1">
+                                  <Input 
+                                    type="text"
+                                    value={brandSidebarActiveBgColor}
+                                    onChange={e => setBrandSidebarActiveBgColor(e.target.value)}
+                                    placeholder="Ativo BG"
+                                    className="h-9 text-[10px] uppercase bg-background border-border/60 pr-8"
+                                  />
+                                  {brandSidebarActiveBgColor && (
+                                    <button onClick={() => handleRemoveSidebarStyle('brand_sidebar_active_bg_color')} className="absolute right-2 top-1/2 -translate-y-1/2 text-destructive hover:opacity-70"><X className="w-3 h-3" /></button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-4">
-                            <input 
-                              type="range" 
-                              min="20" 
-                              max="80" 
-                              step="2"
-                              value={brandLogoHeightNavbar} 
-                              onChange={async (e) => {
-                                const val = Number(e.target.value);
-                                setBrandLogoHeightNavbar(val);
-                                try {
-                                  await fetch(`${API}/api/admin/settings`, {
-                                    method: 'PUT',
-                                    headers: authHeaders,
-                                    body: JSON.stringify({ brand_logo_height_navbar: val })
-                                  });
-                                  localStorage.setItem('brand_logo_height_navbar', String(val));
-                                  window.dispatchEvent(new Event('storage'));
-                                } catch {}
-                              }} 
-                              className="flex-1 accent-primary" 
-                            />
+
+                          <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 mt-4">
+                            <p className="text-[10px] text-primary/70 leading-relaxed font-medium">
+                              <span className="font-black uppercase">Dica:</span> Utilize cores com transparência (RGBA) no Hover e no Fundo Selecionado para preservar os detalhes visuais da sidebar.
+                            </p>
                           </div>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                 </div>
-              </div>
-
-              {/* Seção de Tipos de Usuário */}
-              {(role === 'admin' || canEdit('settings')) && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-border/40 pb-2">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-5 h-5 text-primary" />
-                      <h2 className="text-lg font-bold">Tipos de Usuário</h2>
-                    </div>
-                    <Button size="sm" className="gap-2" onClick={() => {
-                      setEditingUserTypeId(null);
-                      setUserTypeForm({ name: '', color: '#3b82f6', icon: 'User', showInMenu: false, active: true, isAdmin: false });
-                      setIsUserTypeModalOpen(true);
-                    }}>
-                      <Plus className="w-3.5 h-3.5" /> Novo Tipo
-                    </Button>
-                  </div>
-
-                  {userTypes.length === 0 ? (
-                    <div className="py-12 flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed border-border/40 rounded-xl">
-                      <ShieldCheck className="w-10 h-10 opacity-10 mb-2" />
-                      <p className="text-sm font-medium">Nenhum tipo cadastrado</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {userTypes.map(type => {
-                        const TypeIcon = ICON_LIST[type.icon as keyof typeof ICON_LIST] || User;
-                        const isAdminType = type.isAdmin || type.name.toLowerCase() === 'admin';
-                        const isDefaultUser = !isAdminType && type.name.toLowerCase() === 'usuário';
-                        const cardColor = isAdminType ? '#fbbf24' : (isDefaultUser ? '#3b82f6' : type.color);
-
-                        return (
-                          <Card key={type.id} className={`group relative overflow-hidden border-border/40 hover:border-primary/50 transition-all duration-300 ${!type.active ? 'opacity-60 grayscale-[0.5]' : ''}`}>
-                            <div className="h-1 w-full absolute top-0 left-0" style={{ backgroundColor: cardColor }} />
-                            <CardContent className="p-4">
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white shadow-sm" style={{ backgroundColor: cardColor }}>
-                                  <TypeIcon className="w-4 h-4" />
-                                </div>
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
-                                    setEditingUserTypeId(type.id);
-                                    setUserTypeForm({ name: type.name, color: type.color, icon: type.icon || 'User', showInMenu: type.showInMenu, active: type.active, isAdmin: type.isAdmin });
-                                    setIsUserTypeModalOpen(true);
-                                  }}><Pencil className="w-3.5 h-3.5" /></Button>
-                                  {!type.isSystemDefault && (
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteUserType(type.id, type.name)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                                  )}
-                                </div>
-                              </div>
-                              <h3 className="font-bold text-sm mb-1 flex items-center gap-2">
-                                {type.name}
-                                {isAdminType && <ShieldCheck className="w-3 h-3 text-amber-500" />}
-                              </h3>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground font-bold uppercase">
-                                  {users.filter(u => u.userTypeId === type.id).length} Usuários
-                                </span>
-                                {type.showInMenu && (
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-bold uppercase flex items-center gap-1">
-                                    <Eye className="w-2.5 h-2.5" /> Sidebar
-                                  </span>
-                                )}
-                                {!type.active && (
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive font-bold uppercase">Inativo</span>
-                                )}
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
               )}
 
-              {/* Modal Novo/Editar Tipo */}
-              <Dialog open={isUserTypeModalOpen} onOpenChange={setIsUserTypeModalOpen}>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>{editingUserTypeId ? 'Editar Tipo' : 'Novo Tipo de Usuário'}</DialogTitle>
-                    <DialogDescription className="text-xs">Defina as configurações de categorização para este tipo.</DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleSaveUserType} className="space-y-4 pt-4">
-                    <div className="space-y-2">
-                      <Label className="text-xs">Nome do Tipo</Label>
-                      <Input 
-                        placeholder="Ex: Gerente, Vendedor..." 
-                        value={userTypeForm.name}
-                        onChange={e => setUserTypeForm({ ...userTypeForm, name: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs">Cor de Identificação</Label>
-                      <div className="flex gap-2 items-center">
-                        <Input 
-                          type="color" 
-                          className="w-10 h-9 p-1 cursor-pointer" 
-                          value={userTypeForm.color}
-                          onChange={e => setUserTypeForm({ ...userTypeForm, color: e.target.value })}
-                        />
-                        <Input 
-                          placeholder="#000000" 
-                          className="text-xs"
-                          value={userTypeForm.color}
-                          onChange={e => setUserTypeForm({ ...userTypeForm, color: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs">Ícone Representativo</Label>
-                      <div className="grid grid-cols-5 gap-2 p-2 bg-secondary/20 rounded-lg border border-border/40 max-h-40 overflow-y-auto">
-                        {Object.entries(ICON_LIST).map(([name, Icon]) => (
-                          <button
-                            key={name}
-                            type="button"
-                            onClick={() => setUserTypeForm({ ...userTypeForm, icon: name })}
-                            className={`flex flex-col items-center justify-center p-2 rounded-md transition-all hover:bg-primary/10 ${userTypeForm.icon === name ? 'bg-primary/20 ring-1 ring-primary' : ''}`}
+              {/* Conteúdo da Sub-Aba: BOTÕES */}
+              {systemTab === 'buttons' && (
+                <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl overflow-hidden">
+                    <CardHeader className="p-5 sm:p-6 border-b border-border/10">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-primary/15 rounded-xl flex items-center justify-center shrink-0 border border-primary/20 shadow-inner">
+                            <Grid3X3 className="w-5 h-5 text-primary" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-sm sm:text-base uppercase tracking-widest font-black">Estilos de Botões</CardTitle>
+                            <CardDescription className="text-[10px] sm:text-xs">Customize as cores dos botões principais de todo o sistema.</CardDescription>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline"
+                            onClick={() => {
+                              setBrandButtonBgColor('');
+                              setBrandButtonTextColor('');
+                              setBrandButtonHoverBgColor('');
+                              setBrandButtonHoverTextColor('');
+                              toast.info('Cores dos botões resetadas. Clique em Salvar para confirmar.');
+                            }} 
+                            className="h-9 px-4 font-black uppercase tracking-widest text-[10px]"
                           >
-                            <Icon className="w-5 h-5 mb-1" />
-                            <span className="text-[8px] truncate w-full text-center opacity-60">{name}</span>
-                          </button>
-                        ))}
+                            Resetar
+                          </Button>
+                          <Button 
+                            onClick={handleSaveSidebarStyleBatch} 
+                            className="gap-2 h-9 px-6 font-black uppercase tracking-widest shadow-lg shadow-primary/20 text-[10px]"
+                          >
+                            <Save className="w-3.5 h-3.5" /> Salvar Estilos
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-4 pt-2">
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="checkbox" 
-                          id="showInMenu"
-                          className="rounded border-border text-primary focus:ring-primary"
-                          checked={userTypeForm.showInMenu}
-                          onChange={e => setUserTypeForm({ ...userTypeForm, showInMenu: e.target.checked })}
-                        />
-                        <Label htmlFor="showInMenu" className="text-xs cursor-pointer">Exibir na sidebar?</Label>
+                    </CardHeader>
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                        {/* Configurações de Cores */}
+                        <div className="space-y-8">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            {/* Fundo do Botão */}
+                            <div className="space-y-3">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cor de Fundo</Label>
+                              <div className="flex gap-2">
+                                <Input 
+                                  type="color" 
+                                  value={brandButtonBgColor?.startsWith('#') ? brandButtonBgColor : '#155e21'} 
+                                  onChange={e => setBrandButtonBgColor(e.target.value)}
+                                  className="w-10 h-10 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
+                                />
+                                <Input 
+                                  type="text"
+                                  value={brandButtonBgColor}
+                                  onChange={e => setBrandButtonBgColor(e.target.value)}
+                                  placeholder="Cor Base"
+                                  className="h-10 text-[10px] uppercase font-mono bg-background border-border/60"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Texto do Botão */}
+                            <div className="space-y-3">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cor do Texto</Label>
+                              <div className="flex gap-2">
+                                <Input 
+                                  type="color" 
+                                  value={brandButtonTextColor?.startsWith('#') ? brandButtonTextColor : '#ffffff'} 
+                                  onChange={e => setBrandButtonTextColor(e.target.value)}
+                                  className="w-10 h-10 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
+                                />
+                                <Input 
+                                  type="text"
+                                  value={brandButtonTextColor}
+                                  onChange={e => setBrandButtonTextColor(e.target.value)}
+                                  placeholder="Cor do Texto"
+                                  className="h-10 text-[10px] uppercase font-mono bg-background border-border/60"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Fundo Hover */}
+                            <div className="space-y-3">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fundo (Hover)</Label>
+                              <div className="flex gap-2">
+                                <Input 
+                                  type="color" 
+                                  value={brandButtonHoverBgColor?.startsWith('#') ? brandButtonHoverBgColor : '#1a7a2a'} 
+                                  onChange={e => setBrandButtonHoverBgColor(e.target.value)}
+                                  className="w-10 h-10 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
+                                />
+                                <Input 
+                                  type="text"
+                                  value={brandButtonHoverBgColor}
+                                  onChange={e => setBrandButtonHoverBgColor(e.target.value)}
+                                  placeholder="Hover BG"
+                                  className="h-10 text-[10px] uppercase font-mono bg-background border-border/60"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Texto Hover */}
+                            <div className="space-y-3">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Texto (Hover)</Label>
+                              <div className="flex gap-2">
+                                <Input 
+                                  type="color" 
+                                  value={brandButtonHoverTextColor?.startsWith('#') ? brandButtonHoverTextColor : '#ffffff'} 
+                                  onChange={e => setBrandButtonHoverTextColor(e.target.value)}
+                                  className="w-10 h-10 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
+                                />
+                                <Input 
+                                  type="text"
+                                  value={brandButtonHoverTextColor}
+                                  onChange={e => setBrandButtonHoverTextColor(e.target.value)}
+                                  placeholder="Hover Texto"
+                                  className="h-10 text-[10px] uppercase font-mono bg-background border-border/60"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
+                            <p className="text-[10px] text-primary/70 leading-relaxed font-medium">
+                              <span className="font-black uppercase">Nota:</span> Estas cores serão aplicadas a todos os botões que utilizam a cor primária do sistema (como o botão de salvar, novo usuário, etc).
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Preview dos Botões */}
+                        <div className="bg-secondary/10 p-8 rounded-2xl border border-border/40 flex flex-col items-center justify-center gap-6">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Pré-visualização em Tempo Real</Label>
+                          
+                          <div className="flex flex-col gap-4 w-full max-w-[240px]">
+                            <Button className="w-full h-11 font-black uppercase tracking-widest shadow-lg shadow-primary/20">
+                              Botão Primário
+                            </Button>
+                            
+                            <Button className="w-full h-11 font-black uppercase tracking-widest shadow-lg shadow-primary/20 flex items-center gap-2">
+                              <Save className="w-4 h-4" /> Salvar Registro
+                            </Button>
+
+                            <div className="mt-4 p-4 bg-background/50 rounded-xl border border-border/40 flex flex-col items-center gap-2">
+                              <p className="text-[9px] font-bold text-muted-foreground uppercase">Estado de Hover (Simulado)</p>
+                              <Button 
+                                className="w-full h-11 font-black uppercase tracking-widest shadow-lg shadow-primary/20"
+                                style={{
+                                  backgroundColor: brandButtonHoverBgColor || undefined,
+                                  color: brandButtonHoverTextColor || undefined
+                                }}
+                              >
+                                Botão Hover
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="checkbox" 
-                          id="active"
-                          className="rounded border-border text-primary focus:ring-primary"
-                          checked={userTypeForm.active}
-                          onChange={e => setUserTypeForm({ ...userTypeForm, active: e.target.checked })}
-                        />
-                        <Label htmlFor="active" className="text-xs cursor-pointer">Ativo?</Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="checkbox" 
-                          id="isAdmin"
-                          className="rounded border-border text-primary focus:ring-primary"
-                          checked={userTypeForm.isAdmin}
-                          onChange={e => setUserTypeForm({ ...userTypeForm, isAdmin: e.target.checked })}
-                        />
-                        <Label htmlFor="isAdmin" className="text-xs cursor-pointer">Administrador?</Label>
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-3 pt-4 border-t border-border/40 mt-4">
-                      <Button type="button" variant="ghost" size="sm" onClick={() => setIsUserTypeModalOpen(false)}>Cancelar</Button>
-                      <Button type="submit" size="sm" className="gap-2">
-                        <Save className="w-3.5 h-3.5" /> {editingUserTypeId ? 'Salvar' : 'Criar'}
-                      </Button>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </div>
           )}
 
@@ -3999,6 +4387,89 @@ export default function Admin() {
           )}
 
           {/* ━━ PERSONALIZAÇÃO ━━ */}
+          {/* ━━ TIPOS DE USUÁRIO ━━ */}
+          {activeTab === 'user_types' && (role === 'admin' || canEdit('settings')) && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <div className="flex items-center justify-between border-b border-border/40 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center border border-primary/20 shadow-sm">
+                    <ShieldCheck className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black uppercase tracking-wider">Tipos de Usuário</h2>
+                    <p className="text-xs text-muted-foreground">Gerencie as categorias e permissões base do sistema.</p>
+                  </div>
+                </div>
+                <Button className="gap-2 h-11 px-6 font-black uppercase tracking-widest shadow-lg shadow-primary/20" onClick={() => {
+                  setEditingUserTypeId(null);
+                  setUserTypeForm({ name: '', color: '#3b82f6', icon: 'User', showInMenu: false, active: true, isAdmin: false });
+                  setIsUserTypeModalOpen(true);
+                }}>
+                  <Plus className="w-4 h-4" /> Novo Tipo
+                </Button>
+              </div>
+
+              {userTypes.length === 0 ? (
+                <div className="py-24 flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed border-border/40 rounded-2xl bg-secondary/5">
+                  <ShieldCheck className="w-16 h-16 opacity-5 mb-4" />
+                  <p className="text-base font-bold uppercase tracking-widest opacity-40">Nenhum tipo cadastrado</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {userTypes.map(type => {
+                    const TypeIcon = ICON_LIST[type.icon as keyof typeof ICON_LIST] || User;
+                    const isAdminType = type.isAdmin || type.name.toLowerCase() === 'admin';
+                    const isDefaultUser = !isAdminType && type.name.toLowerCase() === 'usuário';
+                    const cardColor = isAdminType ? '#fbbf24' : (isDefaultUser ? '#3b82f6' : type.color);
+
+                    return (
+                      <Card key={type.id} className={`group relative overflow-hidden border-border/40 hover:border-primary/50 transition-all duration-300 shadow-sm hover:shadow-xl ${!type.active ? 'opacity-60 grayscale-[0.5]' : ''}`}>
+                        <div className="h-1.5 w-full absolute top-0 left-0" style={{ backgroundColor: cardColor }} />
+                        <CardContent className="p-6">
+                          <div className="flex items-center justify-between mb-5">
+                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform group-hover:scale-110 duration-300" style={{ backgroundColor: cardColor }}>
+                              <TypeIcon className="w-6 h-6" />
+                            </div>
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
+                              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full hover:bg-primary/10" onClick={() => {
+                                setEditingUserTypeId(type.id);
+                                setUserTypeForm({ name: type.name, color: type.color, icon: type.icon || 'User', showInMenu: type.showInMenu, active: type.active, isAdmin: type.isAdmin });
+                                setIsUserTypeModalOpen(true);
+                              }}><Pencil className="w-4 h-4" /></Button>
+                              {!type.isSystemDefault && (
+                                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteUserType(type.id, type.name)}><Trash2 className="w-4 h-4" /></Button>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-1">
+                            <h3 className="font-black text-base uppercase tracking-tight flex items-center gap-2">
+                              {type.name}
+                              {isAdminType && <BadgeCheck className="w-4 h-4 text-amber-500" />}
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground font-black uppercase tracking-tighter">
+                                {users.filter(u => u.userTypeId === type.id).length} Usuários
+                              </span>
+                              {type.showInMenu && (
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-black uppercase tracking-tighter flex items-center gap-1">
+                                  <Eye className="w-3 h-3" /> Sidebar
+                                </span>
+                              )}
+                              {!type.active && (
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-destructive/10 text-destructive font-black uppercase tracking-tighter">Inativo</span>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ━━ BASE CLIENTE (Standalone) ━━ */}
           {activeTab === 'baserotas' && (
             <BaseClientePanel 
