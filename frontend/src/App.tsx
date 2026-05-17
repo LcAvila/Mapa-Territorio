@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import Profile from "./pages/Profile";
+import Ajuda from "./pages/Ajuda";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NotFound from "./pages/NotFound";
 import NotificationSystem from "./components/NotificationSystem";
@@ -49,6 +50,7 @@ const App = () => (
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/mapa" element={<Index />} />
                 <Route path="/perfil" element={<Profile />} />
+                <Route path="/ajuda" element={<Ajuda />} />
               </Route>
 
 

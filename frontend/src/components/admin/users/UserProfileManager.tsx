@@ -544,7 +544,17 @@ function maskCEP(val: string) {
                 <Label>Data de Nascimento</Label>
                 <Input type="date" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
               </div>
-              
+
+              <div className="field">
+                <Label className="text-primary font-bold">Estado de Atuação</Label>
+                <Input 
+                  value={formData.assigned_state ? `${formData.assigned_state} - ${UF_DATA.find(uf => uf.sigla === formData.assigned_state)?.nome || ''}` : 'Brasil (Todos os Estados)'} 
+                  disabled 
+                  className="bg-muted/30 border-primary/20 font-medium"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">Estado configurado na aba Territórios. Define a visão e reivindicação de municípios.</p>
+              </div>
+
               {showPwdFields && (
                 <div className="col-span-full grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 p-4 rounded-lg bg-primary/5 border border-primary/10">
                   <div className="field">

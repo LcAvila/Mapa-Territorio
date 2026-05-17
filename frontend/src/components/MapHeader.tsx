@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck, Users, Flame, Filter, X, UserCheck, Check, RefreshCw, ShieldCheck, BadgeCheck } from "lucide-react";
+import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck, Users, Flame, Filter, X, UserCheck, Check, RefreshCw, ShieldCheck, BadgeCheck, HelpCircle, LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context-core";
 import { UF_DATA } from "@/data/uf-codes";
 import { SystemUser, Cliente, SearchSuggestion, useApiTerritories } from "@/hooks/use-api-data";
@@ -122,7 +122,7 @@ export default function MapHeader({
   // ── Notifications Logic ──
   const currentUserId = userId || Number(localStorage.getItem('userId') || 0) || null;
   const fullUserName = userName || localStorage.getItem('userName') || 'Usuário';
-  const userCargo = localStorage.getItem('cargo') || localStorage.getItem('tipo') || role || 'usuário';
+  const userCargo = role || localStorage.getItem('cargo') || localStorage.getItem('tipo') || 'usuário';
   const userPhoto = localStorage.getItem('photo') || '';
 
   const myNotifications = useMemo(() => {
@@ -579,6 +579,16 @@ export default function MapHeader({
           </Button>
         ) : (
           <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/admin')}
+              className="h-8 gap-1.5 px-2 sm:px-3 hover:bg-primary/10 hover:text-primary"
+              title="Painel Admin"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline text-xs font-semibold">Admin</span>
+            </Button>
             <Popover open={showNotifications} onOpenChange={setShowNotifications}>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="sm" className="relative h-8 w-8 p-0 hover:bg-primary/5 hover:text-primary">
@@ -659,6 +669,13 @@ export default function MapHeader({
                 >
                   <Settings className="w-3.5 h-3.5" />
                   Painel
+                </button>
+                <button
+                  className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors"
+                  onClick={() => { setShowUserMenu(false); navigate('/ajuda'); }}
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  Ajuda
                 </button>
                 <button
                   className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold rounded-md text-destructive hover:bg-destructive/10 transition-colors"

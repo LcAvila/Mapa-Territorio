@@ -28,7 +28,116 @@ const ICON_LIST = {
   MapPin: MapPin,
   Bell: Bell,
   Activity: Activity,
-  Database: Database
+  Database: Database,
+  Star: Star,
+  Crown: Crown,
+  Zap: Zap,
+  Flame: Flame,
+  Sparkles: Sparkles,
+  Gem: Gem,
+  Diamond: Diamond,
+  Medal: Medal,
+  Award: Award,
+  Trophy: Trophy,
+  Target: Target,
+  Crosshair: Crosshair,
+  Focus: Focus,
+  Home: Home,
+  House: House,
+  Building: Building,
+  Store: Store,
+  Factory: Factory,
+  Warehouse: Warehouse,
+  Car: Car,
+  Bike: Bike,
+  Bus: Bus,
+  Train: Train,
+  Ship: Ship,
+  Rocket: Rocket,
+  Book: Book,
+  BookOpen: BookOpen,
+  Library: Library,
+  FileText: FileText,
+  File: File,
+  Folder: Folder,
+  FolderOpen: FolderOpen,
+  Music: Music,
+  Radio: Radio,
+  Headphones: Headphones,
+  Guitar: Guitar,
+  Piano: Piano,
+  Gamepad2: Gamepad2,
+  Joystick: Joystick,
+  Puzzle: Puzzle,
+  Sun: Sun,
+  Moon: Moon,
+  Cloud: Cloud,
+  CloudRain: CloudRain,
+  Snowflake: Snowflake,
+  Trees: Trees,
+  Leaf: Leaf,
+  Flower: Flower,
+  Sprout: Sprout,
+  Mountain: Mountain,
+  Heart: Heart,
+  Smile: Smile,
+  Laugh: Laugh,
+  Frown: Frown,
+  Meh: Meh,
+  Hand: Hand,
+  Handshake: Handshake,
+  ThumbsUp: ThumbsUp,
+  ThumbsDown: ThumbsDown,
+  Lock: Lock,
+  Unlock: Unlock,
+  Key: Key,
+  Shield: Shield,
+  ShieldX: ShieldX,
+  Globe2: Globe2,
+  Earth: Earth,
+  Compass: Compass,
+  Navigation: Navigation,
+  Clock2: Clock2,
+  Timer: Timer,
+  Hourglass: Hourglass,
+  DollarSign: DollarSign,
+  Euro: Euro,
+  PoundSterling: PoundSterling,
+  Coins: Coins,
+  Smartphone: Smartphone,
+  Laptop: Laptop,
+  Monitor: Monitor,
+  Tablet: Tablet,
+  Tv: Tv,
+  Pizza: Pizza,
+  Cake: Cake,
+  Cookie: Cookie,
+  IceCream: IceCream,
+  Shirt: Shirt,
+  Glasses: Glasses,
+  Baby: Baby,
+  UserCircle: UserCircle,
+  UserCheck: UserCheck,
+  UserX: UserX,
+  ArrowUp: ArrowUp,
+  ArrowDown: ArrowDown,
+  ArrowLeft: ArrowLeft,
+  ArrowRight: ArrowRight,
+  ArrowUpRight: ArrowUpRight,
+  ArrowUpLeft: ArrowUpLeft,
+  Circle: Circle,
+  Square: Square,
+  Triangle: Triangle,
+  Hexagon: Hexagon,
+  Octagon: Octagon,
+  CheckCircle: CheckCircle,
+  XCircle: XCircle,
+  AlertTriangle: AlertTriangle,
+  Info: Info,
+  HelpIcon: HelpIcon,
+  Lightning: Lightning,
+  Fire: Fire,
+  Magic: Magic
 };
 
 export interface ClienteData {
@@ -54,10 +163,34 @@ import {
   Building2, Filter, RefreshCw, ChevronRight, MessageSquare, Globe, Activity,
   TrendingUp, AlertCircle, BadgeCheck, Palette, Upload, ImageOff, Download, Truck, Settings,
   Database, Layers, Grid3X3, Calendar, FileSpreadsheet, Camera, Percent, Mail, Phone, MapPinned,
-  Route, BarChart2, ShieldAlert, UserCog, Contact, GraduationCap, Microscope, Stethoscope, 
+  Route, BarChart2, ShieldAlert, UserCog, Contact, GraduationCap, Microscope, Stethoscope,
   Headset, Construction, ShoppingBag, ChefHat, Coffee, Plane, HeartPulse, Hammer, Wrench, LucideIcon,
   Users2, Package, History as HistoryIcon,
-  Menu, Clock
+  Menu, Clock, HelpCircle,
+  Star, Crown, Zap, Flame, Sparkles, Gem, Diamond, Medal, Award, Trophy,
+  Target, Crosshair, Focus,
+  Home, House, Building, Store, Factory, Warehouse,
+  Car, Bike, Bus, Train, Ship, Rocket,
+  Book, BookOpen, Library, FileText, File, Folder, FolderOpen,
+  Music, Radio, Headphones, Guitar, Piano,
+  Gamepad2, Joystick, Puzzle,
+  Sun, Moon, Cloud, CloudRain, Snowflake,
+  Trees, Leaf, Flower, Sprout, Mountain,
+  Heart, Smile, Laugh, Frown, Meh,
+  Hand, Handshake, ThumbsUp, ThumbsDown,
+  Lock, Unlock, Key, Shield, ShieldX,
+  Globe2, Earth, Compass, Navigation,
+  Clock2, Timer, Hourglass,
+  DollarSign, Euro, PoundSterling, Coins,
+  Smartphone, Laptop, Monitor, Tablet, Tv,
+  Pizza, Cake, Cookie, IceCream,
+  Shirt, Glasses,
+  Baby, UserCircle, UserCheck, UserX,
+  ArrowUp, ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, ArrowUpLeft,
+  Circle, Square, Triangle, Hexagon, Octagon,
+  CheckCircle, XCircle, AlertTriangle, Info, HelpCircle as HelpIcon,
+  Zap as Lightning, Flame as Fire, Sparkles as Magic,
+  Hash
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -136,7 +269,7 @@ interface ModulePermission { userId: number; moduleId: string; canView: boolean;
 type TabId = 'dashboard' | 'users' | 'territories' | 'groups' | 'notifications' | 'audit' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'cycles' | 'roteiro_seq' | 'resumo_roteiro' | 'user_types' | 'system' | 'reps' | `user_type_${number}`;
 
 interface NavItem {
-  id: TabId | 'settings' | 'rotas_menu' | 'users_menu';
+  id: TabId | 'settings' | 'rotas_menu' | 'users_menu' | 'ajuda';
   label: string;
   icon: React.ElementType;
   count?: number;
@@ -1093,6 +1226,7 @@ export default function Admin() {
 
   const navItems: NavItem[] = useMemo(() => [
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'ajuda' as const, label: 'Ajuda', icon: HelpCircle },
     { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor', 'user'] },
     {
       id: 'users_menu' as const, label: 'Usuários', icon: UsersRound, restrict: ['admin'], subItems: [
@@ -1371,11 +1505,65 @@ export default function Admin() {
           }
         } catch (error) {
           toast.error('Erro de conexão');
-        } finally {
-          closeConfirm();
         }
       }
     );
+  };
+
+  const handleAddUsersToType = async (userTypeId: number) => {
+    if (selectedUserIdsForType.length === 0) return;
+
+    try {
+      // Update each user individually using existing endpoint
+      let successCount = 0;
+      for (const userId of selectedUserIdsForType) {
+        try {
+          const user = users.find(u => u.id === userId);
+          if (!user) continue;
+
+          const selectedType = userTypes.find(t => t.id === userTypeId);
+          const body: Record<string, any> = {
+            username: user.username,
+            email: user.email || user.username,
+            role: selectedType?.isAdmin ? 'admin' : user.role,
+            full_name: user.full_name || user.fullName || '',
+            telefone: user.telefone || '',
+            cpf_cnpj: user.cpf_cnpj || user.document || '',
+            birth_date: user.birth_date || user.birthDate || null,
+            cargo: user.cargo || '',
+            company_name: user.company_name || user.companyName || '',
+            groupId: user.groupId ? Number(user.groupId) : null,
+            userTypeId: userTypeId,
+            managedUserIds: user.managedUsers?.map((m: any) => m.id) || []
+          };
+
+          const res = await fetch(`${API}/api/admin/users/${userId}`, {
+            method: 'PUT',
+            headers: authHeaders,
+            body: JSON.stringify(body)
+          });
+          if (res.ok) {
+            successCount++;
+          }
+        } catch (error) {
+          console.error(`Error updating user ${userId}:`, error);
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`${successCount} usuário${successCount !== 1 ? 's' : ''} adicionado${successCount !== 1 ? 's' : ''} ao tipo de usuário`);
+        setSelectedUserIdsForType([]);
+        setIsAddUsersModalOpen(false);
+        // Refresh users data
+        const uR = await fetch(`${API}/api/admin/users`, { headers: authHeaders });
+        if (uR.ok) setUsers(await uR.json());
+        addAudit('batch_update_user_type', 'User', selectedUserIdsForType.join(','), `Updated userTypeId to ${userTypeId}`);
+      } else {
+        toast.error('Erro ao adicionar usuários ao tipo');
+      }
+    } catch (error) {
+      toast.error('Erro de conexão');
+    }
   };
 
   const [groupsData, setGroupsData] = useState<{ id: number, name: string }[]>([]);
@@ -1402,12 +1590,18 @@ export default function Admin() {
   const [userSearch, setUserSearch] = useState('');
   const [userFilterOnline, setUserFilterOnline] = useState(false);
   const [userSortBy, setUserSortBy] = useState<'name' | 'code' | 'date' | 'role'>('name');
+  const [isAddUsersModalOpen, setIsAddUsersModalOpen] = useState(false);
+  const [addUsersSearch, setAddUsersSearch] = useState('');
+  const [addUsersCodeFilter, setAddUsersCodeFilter] = useState('');
+  const [addUsersTypeFilter, setAddUsersTypeFilter] = useState('all');
+  const [selectedUserIdsForType, setSelectedUserIdsForType] = useState<number[]>([]);
 
   const filteredUsers = useMemo(() => {
     const filtered = users.filter(u => {
       // Filter by dynamic user type if applicable
       if (activeTab.startsWith('user_type_')) {
         const typeId = parseInt(activeTab.replace('user_type_', ''));
+        // Show only users who HAVE this type
         // @ts-ignore
         if (Number(u.userTypeId) !== typeId) return false;
       }
@@ -1787,17 +1981,37 @@ export default function Admin() {
     if (!staged.length) { toast.error('Nada para confirmar'); return; }
     let ok = 0, fail = 0;
     for (const item of staged) {
-      const res = await fetch(`${API}/api/admin/territories`, { 
-        method: 'POST', 
-        headers: authHeaders, 
-        body: JSON.stringify({ 
-          municipio: item.municipio || null, 
-          uf: item.uf, 
-          userId: item.userId, 
-          modo: item.modo 
-        }) 
+      const res = await fetch(`${API}/api/admin/territories`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          municipio: item.municipio || null,
+          uf: item.uf,
+          userId: item.userId,
+          modo: item.modo
+        })
       });
-      if (res.ok) { ok++; addAudit('assign_territory', 'Território', item.municipio || 'Estado', `Atribuiu ${item.municipio || item.uf}/${item.uf} → ${item.userId}`); }
+      if (res.ok) {
+        ok++;
+        addAudit('assign_territory', 'Território', item.municipio || 'Estado', `Atribuiu ${item.municipio || item.uf}/${item.uf} → ${item.userId}`);
+
+        // Update user's assigned_state when a state territory is assigned
+        if (!item.municipio) {
+          // This is a state-level territory assignment, update user's assigned_state
+          try {
+            const userRes = await fetch(`${API}/api/admin/users/${item.userId}`, {
+              method: 'PUT',
+              headers: authHeaders,
+              body: JSON.stringify({ assigned_state: item.uf })
+            });
+            if (userRes.ok) {
+              console.log(`Updated assigned_state for user ${item.userId} to ${item.uf}`);
+            }
+          } catch (error) {
+            console.error('Error updating user assigned_state:', error);
+          }
+        }
+      }
       else fail++;
     }
     if (ok) toast.success(`${ok} território(s) atribuído(s)!`);
@@ -1807,7 +2021,32 @@ export default function Admin() {
 
   const handleDeleteTerritory = async (id: number, municipio: string, userId: number, uf: string) => {
     const res = await fetch(`${API}/api/admin/territories/${id}`, { method: 'DELETE', headers: authHeaders });
-    if (res.ok) { toast.success(`${municipio} removido!`); addAudit('delete_territory', 'Território', String(id), `Removeu ${municipio}/${uf}`); fetchAll(); }
+    if (res.ok) {
+      toast.success(`${municipio} removido!`);
+      addAudit('delete_territory', 'Território', String(id), `Removeu ${municipio}/${uf}`);
+
+      // If this was a state-level territory, check if user still has any territories in this state
+      if (!municipio) {
+        const remainingTerritoriesInUF = territories.filter(t => t.uf === uf && t.userId === userId);
+        if (remainingTerritoriesInUF.length === 0) {
+          // User no longer has any territories in this state, clear assigned_state
+          try {
+            const userRes = await fetch(`${API}/api/admin/users/${userId}`, {
+              method: 'PUT',
+              headers: authHeaders,
+              body: JSON.stringify({ assigned_state: '' })
+            });
+            if (userRes.ok) {
+              console.log(`Cleared assigned_state for user ${userId}`);
+            }
+          } catch (error) {
+            console.error('Error clearing user assigned_state:', error);
+          }
+        }
+      }
+
+      fetchAll();
+    }
     else toast.error('Erro');
   };
 
@@ -1841,6 +2080,25 @@ export default function Admin() {
           if (ok > 0) {
             toast.success(`${ok} atribuições removidas com sucesso!`);
             addAudit('remove_user_from_uf', 'Território', uf, `Removeu usuário ${userId} do estado ${uf} (${ok} locais)`);
+
+            // Check if user still has any state-level territories in this UF
+            const remainingStateTerritories = territories.filter(t => t.uf === uf && t.userId === userId && !t.municipio);
+            if (remainingStateTerritories.length === 0) {
+              // User no longer has state-level territory in this UF, clear assigned_state
+              try {
+                const userRes = await fetch(`${API}/api/admin/users/${userId}`, {
+                  method: 'PUT',
+                  headers: authHeaders,
+                  body: JSON.stringify({ assigned_state: '' })
+                });
+                if (userRes.ok) {
+                  console.log(`Cleared assigned_state for user ${userId} after removing from ${uf}`);
+                }
+              } catch (error) {
+                console.error('Error clearing user assigned_state:', error);
+              }
+            }
+
             fetchAll();
           }
           if (fail > 0) toast.error(`Falha ao remover ${fail} atribuições.`);
@@ -2904,6 +3162,20 @@ export default function Admin() {
                     <span className="hidden sm:inline">Online</span>
                     {userFilterOnline && <X className="w-3 h-3 ml-0 sm:ml-1" />}
                   </Button>
+                  {activeTab.startsWith('user_type_') && (
+                    <Button
+                      className="h-9 sm:h-10 px-2 sm:px-4 gap-1 sm:gap-2 shadow-lg shadow-primary/20 bg-primary hover:bg-primary/90"
+                      onClick={() => {
+                        setSelectedUserIdsForType([]);
+                        setAddUsersSearch('');
+                        setAddUsersCodeFilter('');
+                        setAddUsersTypeFilter('all');
+                        setIsAddUsersModalOpen(true);
+                      }}
+                    >
+                      <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Adicionar Usuários</span>
+                    </Button>
+                  )}
                   <Button className="h-9 sm:h-10 px-2 sm:px-4 gap-1 sm:gap-2 shadow-lg shadow-primary/20" onClick={() => {
                     setEditingUserId(null);
                     setNewUser({
@@ -4941,6 +5213,82 @@ export default function Admin() {
             </DialogContent>
           </Dialog>
 
+          {/* Modal de Criação/Edição de Tipo de Usuário */}
+          <Dialog open={isUserTypeModalOpen} onOpenChange={setIsUserTypeModalOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>{editingUserTypeId ? 'Editar Tipo de Usuário' : 'Novo Tipo de Usuário'}</DialogTitle>
+                <DialogDescription>
+                  {editingUserTypeId ? 'Edite as configurações do tipo de usuário.' : 'Crie um novo tipo de usuário para o sistema.'}
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSaveUserType} className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Nome</Label>
+                  <Input 
+                    value={userTypeForm.name} 
+                    onChange={e => setUserTypeForm({ ...userTypeForm, name: e.target.value })}
+                    placeholder="Ex: Gerente, Supervisor, etc."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Cor</Label>
+                  <div className="flex gap-2">
+                    <Input 
+                      type="color" 
+                      value={userTypeForm.color} 
+                      onChange={e => setUserTypeForm({ ...userTypeForm, color: e.target.value })}
+                      className="w-16 h-10 p-1"
+                    />
+                    <Input 
+                      value={userTypeForm.color} 
+                      onChange={e => setUserTypeForm({ ...userTypeForm, color: e.target.value })}
+                      className="flex-1"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Ícone</Label>
+                  <div className="grid grid-cols-8 gap-2 max-h-[300px] overflow-y-auto custom-scrollbar p-2 border border-border/40 rounded-lg bg-secondary/20">
+                    {Object.entries(ICON_LIST).map(([iconName, IconComponent]) => (
+                      <button
+                        key={iconName}
+                        type="button"
+                        onClick={() => setUserTypeForm({ ...userTypeForm, icon: iconName })}
+                        className={`p-2 rounded-lg flex items-center justify-center transition-all hover:bg-primary/20 ${
+                          userTypeForm.icon === iconName ? 'bg-primary text-primary-foreground ring-2 ring-primary' : 'bg-background hover:scale-110'
+                        }`}
+                        title={iconName}
+                      >
+                        <IconComponent className="w-5 h-5" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch 
+                    checked={userTypeForm.showInMenu}
+                    onCheckedChange={(checked) => setUserTypeForm({ ...userTypeForm, showInMenu: checked })}
+                  />
+                  <Label>Mostrar no menu lateral</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch 
+                    checked={userTypeForm.active}
+                    onCheckedChange={(checked) => setUserTypeForm({ ...userTypeForm, active: checked })}
+                  />
+                  <Label>Ativo</Label>
+                </div>
+                <div className="flex gap-2 pt-4">
+                  <Button type="button" variant="outline" onClick={() => setIsUserTypeModalOpen(false)} className="flex-1">Cancelar</Button>
+                  <Button type="submit" className="flex-1">
+                    {editingUserTypeId ? 'Atualizar' : 'Criar'}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+
           {/* Modal de Detalhes do Território (Mobile) */}
           <Dialog open={isTerritoryDetailOpen} onOpenChange={setIsTerritoryDetailOpen}>
             <DialogContent className="max-w-md p-0 overflow-hidden">
@@ -5265,6 +5613,134 @@ export default function Admin() {
                   </div>
                 </div>
               )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Modal para Adicionar Usuários ao Tipo de Usuário */}
+          <Dialog open={isAddUsersModalOpen} onOpenChange={setIsAddUsersModalOpen}>
+            <DialogContent className="max-w-4xl max-h-[80vh]">
+              <DialogHeader>
+                <DialogTitle>Adicionar Usuários ao Tipo</DialogTitle>
+                <DialogDescription>
+                  Selecione os usuários que deseja adicionar a este tipo de usuário.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por nome..."
+                      className="pl-10"
+                      value={addUsersSearch}
+                      onChange={(e) => setAddUsersSearch(e.target.value)}
+                    />
+                  </div>
+                  <div className="relative">
+                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Filtrar por código..."
+                      className="pl-10"
+                      value={addUsersCodeFilter}
+                      onChange={(e) => setAddUsersCodeFilter(e.target.value)}
+                    />
+                  </div>
+                  <Select value={addUsersTypeFilter} onValueChange={setAddUsersTypeFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filtrar por tipo..." />
+                    </SelectTrigger>
+                    <SelectContent className="z-[100]">
+                      <SelectItem value="all">Todos os tipos</SelectItem>
+                      {userTypes.length > 0 ? (
+                        userTypes.map(type => (
+                          <SelectItem key={type.id} value={String(type.id)}>{type.name}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="all" disabled>Nenhum tipo criado</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="max-h-[400px] overflow-y-auto border rounded-lg">
+                  <table className="w-full">
+                    <thead className="bg-muted/50 sticky top-0">
+                      <tr>
+                        <th className="p-3 text-left font-bold text-xs uppercase">Selecionar</th>
+                        <th className="p-3 text-left font-bold text-xs uppercase">Nome</th>
+                        <th className="p-3 text-left font-bold text-xs uppercase">Código</th>
+                        <th className="p-3 text-left font-bold text-xs uppercase">Tipo Atual</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users
+                        .filter(u => {
+                          const name = (u.full_name || u.fullName || u.username).toLowerCase();
+                          const code = (u.code || '').toLowerCase();
+                          const search = addUsersSearch.toLowerCase();
+                          const codeFilter = addUsersCodeFilter.toLowerCase();
+                          const typeFilter = addUsersTypeFilter;
+
+                          const matchesName = name.includes(search);
+                          const matchesCode = code.includes(codeFilter);
+                          const matchesType = typeFilter === 'all' || Number(u.userTypeId) === Number(typeFilter);
+
+                          return matchesName && matchesCode && matchesType;
+                        })
+                        .map(u => {
+                          const userType = userTypes.find(t => t.id === Number(u.userTypeId));
+                          return (
+                            <tr key={u.id} className="border-b hover:bg-muted/30">
+                              <td className="p-3">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedUserIdsForType.includes(u.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedUserIdsForType([...selectedUserIdsForType, u.id]);
+                                    } else {
+                                      setSelectedUserIdsForType(selectedUserIdsForType.filter(id => id !== u.id));
+                                    }
+                                  }}
+                                  className="w-4 h-4 rounded"
+                                />
+                              </td>
+                              <td className="p-3 font-medium">{u.full_name || u.fullName || u.username}</td>
+                              <td className="p-3 text-muted-foreground">{u.code || 'S/ COD'}</td>
+                              <td className="p-3">
+                                {userType ? (
+                                  <span className="px-2 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: `${userType.color}20`, color: userType.color }}>
+                                    {userType.name}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs">Sem tipo</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex justify-between items-center pt-4 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    {selectedUserIdsForType.length} usuário{selectedUserIdsForType.length !== 1 ? 's' : ''} selecionado{selectedUserIdsForType.length !== 1 ? 's' : ''}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setIsAddUsersModalOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const typeId = parseInt(activeTab.replace('user_type_', ''));
+                        handleAddUsersToType(typeId);
+                      }}
+                      disabled={selectedUserIdsForType.length === 0}
+                    >
+                      Adicionar {selectedUserIdsForType.length} Usuário{selectedUserIdsForType.length !== 1 ? 's' : ''}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
 
