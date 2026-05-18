@@ -5645,21 +5645,20 @@ export default function Admin() {
                       onChange={(e) => setAddUsersCodeFilter(e.target.value)}
                     />
                   </div>
-                  <Select value={addUsersTypeFilter} onValueChange={setAddUsersTypeFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Filtrar por tipo..." />
-                    </SelectTrigger>
-                    <SelectContent className="z-[100]">
-                      <SelectItem value="all">Todos os tipos</SelectItem>
-                      {userTypes.length > 0 ? (
-                        userTypes.map(type => (
-                          <SelectItem key={type.id} value={String(type.id)}>{type.name}</SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="all" disabled>Nenhum tipo criado</SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
+                  <select
+                    value={addUsersTypeFilter}
+                    onChange={(e) => setAddUsersTypeFilter(e.target.value)}
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="all">Todos os tipos</option>
+                    {userTypes.length > 0 ? (
+                      userTypes.map(type => (
+                        <option key={type.id} value={String(type.id)}>{type.name}</option>
+                      ))
+                    ) : (
+                      <option value="all" disabled>Nenhum tipo criado</option>
+                    )}
+                  </select>
                 </div>
                 <div className="max-h-[400px] overflow-y-auto border rounded-lg">
                   <table className="w-full">
