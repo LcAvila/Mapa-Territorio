@@ -461,14 +461,14 @@ export default function BrazilMap({
 
   const [isMapMoving, setIsMapMoving] = useState(false);
   const [selectedNeighborhood, setSelectedNeighborhood] = useState<string | null>(null);
-  const [mapTheme, setMapTheme] = useState<'dark' | 'dark-labels' | 'light' | 'satellite' | 'osm'>('dark-labels');
+  const [mapTheme, setMapTheme] = useState<'dark' | 'dark-labels' | 'light' | 'satellite' | 'osm'>('light');
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [clientContextMenu, setClientContextMenu] = useState<{ client: Cliente, x: number, y: number } | null>(null);
 
   const MAP_THEMES = {
     'dark': { label: 'Escuro', url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', opacity: 0.4 },
     'dark-labels': { label: 'Escuro + Labels', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', opacity: 0.5 },
-    'light': { label: 'Claro', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', opacity: 0.9 },
+    'light': { label: 'Claro', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', opacity: 1.0 },
     'satellite': { label: 'Satélite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opacity: 1.0 },
     'osm': { label: 'OpenStreetMap', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', opacity: 1.0 },
   } as const;
@@ -630,10 +630,8 @@ export default function BrazilMap({
 
     if (userIds.length === 0) return blank;
     
-    // Only show user colors if the "Usuarios" filter is active or a specific user filter is set
-    if (!showUsuarios && !filtroUsuario) return blank;
-
-    // If showUsuarios is active, always show the color of the first user
+    // Always show user colors when there are users assigned
+    // The filter controls which users to show, not whether to show colors at all
     const matchedUserId = (showUsuarios || filtroUsuario) 
       ? (filtroUsuario ? userIds.find(id => filtroUsuario.split(',').map(f => Number(f.trim())).includes(id)) : userIds[0])
       : userIds[0];
@@ -988,7 +986,6 @@ export default function BrazilMap({
           url={MAP_THEMES[mapTheme].url}
           attribution=""
           opacity={MAP_THEMES[mapTheme].opacity}
-          className={isMapMoving ? "map-motion-blur" : ""}
         />
 
         {/* Search Result Polygon Highlight */}

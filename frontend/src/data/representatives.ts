@@ -35,6 +35,7 @@ export interface SystemUser {
   bairro_end?: string;
   cidade?: string;
   estado_end?: string;
+  assigned_state?: string;
   area_atuacao?: string;
   base_logistica?: string;
   userTypeId?: number;

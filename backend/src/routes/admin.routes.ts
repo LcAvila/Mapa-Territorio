@@ -719,13 +719,8 @@ router.get('/territories', requirePermission('territories', 'view'), async (req,
   const user = (req as any).user;
   const where: any = {};
   
-  // Restrição por hierarquia:
-  // - Admin: Vê tudo.
-  // - Supervisor/User: Vê apenas os seus próprios territórios e os de seus subordinados.
-  if (user && user.role !== 'admin') {
-    const subordinateIds = user.subordinateIds || [];
-    where.userId = { in: [user.id, ...subordinateIds] };
-  }
+  // Todos os usuários podem ver todos os territórios para visualizar as cores no mapa
+  // A restrição de edição ainda se aplica no endpoint POST/DELETE
 
   try {
     const fetchPromise = prisma.territory.findMany({ where, orderBy: [{ uf: 'asc' }, { municipio: 'asc' }] });
@@ -739,11 +734,6 @@ router.get('/territories', requirePermission('territories', 'view'), async (req,
         .select('*')
         .order('uf', { ascending: true })
         .order('municipio', { ascending: true });
-    
-    if (user && user.role !== 'admin') {
-        const subordinateIds = user.subordinateIds || [];
-        query = query.in('userId', [user.id, ...subordinateIds]);
-    }
 
     const { data, error: httpError } = await query;
     if (httpError) return res.status(500).json({ message: 'Erro ao listar territórios' });
@@ -757,7 +747,7 @@ router.post('/territories', authenticate, requirePermission('territories', 'edit
   if (!uf || !userId) return res.status(400).json({ message: 'UF e Usuário são obrigatórios' });
 
   try {
-    // 1. Verificar se já existe a mesma atribuição
+    // 1. Verificar se o MESMO usuário já tem este território (para evitar duplicatas)
     const existing = await prisma.territory.findFirst({
       where: {
         municipio: municipio ? { equals: municipio, mode: 'insensitive' } : null,
@@ -771,7 +761,7 @@ router.post('/territories', authenticate, requirePermission('territories', 'edit
       return res.status(409).json({ message: 'Esta atribuição já existe para este usuário.' });
     }
 
-    // 2. Criar o território
+    // 2. Criar o território (permite múltiplos usuários no mesmo município)
     const territory = await prisma.territory.create({
       data: { 
         municipio: municipio || null, 
@@ -878,7 +868,10 @@ router.post('/territories/claim', authenticate, async (req: any, res) => {
 
   let user: any = null;
   try {
-    const fetchPromise = prisma.user.findUnique({ where: { id: req.user.id } });
+    const fetchPromise = prisma.user.findUnique({ 
+      where: { id: req.user.id },
+      include: { permissions: { include: { module: true } } }
+    });
     const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
     user = await Promise.race([fetchPromise, timeoutPromise]);
   } catch (e) {
@@ -893,9 +886,15 @@ router.post('/territories/claim', authenticate, async (req: any, res) => {
     return res.status(403).json({ message: `Você só pode reivindicar municípios no estado ${user.assigned_state}` });
   }
 
+  // 2. Verificar permissão de edição no módulo territories
+  const canEditTerritories = user.role === 'admin' || 
+    user.permissions?.some((p: any) => 
+      (p.moduleId === 'territories' || p.module?.id === 'territories') && p.canEdit
+    );
+
   try {
-    // 2. Verificar se o usuário já reivindicou este município neste modo
-    let alreadyClaimed: any = null;
+    // 3. Verificar se o usuário já reivindicou este município
+    let alreadyClaimedByUser: any = null;
     try {
       const findPromise = prisma.territory.findFirst({
         where: {
@@ -906,7 +905,7 @@ router.post('/territories/claim', authenticate, async (req: any, res) => {
         }
       });
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
-      alreadyClaimed = await Promise.race([findPromise, timeoutPromise]);
+      alreadyClaimedByUser = await Promise.race([findPromise, timeoutPromise]);
     } catch (e) {
       console.warn('[CLAIM] Prisma failed to find territory, checking via HTTP');
       const { data } = await supabaseAdmin
@@ -917,14 +916,44 @@ router.post('/territories/claim', authenticate, async (req: any, res) => {
         .eq('userId', user.id)
         .eq('modo', targetModo)
         .single();
-      alreadyClaimed = data;
+      alreadyClaimedByUser = data;
     }
 
-    if (alreadyClaimed) {
+    if (alreadyClaimedByUser) {
       return res.status(409).json({ message: 'Você já reivindicou este município.' });
     }
 
-    // 3. Criar o território (sempre cria um novo registro para permitir múltiplos usuários)
+    // 4. Se o usuário NÃO tem permissão de edição, verificar se o município está vago
+    if (!canEditTerritories) {
+      let existingClaim: any = null;
+      try {
+        const findPromise = prisma.territory.findFirst({
+          where: {
+            municipio: { equals: municipio, mode: 'insensitive' },
+            uf: { equals: uf, mode: 'insensitive' },
+            modo: targetModo
+          }
+        });
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Prisma Timeout')), 5000));
+        existingClaim = await Promise.race([findPromise, timeoutPromise]);
+      } catch (e) {
+        console.warn('[CLAIM] Prisma failed to find territory, checking via HTTP');
+        const { data } = await supabaseAdmin
+          .from('territories')
+          .select('*')
+          .ilike('municipio', municipio)
+          .ilike('uf', uf)
+          .eq('modo', targetModo)
+          .single();
+        existingClaim = data;
+      }
+
+      if (existingClaim) {
+        return res.status(409).json({ message: 'Este município já foi reivindicado por outro usuário. Você precisa de permissão de edição para atribuir múltiplos usuários.' });
+      }
+    }
+
+    // 5. Criar o território
     try {
       await prisma.territory.create({
         data: { municipio, uf, userId: user.id, modo: targetModo }
