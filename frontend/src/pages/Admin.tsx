@@ -230,6 +230,7 @@ import { PlanningDashboard } from '../components/admin/rotas/PlanningDashboard';
 import { RotasProvider } from '../contexts/RotasContext';
 import MiniMapBrasil from '../components/admin/MiniMapBrasil';
 import UserProfileManager from '../components/admin/users/UserProfileManager';
+import ProfileImageCropper from '../components/admin/users/ProfileImageCropper';
 import SpaceButton from '../components/admin/SpaceButton';
 import { API_BASE_URL } from '@/lib/api-base';
 import {
@@ -1255,7 +1256,7 @@ export default function Admin() {
         { id: 'densidade' as const, label: 'Densidade', icon: Activity },
       ]
     },
-    { id: 'territories' as const, label: 'Territórios', icon: MapPin, count: computedTerritories.length, restrict: ['admin', 'supervisor'] },
+    { id: 'territories' as const, label: 'Territórios', icon: MapPin, restrict: ['admin', 'supervisor'] },
     { id: 'notifications' as const, label: 'Enviar Alerta', icon: Bell, restrict: ['admin'] },
     {
       id: 'settings' as const, label: 'Configurações', icon: Settings, restrict: ['admin'], subItems: [
@@ -1364,7 +1365,7 @@ export default function Admin() {
     fullName: string; email: string; password: string; confirmPassword: string;
     role: 'user' | 'supervisor' | 'admin';
     code: string; documentType: 'cpf' | 'cnpj';
-    document: string; companyName: string; birthDate: string; telefone: string; photo: string;
+    document: string; companyName: string; birthDate: string; telefone: string; photo: string; photoBorderColor: string;
     cargo: string; groupId: string; tipo: 'normal' | 'representante' | 'promotor' | 'supervisor'; colorIndex: number;
     cep: string; logradouro: string; numero: string; complemento: string; bairro_end: string; cidade: string; estado_end: string; assigned_state?: string; area_atuacao: string; base_logistica: string;
     userTypeId: string;
@@ -1375,7 +1376,7 @@ export default function Admin() {
     fullName: '', email: '', password: '', confirmPassword: '',
     role: 'user',
     code: '', documentType: 'cpf',
-    document: '', companyName: '', birthDate: '', telefone: '', photo: '',
+    document: '', companyName: '', birthDate: '', telefone: '', photo: '', photoBorderColor: '#FFD700',
     cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
     cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', assigned_state: '', area_atuacao: '', base_logistica: '',
     userTypeId: '',
@@ -1572,14 +1573,14 @@ export default function Admin() {
   const [editUserForm, setEditUserForm] = useState<{
     username: string; fullName: string; document: string; password: string; confirmPassword: string;
     role: 'user' | 'supervisor' | 'admin';
-    code: string; photo: string; telefone: string; birthDate: string;
+    code: string; photo: string; photoBorderColor: string; telefone: string; birthDate: string;
     cargo: string; companyName: string; groupId: string;
     userTypeId: string;
     managedUserIds: number[];
   }>({
     username: '', fullName: '', document: '', password: '', confirmPassword: '',
     role: 'user',
-    code: '', photo: '', telefone: '', birthDate: '',
+    code: '', photo: '', photoBorderColor: '#FFD700', telefone: '', birthDate: '',
     cargo: '', companyName: '', groupId: '',
     userTypeId: '',
     managedUserIds: []
@@ -1595,6 +1596,11 @@ export default function Admin() {
   const [addUsersCodeFilter, setAddUsersCodeFilter] = useState('');
   const [addUsersTypeFilter, setAddUsersTypeFilter] = useState('all');
   const [selectedUserIdsForType, setSelectedUserIdsForType] = useState<number[]>([]);
+
+  // Photo Cropper State
+  const [showCropper, setShowCropper] = useState(false);
+  const [tempImage, setTempImage] = useState('');
+  const [cropperForEdit, setCropperForEdit] = useState(false);
 
   const filteredUsers = useMemo(() => {
     const filtered = users.filter(u => {
@@ -1659,11 +1665,21 @@ export default function Admin() {
     if (file.size > 2 * 1024 * 1024) { toast.error('Foto deve ter no máximo 2MB'); return; }
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const b64 = ev.target?.result as string;
-      if (isEdit) setEditUserForm(f => ({ ...f, photo: b64 }));
-      else setNewUser(f => ({ ...f, photo: b64 }));
+      setTempImage(ev.target?.result as string);
+      setCropperForEdit(isEdit);
+      setShowCropper(true);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleCropComplete = (croppedImage: string, borderColor: string) => {
+    if (cropperForEdit) {
+      setEditUserForm(f => ({ ...f, photo: croppedImage, photoBorderColor: borderColor }));
+    } else {
+      setNewUser(f => ({ ...f, photo: croppedImage, photoBorderColor: borderColor }));
+    }
+    setShowCropper(false);
+    setTempImage('');
   };
 
   // ── Territories form ──────────────────────────────────────────────────────
@@ -2163,6 +2179,7 @@ export default function Admin() {
       company_name: newUser.companyName,
       groupId: newUser.groupId ? Number(newUser.groupId) : null,
       photo: newUser.photo || null,
+      photoBorderColor: newUser.photoBorderColor || '#FFD700',
       cep: newUser.cep,
       logradouro: newUser.logradouro,
       numero: newUser.numero,
@@ -2187,7 +2204,7 @@ export default function Admin() {
         setNewUser({
           fullName: '', email: '', password: '', confirmPassword: '',
           role: 'user', code: '', documentType: 'cpf',
-          document: '', companyName: '', birthDate: '', telefone: '', photo: '',
+          document: '', companyName: '', birthDate: '', telefone: '', photo: '', photoBorderColor: '#FFD700',
           cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
           cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', assigned_state: '', area_atuacao: '', base_logistica: '',
           userTypeId: '',
@@ -3181,7 +3198,7 @@ export default function Admin() {
                     setNewUser({
                       fullName: '', email: '', password: '', confirmPassword: '',
                       role: 'user', code: '', documentType: 'cpf',
-                      document: '', companyName: '', birthDate: '', telefone: '', photo: '',
+                      document: '', companyName: '', birthDate: '', telefone: '', photo: '', photoBorderColor: '#FFD700',
                       cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
                       cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', assigned_state: '', area_atuacao: '', base_logistica: '',
                       userTypeId: '',
@@ -3266,6 +3283,7 @@ export default function Admin() {
                                 role: u.role as 'user' | 'supervisor' | 'admin',
                                 code: u.code || '',
                                 photo: u.photo || '',
+                                photoBorderColor: (u as any).photoBorderColor || '#FFD700',
                                 telefone: u.telefone || '',
                                 birthDate: u.birth_date || u.birthDate || '',
                                 cargo: u.cargo || '',
@@ -4874,7 +4892,7 @@ export default function Admin() {
                           
                           {/* Foto de Perfil */}
                           <div className="flex flex-col items-center gap-2 w-full">
-                            <label className="cursor-pointer w-24 h-24 rounded-full bg-secondary border-2 border-dashed border-border/60 flex items-center justify-center overflow-hidden hover:border-primary/50 transition-all select-none group relative">
+                            <label className="cursor-pointer w-24 h-24 rounded-full bg-secondary border-2 border-dashed border-border/60 flex items-center justify-center overflow-hidden hover:border-primary/50 transition-all select-none group relative" style={{ borderColor: newUser.photo ? newUser.photoBorderColor : undefined, borderStyle: newUser.photo ? 'solid' : 'dashed' }}>
                               {newUser.photo ? (
                                 <>
                                   <img src={newUser.photo} alt="Avatar" className="w-full h-full object-cover" />
@@ -5473,6 +5491,7 @@ export default function Admin() {
                                           role: u.role as 'user' | 'supervisor' | 'admin',
                                           code: u.code || '',
                                           photo: u.photo || '',
+                                          photoBorderColor: (u as any).photoBorderColor || '#FFD700',
                                           telefone: u.telefone || '',
                                           birthDate: u.birth_date || u.birthDate || '',
                                           cargo: u.cargo || '',
@@ -5742,6 +5761,18 @@ export default function Admin() {
               </div>
             </DialogContent>
           </Dialog>
+
+          {showCropper && tempImage && (
+            <ProfileImageCropper
+              imageSrc={tempImage}
+              onCropComplete={handleCropComplete}
+              onCancel={() => {
+                setShowCropper(false);
+                setTempImage('');
+              }}
+              initialBorderColor={cropperForEdit ? editUserForm.photoBorderColor : newUser.photoBorderColor}
+            />
+          )}
 
         </main>
       </div>

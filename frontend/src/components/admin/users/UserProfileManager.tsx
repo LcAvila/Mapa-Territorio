@@ -17,6 +17,7 @@ import type { SystemUser } from '@/data/representatives';
 import { REP_COLOR_PALETTE } from '@/data/representatives';
 import { useApiClientes } from '@/hooks/use-api-data';
 import { UF_DATA } from '@/data/uf-codes';
+import ProfileImageCropper from './ProfileImageCropper';
 
 interface Module {
   id: string;
@@ -61,6 +62,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
     email: user.email || '',
     role: user.role || 'user',
     photo: user.photo || '',
+    photoBorderColor: (user as any).photoBorderColor || '#FFD700',
     colorIndex: user.colorIndex ?? 0,
     comissao: user.comissao ?? 0,
     isVago: user.isVago ?? 0,
@@ -84,6 +86,10 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
     default_screen: user.default_screen || 'mapa',
     managedUserIds: (user as any).managedUsers?.map((u: any) => u.id) || []
   });
+
+  // Photo Cropper State
+  const [showCropper, setShowCropper] = useState(false);
+  const [tempImage, setTempImage] = useState('');
 
   const [permissions, setPermissions] = useState<UserPermission[]>([]);
   const [availableModules, setAvailableModules] = useState<Module[]>([]);
@@ -141,6 +147,7 @@ function maskCEP(val: string) {
       email: user.email || '',
       role: user.role || 'user',
       photo: user.photo || '',
+      photoBorderColor: (user as any).photoBorderColor || '#FFD700',
       colorIndex: user.colorIndex ?? 0,
       comissao: user.comissao ?? 0,
       isVago: user.isVago ?? 0,
@@ -164,12 +171,12 @@ function maskCEP(val: string) {
       default_screen: user.default_screen || 'mapa',
       managedUserIds: (user as any).managedUsers?.map((u: any) => u.id) || []
     });
-    
+
     setConfig({
       default_workspace: user.default_workspace || 'dashboard',
       inactivity_limit: user.inactivity_limit || 30
     });
-    
+
     setNotifPrefs({
       email: user.notif_email ?? true,
       sms: user.notif_sms ?? false,
@@ -304,6 +311,7 @@ function maskCEP(val: string) {
           email: formData.email,
           role: finalRole,
           photo: formData.photo,
+          photoBorderColor: formData.photoBorderColor,
           colorIndex: formData.colorIndex,
           comissao: formData.comissao,
           isVago: formData.isVago,
@@ -443,15 +451,24 @@ function maskCEP(val: string) {
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) { toast.error('A foto deve ter no máximo 2MB'); return; }
     const reader = new FileReader();
-    reader.onload = (ev) => setFormData(f => ({ ...f, photo: ev.target?.result as string }));
+    reader.onload = (ev) => {
+      setTempImage(ev.target?.result as string);
+      setShowCropper(true);
+    };
     reader.readAsDataURL(file);
+  };
+
+  const handleCropComplete = (croppedImage: string, borderColor: string) => {
+    setFormData(f => ({ ...f, photo: croppedImage, photoBorderColor: borderColor }));
+    setShowCropper(false);
+    setTempImage('');
   };
 
   return (
     <Container className="animate-in fade-in zoom-in-95 duration-300">
       <Sidebar>
         <SidebarHeader>
-          <UserAvatarHome>
+          <UserAvatarHome style={{ borderColor: formData.photoBorderColor }}>
              {formData.photo ? <img src={formData.photo} alt="Avatar" /> : <User size={40} className="opacity-20" />}
              <div className="edit-overlay"><Camera size={14} /></div>
              <input type="file" accept="image/*" onChange={handlePhotoUpload} />
@@ -1188,6 +1205,18 @@ function maskCEP(val: string) {
           </ContentFooter>
         )}
       </MainContent>
+
+      {showCropper && tempImage && (
+        <ProfileImageCropper
+          imageSrc={tempImage}
+          onCropComplete={handleCropComplete}
+          onCancel={() => {
+            setShowCropper(false);
+            setTempImage('');
+          }}
+          initialBorderColor={formData.photoBorderColor}
+        />
+      )}
     </Container>
   );
 };
