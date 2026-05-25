@@ -167,6 +167,26 @@ export class VisitRouteService {
       data: items
     });
 
+    // 4. Notificar o representante
+    try {
+      const supervisor = await prisma.user.findUnique({
+        where: { id: data.supervisorId },
+        select: { full_name: true }
+      });
+
+      await prisma.notification.create({
+        data: {
+          title: 'Novo Roteiro Agendado',
+          message: `Você tem um novo roteiro com ${clients.length} paradas agendado para o dia ${data.date.toLocaleDateString('pt-BR')}.`,
+          targetAll: false,
+          targetUserIds: [data.supervisorId],
+          senderName: supervisor?.full_name || 'Sistema'
+        }
+      });
+    } catch (err) {
+      console.error('[NOTIFY] Erro ao criar notificação:', err);
+    }
+
     return sequence;
   }
 
@@ -180,6 +200,14 @@ export class VisitRouteService {
         items: {
           include: { 
             clientSnapshot: true,
+            client: {
+              select: {
+                nome_cliente: true,
+                endereco_completo: true,
+                cidade: true,
+                uf: true
+              }
+            },
             checkins: {
               orderBy: { checkin_at: 'desc' },
               take: 1
@@ -194,10 +222,11 @@ export class VisitRouteService {
   /**
    * Retorna um resumo dos roteiros em execução para supervisão.
    */
-  async getSummary() {
+  async getSummary(userId?: number) {
     const sequences = await prisma.routeSequence.findMany({
       where: {
-        optimization_status: { in: ['completed', 'em_execucao'] }
+        optimization_status: { in: ['completed', 'em_execucao', 'pending'] },
+        ...(userId ? { supervisor_user_id: userId } : {})
       },
       include: {
         supervisor: { select: { full_name: true } },
@@ -210,7 +239,7 @@ export class VisitRouteService {
       id: s.id,
       name: `Roteiro #${s.id}`,
       representative: s.supervisor?.full_name || 'Sem Supervisor',
-      date: s.created_at.toISOString().split('T')[0],
+      date: (s.route_date || s.created_at).toISOString().split('T')[0],
       total_stops: s.total_visits || 0,
       completed_stops: s.items.filter(i => i.status === 'visitada').length,
       status: s.optimization_status,
@@ -238,15 +267,19 @@ export class VisitRouteService {
   /**
    * Sugestão "Inteligente" de visitas baseada no histórico.
    * Procura clientes que não são visitados há mais de 30 dias ou nunca foram visitados.
+   * Inclui clientes de subordinados na hierarquia.
    */
   async getSuggestions(userId: number) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // Buscar clientes do usuário que não tiveram visitas recentes concluídas
+    // Obter todos os IDs de usuários na hierarquia (recursivo)
+    const allUserIds = await this.getAllSubordinateIds(userId);
+
+    // Buscar clientes dos usuários da hierarquia que não tiveram visitas recentes concluídas
     const suggestions = await prisma.cliente.findMany({
       where: {
-        userId: userId,
+        userId: { in: allUserIds },
         status_ativo: true,
         OR: [
           {
@@ -263,8 +296,8 @@ export class VisitRouteService {
       },
       take: 15,
       orderBy: [
-        { prioridade: 'desc' }, // Se houver campo de prioridade
-        { data_cadastro: 'asc' } // Mais antigos primeiro
+        { prioridade: 'desc' },
+        { data_cadastro: 'asc' }
       ],
       select: {
         id_cliente: true,
@@ -286,5 +319,110 @@ export class VisitRouteService {
       last_visit: s.historicos[0]?.data_visita || null,
       reason: s.historicos.length === 0 ? 'Nunca visitado' : 'Sem visita há +30 dias'
     }));
+  }
+
+  /**
+   * Helper privado para obter todos os IDs de subordinados de forma recursiva.
+   */
+  private async getAllSubordinateIds(userId: number): Promise<number[]> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { 
+        id: true, 
+        managedUsers: { select: { id: true } } 
+      }
+    });
+
+    if (!user) return [userId];
+    
+    let ids = [userId];
+    if (user.managedUsers && user.managedUsers.length > 0) {
+      for (const sub of user.managedUsers) {
+        const subIds = await this.getAllSubordinateIds(sub.id);
+        ids = [...ids, ...subIds];
+      }
+    }
+    return Array.from(new Set(ids));
+  }
+
+  /**
+   * Retorna os pontos da rota em formato GeoJSON para visualização no mapa.
+   */
+  async getRouteGeoJSON(sequenceId: number) {
+    const sequence = await prisma.routeSequence.findUnique({
+      where: { id: sequenceId },
+      include: {
+        items: {
+          orderBy: { sequence_number: 'asc' }
+        }
+      }
+    });
+
+    if (!sequence) throw new Error('Roteiro não encontrado');
+
+    const features: any[] = [];
+
+    // Adiciona ponto de início se houver
+    if (sequence.start_lat && sequence.start_lng) {
+      features.push({
+        type: 'Feature',
+        properties: {
+          type: 'start',
+          label: sequence.start_label || 'Ponto de Partida'
+        },
+        geometry: {
+          type: 'Point',
+          coordinates: [sequence.start_lng, sequence.start_lat]
+        }
+      });
+    }
+
+    // Adiciona os clientes como pontos
+    sequence.items.forEach(item => {
+      if (item.stop_lat && item.stop_lng) {
+        features.push({
+          type: 'Feature',
+          properties: {
+            type: 'stop',
+            sequence: item.sequence_number,
+            status: item.status,
+            city: item.city
+          },
+          geometry: {
+            type: 'Point',
+            coordinates: [item.stop_lng, item.stop_lat]
+          }
+        });
+      }
+    });
+
+    // Cria a linha da rota (conecta os pontos)
+    const lineCoordinates: number[][] = [];
+    if (sequence.start_lat && sequence.start_lng) {
+      lineCoordinates.push([sequence.start_lng, sequence.start_lat]);
+    }
+    sequence.items.forEach(item => {
+      if (item.stop_lat && item.stop_lng) {
+        lineCoordinates.push([item.stop_lng, item.stop_lat]);
+      }
+    });
+
+    if (lineCoordinates.length > 1) {
+      features.push({
+        type: 'Feature',
+        properties: {
+          type: 'route_line'
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: lineCoordinates
+        }
+      });
+    }
+
+    return {
+      type: 'FeatureCollection',
+      features
+    };
   }
 }

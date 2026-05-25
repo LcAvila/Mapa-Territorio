@@ -5,6 +5,18 @@ import { logUserActivity } from '../utils/logger';
 import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router();
+
+// Public route for system branding/settings
+router.get('/settings', async (req, res) => {
+  try {
+    const configs = await prisma.configSistema.findMany();
+    const configMap = configs.reduce((acc, c) => ({ ...acc, [c.parametro]: c.valor }), {});
+    res.json(configMap);
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao buscar configurações do sistema' });
+  }
+});
+
 router.use(authenticate);
 
 // ── USER TYPES ──────────────────────────────────────────────────────────────
@@ -1210,16 +1222,6 @@ router.put('/users/:id/notif-prefs', requirePermission('users', 'edit'), async (
 });
 
 // ── SYSTEM SETTINGS ─────────────────────────────────────────────────────────
-
-router.get('/settings', async (req, res) => {
-  try {
-    const configs = await prisma.configSistema.findMany();
-    const configMap = configs.reduce((acc, c) => ({ ...acc, [c.parametro]: c.valor }), {});
-    res.json(configMap);
-  } catch (error) {
-    res.status(500).json({ message: 'Erro ao buscar configurações do sistema' });
-  }
-});
 
 router.put('/settings', requireAdmin, async (req: any, res) => {
   const settings = req.body; // { brand_name?: string, brand_logo?: string }

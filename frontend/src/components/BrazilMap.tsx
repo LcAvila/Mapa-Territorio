@@ -1,4 +1,4 @@
-import { RotateCcw, Loader, Layers } from "lucide-react";
+import { RotateCcw, Loader, Layers, Loader2 } from "lucide-react";
 import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import { useEffect, useCallback, useRef, useState, useMemo } from "react";
 import {
@@ -295,12 +295,20 @@ function HeatmapLayer({ points }: { points: [number, number, number][] }) {
 
 
 
-// ─── World Mask component to highlight Brazil ────────────────────────────────
-function WorldMask({ brazilGeo, theme }: { brazilGeo: GeoJSONFeatureCollection | null; theme: string }) {
+// ─── World Mask component to highlight Brazil or a specific locality ────────
+function WorldMask({ 
+  brazilGeo, 
+  focusGeo,
+  theme 
+}: { 
+  brazilGeo: GeoJSONFeatureCollection | null; 
+  focusGeo?: GeoJSONFeature | GeoJSONFeatureCollection | null;
+  theme: string 
+}) {
   const maskGeo = useMemo(() => {
     if (!brazilGeo) return null;
     
-    // Create a world-covering polygon with holes for Brazil states
+    // Create a world-covering polygon
     const worldPolygon = [
       [-180, -90],
       [180, -90],
@@ -309,14 +317,24 @@ function WorldMask({ brazilGeo, theme }: { brazilGeo: GeoJSONFeatureCollection |
       [-180, -90]
     ];
 
-    const holes = brazilGeo.features.map(f => {
-      if (f.geometry.type === 'Polygon') {
-        return f.geometry.coordinates;
-      } else if (f.geometry.type === 'MultiPolygon') {
-        return f.geometry.coordinates.flat(1);
-      }
-      return [];
-    }).filter(h => h.length > 0);
+    // If we have a focusGeo (municipality), we only want a hole for THAT.
+    // Otherwise, we want holes for all of Brazil.
+    let holes: any[] = [];
+    
+    if (focusGeo) {
+      const features = (focusGeo as any).features || [focusGeo];
+      holes = features.map((f: any) => {
+        if (f.geometry.type === 'Polygon') return f.geometry.coordinates;
+        if (f.geometry.type === 'MultiPolygon') return f.geometry.coordinates.flat(1);
+        return [];
+      }).filter((h: any) => h.length > 0);
+    } else {
+      holes = brazilGeo.features.map(f => {
+        if (f.geometry.type === 'Polygon') return f.geometry.coordinates;
+        if (f.geometry.type === 'MultiPolygon') return f.geometry.coordinates.flat(1);
+        return [];
+      }).filter(h => h.length > 0);
+    }
 
     return {
       type: "Feature",
@@ -326,17 +344,17 @@ function WorldMask({ brazilGeo, theme }: { brazilGeo: GeoJSONFeatureCollection |
         coordinates: [worldPolygon, ...holes.flat(1)]
       }
     } as any;
-  }, [brazilGeo]);
+  }, [brazilGeo, focusGeo]);
 
   if (!maskGeo) return null;
 
   return (
-    <Pane name="maskPane" style={{ zIndex: 50 }}>
+    <Pane name="maskPane" style={{ zIndex: 300 }}>
       <GeoJSON 
         data={maskGeo} 
         style={{
-          fillColor: "#000000", // Dark black shadow
-          fillOpacity: theme === 'light' ? 0.65 : 0.45,
+          fillColor: "#000000",
+          fillOpacity: theme === 'light' ? (focusGeo ? 0.45 : 0.65) : (focusGeo ? 0.35 : 0.45),
           color: "transparent",
           weight: 0
         }}
@@ -505,11 +523,11 @@ export default function BrazilMap({
     const hideSelection = isMapMoving && isSelected;
 
     return {
-      fillColor: isSelected ? "hsl(168, 60%, 40%)" : "hsl(168, 60%, 40%)",
-      weight: isSelected ? 2.5 : 1.2,
+      fillColor: isSelected ? "hsl(168, 80%, 45%)" : "hsl(168, 60%, 40%)",
+      weight: isSelected ? 3 : 1.5,
       opacity: 1,
-      color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : "hsl(168, 70%, 65%)",
-      fillOpacity: isSelected ? 0.3 : 0.1,
+      color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : "hsl(168, 70%, 60%)",
+      fillOpacity: isSelected ? 0.45 : 0.15,
       dashArray: isSelected ? undefined : "4 3",
     };
   }, [selectedNeighborhood, isMapMoving]);
@@ -580,7 +598,7 @@ export default function BrazilMap({
       weight: isSelected ? 2 : (isLightTheme ? 1.5 : 1.0),
       opacity: hasSelection && !isSelected ? 0.3 : 1, // Esmaece estados não selecionados
       color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : baseStrokeColor,
-      fillOpacity: isSelected ? 0.15 : baseFillOpacity,
+      fillOpacity: isSelected ? 0.05 : baseFillOpacity, // Selecionado fica mais "limpo" para brilhar sobre a máscara
       interactive: !hasSelection || isSelected // Desativa interação nos outros quando um está aberto
     };
   }, [selectedUF, isMapMoving, showUsuarios, apiTerritories, apiUsers, role, effectiveAssignedStates, mapTheme, filtroUsuario]);
@@ -595,6 +613,22 @@ export default function BrazilMap({
     const city = citiesList.find((c: { ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea));
     const ibgeName = municipioNamesByCode?.[String(codArea)];
     const name = city?.name || ibgeName || String(f?.properties?.name || f?.properties?.nome || "").trim() || `Município ${codArea}`;
+    
+    const isTarget = name.toLowerCase() === (selectedMunicipioName || "").toLowerCase();
+    const hasSelection = !!selectedMunicipioName;
+
+    // Se houver seleção e este NÃO for o alvo, esmaecemos radicalmente para dar o efeito de "sombra"
+    if (hasSelection && !isTarget) {
+      return { 
+        fillColor: "#e2e8f0", 
+        weight: 0.5, 
+        opacity: 0.15, 
+        color: "#94a3b8", 
+        fillOpacity: 0.05,
+        interactive: false // Desativa interação nos outros quando um está aberto
+      };
+    }
+
     const userIds = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
 
     // Only highlight if the search query is a specific word that matches name/user
@@ -674,8 +708,16 @@ export default function BrazilMap({
     const ibgeName = municipioNamesByCode?.[String(codArea)];
     const name = city?.name || ibgeName || "";
     const isTarget = name.toLowerCase() === (selectedMunicipioName || "").toLowerCase();
+    
+    // Se o município é o alvo, damos um destaque de borda mais forte
     return isTarget
-      ? { fillColor: "transparent", weight: 2.5, opacity: 1, color: "hsl(168, 70%, 70%)", fillOpacity: 0 }
+      ? { 
+          fillColor: "hsl(168, 80%, 50%)", 
+          weight: 4, 
+          opacity: 1, 
+          color: "hsl(168, 90%, 40%)", 
+          fillOpacity: 0.15 
+        }
       : { fillColor: "transparent", weight: 0, opacity: 0, color: "transparent", fillOpacity: 0 };
   }, [citiesList, municipioNamesByCode, selectedMunicipioName]);
 
@@ -979,8 +1021,8 @@ export default function BrazilMap({
         {!neighborhoodGeo && munGeo && <ZoomToFeature geoJson={munGeo} maxZoom={15} skipIfZoomed={true} />}
         {!neighborhoodGeo && !munGeo && stateGeo && <ZoomToFeature geoJson={stateGeo} maxZoom={ufInfo?.zoom || 7} skipIfZoomed={true} />}
 
-        {/* World Shadow Mask (Only in light theme) */}
-        {mapTheme === 'light' && statesGeo && <WorldMask brazilGeo={statesGeo} theme={mapTheme} />}
+        {/* World Shadow Mask (Brazil or Municipality Focus) */}
+        {statesGeo && <WorldMask brazilGeo={statesGeo} focusGeo={munGeo} theme={mapTheme} />}
 
         <Pane name="backgroundTilePane" style={{ zIndex: 10 }}>
           <TileLayer
@@ -999,11 +1041,11 @@ export default function BrazilMap({
             data={searchResultGeo}
             interactive={false}
             style={{
-              fillColor: "hsl(190, 100%, 50%)",
-              weight: 3,
-              opacity: 1,
-              color: "hsl(190, 100%, 40%)",
-              fillOpacity: 0.1
+              fillColor: "transparent",
+              weight: 0,
+              opacity: 0,
+              color: "transparent",
+              fillOpacity: 0
             }}
           />
         )}
@@ -1022,33 +1064,38 @@ export default function BrazilMap({
 
         {/* Municipalities layer (Level 2) - Always show when a state is selected */}
         {municipiosGeo && selectedUF && (
-          <Pane name="municipiosPane" style={{ zIndex: 400 }}>
-            <GeoJSON
-              key={`muns-${selectedUF}-${modo}-${filtroUsuario}-${showUsuarios}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}-${citiesList.length}`}
-              data={municipiosGeo}
-              style={municipioStyle}
-              onEachFeature={onEachMunicipio}
-              interactive={true}
-            />
-            {/* Destaque do Município Selecionado (Sempre visível se selecionado) */}
-            {(selectedMunicipioCode || selectedMunicipioName) && (
+          <>
+            <Pane name="municipiosPane" style={{ zIndex: 200 }}>
               <GeoJSON
-                key={`muns-highlight-${selectedMunicipioCode || selectedMunicipioName}`}
+                key={`muns-${selectedUF}-${modo}-${filtroUsuario}-${showUsuarios}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}-${citiesList.length}`}
                 data={municipiosGeo}
-                style={targetMunicipioStyle}
-                interactive={false}
+                style={municipioStyle}
+                onEachFeature={onEachMunicipio}
+                interactive={true}
               />
+            </Pane>
+            
+            {/* Destaque do Município Selecionado (Sempre visível se selecionado e acima da máscara) */}
+            {(selectedMunicipioCode || selectedMunicipioName) && (
+              <Pane name="activeMunicipioPane" style={{ zIndex: 400 }}>
+                <GeoJSON
+                  key={`muns-highlight-${selectedMunicipioCode || selectedMunicipioName}`}
+                  data={municipiosGeo}
+                  style={targetMunicipioStyle}
+                  interactive={false}
+                />
+              </Pane>
             )}
-          </Pane>
+          </>
         )}
 
-        {/* Bairros layer (Level 3) - Strict Hierarchy: Only when municipality is selected and active */}
-        {municipioCodeForBairros && selectedMunicipioCode && String(municipioCodeForBairros) === String(selectedMunicipioCode) && (
-          <Pane name="bairrosPane" style={{ zIndex: 450, pointerEvents: 'auto' }}>
-            {/* Neighborhood polygons - Only render if we have a reasonable amount of features or high zoom */}
-            {neighborhoodsGeo && (
+        {/* Bairros layer (Level 3) - Only show when explicitly requested */}
+        {municipioCodeForBairros && (
+          <Pane name="bairrosPane" style={{ zIndex: 500, pointerEvents: 'auto' }}>
+            {/* Neighborhood polygons */}
+            {neighborhoodsGeo && neighborhoodsGeo.features && neighborhoodsGeo.features.length > 0 && (
               <GeoJSON
-                key={`hoods-${municipioCodeForBairros}-${neighborhoodsGeo.features?.length ?? 0}`}
+                key={`hoods-${municipioCodeForBairros}-${neighborhoodsGeo.features.length}-${selectedNeighborhood}`}
                 data={neighborhoodsGeo}
                 style={neighborhoodStyle}
                 onEachFeature={onEachNeighborhood}
@@ -1195,17 +1242,27 @@ export default function BrazilMap({
             initial={{ x: -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -20, opacity: 0 }}
-            className="absolute top-4 left-14 z-[1000]"
+            className="absolute top-4 left-14 z-[1000] flex flex-col gap-2"
           >
-            <button
-              onClick={handleBack}
-              className="flex items-center gap-2 px-3 py-2 bg-card/95 backdrop-blur-sm border border-border text-foreground text-xs font-semibold rounded-md shadow-lg hover:bg-secondary transition-all"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              {selectedNeighborhood ? "Voltar ao Município" : (municipioCodeForBairros ? "Voltar ao Estado" : "Voltar ao Brasil")}
-            </button>
-            {municipioCodeForBairros && markers.length > 0 && (
-              <div className="mt-2 px-3 py-1.5 bg-card/80 backdrop-blur-sm border border-border/50 rounded-md text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleBack}
+                className="flex items-center gap-2 px-3 py-2 bg-card/95 backdrop-blur-sm border border-border text-foreground text-xs font-semibold rounded-md shadow-lg hover:bg-secondary transition-all"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                {selectedNeighborhood ? "Voltar ao Município" : (municipioCodeForBairros ? "Voltar ao Estado" : "Voltar ao Brasil")}
+              </button>
+
+              {loadingNeighborhoods && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-card/95 backdrop-blur-sm border border-border rounded-md shadow-lg">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Carregando Bairros...</span>
+                </div>
+              )}
+            </div>
+
+            {municipioCodeForBairros && markers.length > 0 && !loadingNeighborhoods && (
+              <div className="px-3 py-1.5 bg-card/80 backdrop-blur-sm border border-border/50 rounded-md text-[10px] text-muted-foreground w-fit">
                 {markers.length} bairro(s) carregado(s)
               </div>
             )}

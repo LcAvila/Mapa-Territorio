@@ -1,4 +1,4 @@
-import { X, Map as MapIcon, Loader2, RotateCcw, UserPlus, Users, Check, X as XIcon } from "lucide-react";
+import { X, Map as MapIcon, Loader2, RotateCcw, UserPlus, Users, Check, X as XIcon, Eye } from "lucide-react";
 import { getUserColor, getUserById } from "@/data/representatives";
 import { getMunicipioResponsaveis } from "@/data/territories";
 import { useMunicipioInfo } from "@/hooks/use-geo-data";
@@ -127,84 +127,99 @@ export default function DetailPanel({
 
   return (
     <>
-      <div className="bg-card border border-border rounded-lg overflow-hidden animate-in slide-in-from-right-4 duration-300">
+      <div className="bg-card/95 backdrop-blur-xl border border-border/40 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-right-4 duration-300 w-[260px] shadow-2xl ring-1 ring-white/10">
         {/* Header */}
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between" style={{ background: "var(--gradient-header)" }}>
-          <div>
-            <h2 className="font-semibold text-foreground">{municipio}</h2>
-            <p className="text-xs text-muted-foreground">{uf} · {modo === "planejamento" ? "Planejamento" : "Atendimento"}</p>
+        <div className="px-4 py-3 border-b border-border/20 flex items-center justify-between bg-muted/40">
+          <div className="min-w-0">
+            <h2 className="font-bold text-sm text-foreground truncate tracking-tight">{municipio}</h2>
+            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{uf} · {modo === "planejamento" ? "Planejamento" : "Atendimento"}</p>
           </div>
-          <div className="flex gap-1">
+          <div className="flex items-center gap-1.5 shrink-0 ml-2">
             {onDeselectState && (
-              <button onClick={onDeselectState} title="Voltar ao Brasil" className="p-1 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
-                <RotateCcw className="w-4 h-4" />
+              <button 
+                onClick={onDeselectState} 
+                title="Voltar ao Brasil" 
+                className="p-1.5 rounded-lg hover:bg-secondary transition-all text-muted-foreground/60 hover:text-foreground active:scale-90"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
               </button>
             )}
-            <button onClick={onClose} title="Fechar painel" className="p-1 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
-              <X className="w-4 h-4" />
+            <button 
+              onClick={onClose} 
+              title="Fechar painel" 
+              className="p-1.5 rounded-lg hover:bg-destructive/10 transition-all text-muted-foreground/60 hover:text-destructive active:scale-90"
+            >
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
         {/* Responsáveis */}
-        <div className="p-4 space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {modo === "planejamento" ? "Responsável Principal" : "Responsáveis"}
-          </h3>
+        <div className="p-4 space-y-4">
+          <div className="space-y-2">
+            <h3 className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
+              <Users className="w-2.5 h-2.5" />
+              {modo === "planejamento" ? "Responsável Principal" : "Responsáveis"}
+            </h3>
 
-          {userIds.length === 0 ? (
-            <p className="text-sm text-muted-foreground italic">Sem responsável atribuído</p>
-          ) : (role === "user" && estado_end && uf !== estado_end) ? (
-            <div className="space-y-2">
-              {userIds.some(id => getUserById(id, apiUsers)?.isVago) ? (
-                <div className="flex items-center gap-3 p-2 rounded-md bg-secondary/50 border border-destructive/20">
-                  <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ border: "2px dashed hsl(0, 70%, 50%)" }} />
-                  <div><p className="text-sm font-medium text-destructive">Território Vago</p></div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3 p-2 rounded-md bg-secondary/50">
-                  <span className="w-3 h-3 rounded-sm flex-shrink-0 bg-primary/60" />
-                  <div><p className="text-sm font-medium text-foreground">Território Ocupado</p></div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {userIds.map((id, i) => {
-                const user = getUserById(id, apiUsers);
-                if (!user) return (
-                  <div key={`${id}-${i}`} className="flex items-center gap-3 p-2 rounded-md bg-secondary/50">
-                    <span className="w-3 h-3 rounded-sm flex-shrink-0 bg-muted" />
-                    <p className="text-sm font-medium text-foreground">{id}</p>
+            {userIds.length === 0 ? (
+              <div className="py-1 px-1">
+                <p className="text-[11px] text-muted-foreground italic font-medium">Sem responsável atribuído</p>
+              </div>
+            ) : (role === "user" && estado_end && uf !== estado_end) ? (
+              <div className="space-y-2">
+                {userIds.some(id => getUserById(id, apiUsers)?.isVago) ? (
+                  <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-destructive/5 border border-destructive/10">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 animate-pulse" style={{ border: "2px dashed hsl(0, 70%, 50%)" }} />
+                    <p className="text-[11px] font-bold text-destructive/80 uppercase tracking-tight">Território Vago</p>
                   </div>
-                );
-                return (
-                  <div key={`${id}-${i}`} className="flex items-center gap-3 p-2 rounded-md bg-secondary/50">
-                    <span
-                      className="w-3 h-3 rounded-sm flex-shrink-0"
-                      style={{ backgroundColor: getUserColor(user), border: user.isVago ? "2px dashed hsl(0, 70%, 50%)" : "none" }}
-                    />
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{user.username} - {user.full_name || user.fullName}</p>
-                      {user.isVago && <span className="text-[10px] text-destructive font-medium uppercase">VAGO</span>}
-                      {i === 0 && modo === "atendimento" && userIds.length > 1 && (
-                        <span className="text-[10px] text-primary font-medium ml-2">PRINCIPAL</span>
-                      )}
+                ) : (
+                  <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-secondary/30">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-primary/40 shadow-[0_0_8px_rgba(var(--primary),0.3)]" />
+                    <p className="text-[11px] font-bold text-foreground/70 uppercase tracking-tight">Território Ocupado</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {userIds.map((id, i) => {
+                  const user = getUserById(id, apiUsers);
+                  if (!user) return (
+                    <div key={`${id}-${i}`} className="flex items-center gap-2.5 p-2 rounded-xl bg-secondary/20">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-muted" />
+                      <p className="text-[11px] font-medium text-foreground/60">ID: {id}</p>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                  return (
+                    <div key={`${id}-${i}`} className="flex items-center gap-3 p-2 rounded-xl bg-secondary/30 border border-transparent hover:border-border/40 transition-all group">
+                      <span
+                        className="w-3 h-3 rounded-full flex-shrink-0 shadow-sm transition-transform group-hover:scale-110"
+                        style={{ backgroundColor: getUserColor(user), border: user.isVago ? "1.5px dashed hsl(0, 70%, 50%)" : "none" }}
+                      />
+                      <div className="min-w-0 leading-tight">
+                        <p className="text-[11px] font-bold text-foreground truncate">{user.full_name || user.fullName || user.username}</p>
+                        <div className="flex gap-1.5 mt-0.5">
+                          {user.isVago && <span className="text-[8px] text-destructive font-black uppercase tracking-tighter">VAGO</span>}
+                          {i === 0 && modo === "atendimento" && userIds.length > 1 && (
+                            <span className="text-[8px] text-primary font-black uppercase tracking-tighter">PRINCIPAL</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Actions (Bairros & Clientes) */}
-          <div className="border-t border-border pt-4 mt-2 space-y-2">
+          <div className="pt-4 border-t border-border/20 flex flex-col gap-2">
             {canEditTerritories && (
               <button
                 onClick={() => setShowAssignModal(true)}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-md text-xs font-semibold transition-all bg-purple-600 text-white hover:bg-purple-700 shadow-md"
+                className="w-full flex items-center justify-center gap-2.5 h-9 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-purple-600 text-white hover:bg-purple-700 hover:shadow-lg hover:shadow-purple-500/20 active:scale-[0.98]"
               >
-                <UserPlus className="w-4 h-4" />
+                <UserPlus className="w-3.5 h-3.5" />
                 Atribuir Reps
               </button>
             )}
@@ -212,29 +227,25 @@ export default function DetailPanel({
             <button
               onClick={handleViewBairros}
               disabled={loadingInfo || !onViewBairros}
-              className={`w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-md text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${isBairrosActive
-                ? "bg-secondary text-foreground hover:bg-secondary/80 border border-border"
-                : "bg-primary text-primary-foreground hover:bg-primary/90"
+              className={`w-full flex items-center justify-center gap-2.5 h-9 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50 active:scale-[0.98] ${isBairrosActive
+                ? "bg-secondary text-foreground hover:bg-secondary/80 border border-border/50"
+                : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/10"
                 }`}
             >
-              {loadingInfo ? <Loader2 className="w-4 h-4 animate-spin" /> : isBairrosActive ? <RotateCcw className="w-4 h-4" /> : <MapIcon className="w-4 h-4" />}
-              {isBairrosActive ? "Esconder Bairros no Mapa" : "Visualizar Bairros no Mapa"}
+              {loadingInfo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MapIcon className="w-3.5 h-3.5" />}
+              {isBairrosActive ? "Esconder Bairros" : "Ver Bairros"}
             </button>
 
             <button
               onClick={onToggleClientes}
-              className={`w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-md text-xs font-semibold transition-all ${showClientes
-                ? "bg-cyan-600 text-white hover:bg-cyan-700 shadow-md"
-                : "bg-secondary text-foreground hover:bg-secondary/80 border border-border"
+              className={`w-full flex items-center justify-center gap-2.5 h-9 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-[0.98] ${showClientes
+                ? "bg-cyan-600 text-white hover:bg-cyan-700 shadow-md shadow-cyan-500/20"
+                : "bg-secondary/60 text-foreground hover:bg-secondary border border-border/50"
                 }`}
             >
-              <X className={`w-4 h-4 transition-transform ${showClientes ? "rotate-45" : "rotate-0 text-cyan-500"}`} />
-              {showClientes ? "Ocultar Clientes no Mapa" : "Mostrar Clientes no Mapa"}
+              {showClientes ? <X className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5 text-cyan-500" />}
+              {showClientes ? "Ocultar Clientes" : "Mostrar Clientes"}
             </button>
-
-            <p className="text-[10px] text-muted-foreground mt-2 text-center">
-              {isBairrosActive ? "Divisões municipais ativas." : "* Carrega os limites geográficos (IBGE) para este município."}
-            </p>
           </div>
         </div>
       </div>

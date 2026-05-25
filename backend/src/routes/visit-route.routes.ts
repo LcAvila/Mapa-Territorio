@@ -9,6 +9,7 @@ router.use(authenticate);
 router.get('/summary', VisitController.getSummary);
 router.get('/suggestions', VisitController.getSuggestions);
 router.get('/sequence/:id', VisitController.getSequence);
+router.get('/:id/geojson', VisitController.getRouteGeoJSON);
 router.post('/manual', VisitController.createManualRoute);
 router.post('/:id/start', VisitController.startRoute);
 router.post('/checkin', VisitController.checkin);

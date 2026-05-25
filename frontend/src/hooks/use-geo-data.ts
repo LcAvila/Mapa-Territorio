@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { API_BASE_URL } from "@/lib/api-base";
 import { useAuth } from "@/contexts/auth-context-core";
+import { toast } from "sonner";
 
 const API_BASE = `${API_BASE_URL}/api/location`;
 const IBGE_MALHAS = "https://servicodados.ibge.gov.br/api/v3/malhas";
@@ -77,27 +78,44 @@ export function useMunicipiosGeoJSON(ufCode: number | null) {
 }
 
 export function useNeighborhoodsGeoJSON(municipioCode: number | null, municipioName?: string, ufSigla?: string) {
-  const { authHeaders } = useAuth();
+  const { token, tokenVersion } = useAuth();
   const API = API_BASE_URL;
 
   return useQuery({
-    queryKey: ["geo", "neighborhoods-backend", municipioCode],
+    queryKey: ["geo", "neighborhoods-backend", municipioCode, !!token, tokenVersion],
     queryFn: async () => {
-      if (!municipioCode) return null;
+      if (!municipioCode || !token) return null;
 
       try {
         const res = await fetch(`${API}/api/location/neighborhoods-geojson/${municipioCode}`, {
-          headers: authHeaders
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-user-token-version': String(tokenVersion || 0)
+          }
         });
+        
+        if (res.status === 401) {
+          console.warn("[GeoHook] 401 Unauthorized for neighborhoods. Token might be stale.");
+          throw new Error("Sessão expirada. Recarregue a página.");
+        }
+
         if (!res.ok) throw new Error("Erro ao buscar bairros do servidor");
-        return await res.json();
+        const data = await res.json();
+        
+        if (!data || !data.features || data.features.length === 0) {
+          console.warn(`[GeoHook] No neighborhoods found for municipio ${municipioCode}`);
+        }
+        
+        return data;
       } catch (e) {
-        console.error("[GeoHook] Backend neighborhoods failed, using empty collection", e);
+        console.error("[GeoHook] Backend neighborhoods failed", e);
+        toast.error("Não foi possível carregar os bairros para este município.");
         return { type: "FeatureCollection", features: [] };
       }
     },
-    enabled: !!municipioCode,
-    staleTime: Infinity,
+    enabled: !!municipioCode && !!token,
+    staleTime: 1000 * 60 * 30, // 30 minutes
+    retry: 1
   });
 }
 

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { 
   Settings, Palette, LayoutDashboard, Grid3X3, Trash2, Upload, 
-  ImageOff, RefreshCw, Save, Layers, Check, X, Moon 
+  ImageOff, RefreshCw, Save, Layers, Check, X, Moon, Sun 
 } from 'lucide-react';
 
 interface SystemConfigPanelProps {

@@ -71,9 +71,9 @@ export const RoteiroExecucao: React.FC = () => {
       const formattedStops: VisitStop[] = (data.items || []).map((item: any) => ({
         id: item.id,
         sequence_number: item.sequence_number,
-        client_name: item.clientSnapshot.client_name,
-        address: item.clientSnapshot.address,
-        city: item.clientSnapshot.city,
+        client_name: item.clientSnapshot?.client_name || item.client?.nome_cliente || 'Cliente s/ nome',
+        address: item.clientSnapshot?.address || item.client?.endereco_completo || 'Endereço não informado',
+        city: item.clientSnapshot?.city || item.client?.cidade || 'Cidade não informada',
         status: item.status,
         classification: item.classification,
         distance_from_previous_km: item.distance_from_previous_km,

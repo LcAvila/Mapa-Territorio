@@ -15,6 +15,8 @@ export const startRoute = async (req: Request, res: Response) => {
 export const createManualRoute = async (req: Request, res: Response) => {
   try {
     const { supervisorId, date, clientIds, startPoint, startLat, startLng } = req.body;
+    console.log('[CREATE_MANUAL_ROUTE] Payload:', { supervisorId, date, clientIdsLength: clientIds?.length });
+    
     if (!supervisorId || !date || !clientIds || !Array.isArray(clientIds)) {
       return res.status(400).json({ message: 'Dados incompletos para criação do roteiro.' });
     }
@@ -28,6 +30,7 @@ export const createManualRoute = async (req: Request, res: Response) => {
     });
     res.status(201).json(result);
   } catch (error: any) {
+    console.error('[CREATE_MANUAL_ROUTE] Error:', error);
     res.status(400).json({ message: error.message });
   }
 };
@@ -53,7 +56,8 @@ export const getSequence = async (req: Request, res: Response) => {
 
 export const getSummary = async (req: Request, res: Response) => {
   try {
-    const result = await visitService.getSummary();
+    const userId = req.query.userId ? Number(req.query.userId) : undefined;
+    const result = await visitService.getSummary(userId);
     res.json(result);
   } catch (error: any) {
     res.status(400).json({ message: error.message });
@@ -84,6 +88,15 @@ export const getSuggestions = async (req: Request, res: Response) => {
     const { userId } = (req as any).user;
     const targetUserId = req.query.userId ? Number(req.query.userId) : userId;
     const result = await visitService.getSuggestions(targetUserId);
+    res.json(result);
+  } catch (error: any) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+export const getRouteGeoJSON = async (req: Request, res: Response) => {
+  try {
+    const result = await visitService.getRouteGeoJSON(Number(req.params.id));
     res.json(result);
   } catch (error: any) {
     res.status(400).json({ message: error.message });

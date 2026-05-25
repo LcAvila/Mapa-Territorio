@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,7 @@ interface Cliente {
   cidade: string;
   uf: string;
   bairro: string;
+  userId: number | null;
 }
 
 interface User {
@@ -38,6 +39,7 @@ interface User {
   full_name: string;
   role: string;
   userTypeId?: number | string;
+  managedUsers?: { id: number }[];
 }
 
 interface UserType {
@@ -62,8 +64,30 @@ export const VisitScheduler: React.FC = () => {
   const [filterUF, setFilterUF] = useState<string>('all');
   const [filterCity, setFilterCity] = useState<string>('all');
   const [startPoint, setStartPoint] = useState<'base' | 'current'>('base');
+  const [currentCoords, setCurrentCoords] = useState<{lat: number, lng: number} | null>(null);
+  const [loadingCoords, setLoadingCoords] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  // Memoized list of allowed user IDs (recursive hierarchy)
+  const allowedUserIds = React.useMemo(() => {
+    if (!selectedUserId) return [];
+    
+    const getIdsRecursive = (id: number): number[] => {
+      const user = users.find(u => u.id === id);
+      if (!user) return [id];
+      
+      let ids = [id];
+      if (user.managedUsers) {
+        user.managedUsers.forEach(sub => {
+          ids = [...ids, ...getIdsRecursive(sub.id)];
+        });
+      }
+      return ids;
+    };
+    
+    return Array.from(new Set(getIdsRecursive(Number(selectedUserId))));
+  }, [selectedUserId, users]);
 
   useEffect(() => {
     fetchData();
@@ -128,12 +152,59 @@ export const VisitScheduler: React.FC = () => {
                          c.cidade.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesUF = filterUF === 'all' || c.uf === filterUF;
     const matchesCity = filterCity === 'all' || c.cidade === filterCity;
-    return matchesSearch && matchesUF && matchesCity;
+    
+    // Filtro por hierarquia do usuário selecionado
+    let matchesUser = true;
+    if (selectedUserId) {
+      matchesUser = c.userId !== null && allowedUserIds.includes(c.userId);
+    }
+
+    return matchesSearch && matchesUF && matchesCity && matchesUser;
   });
 
   const toggleClient = (id: number) => {
     setSelectedClientIds(prev => 
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleCaptureLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocalização não é suportada pelo seu navegador.');
+      return;
+    }
+
+    setLoadingCoords(true);
+    setStartPoint('current');
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCurrentCoords({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        });
+        setLoadingCoords(false);
+        toast.success('Localização capturada com sucesso!');
+      },
+      (error) => {
+        setLoadingCoords(false);
+        setStartPoint('base');
+        console.error('Erro ao capturar localização:', error);
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            toast.error('Permissão de localização negada pelo usuário.');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            toast.error('Informações de localização indisponíveis.');
+            break;
+          case error.TIMEOUT:
+            toast.error('Tempo esgotado ao tentar obter localização.');
+            break;
+          default:
+            toast.error('Erro desconhecido ao obter localização.');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
@@ -145,13 +216,22 @@ export const VisitScheduler: React.FC = () => {
     try {
       setSubmitting(true);
       
-      let lat, lng;
-      if (startPoint === 'current' && navigator.geolocation) {
-        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject);
-        });
-        lat = pos.coords.latitude;
-        lng = pos.coords.longitude;
+      let lat = currentCoords?.lat;
+      let lng = currentCoords?.lng;
+
+      // Se o ponto for atual mas não tivermos as coordenadas ainda, tentamos capturar
+      if (startPoint === 'current' && !lat) {
+        if (navigator.geolocation) {
+          try {
+            const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+            });
+            lat = pos.coords.latitude;
+            lng = pos.coords.longitude;
+          } catch (e) {
+            console.warn('Falha ao capturar localização no envio, enviando sem coordenadas de início.');
+          }
+        }
       }
 
       const response = await fetch(`${API_BASE_URL}/api/visit-route/manual`, {
@@ -171,7 +251,9 @@ export const VisitScheduler: React.FC = () => {
       });
 
       if (response.ok) {
-        toast.success('Roteiro criado com sucesso!');
+        toast.success('Roteiro criado e enviado para o representante!', {
+          description: 'Ele receberá uma notificação no painel principal.'
+        });
         setSelectedClientIds([]);
         setSelectedUserId('');
       } else {
@@ -204,9 +286,22 @@ export const VisitScheduler: React.FC = () => {
                   <MapPin className="w-4 h-4 text-primary" />
                   Agendamento de Visitas
                 </CardTitle>
-                <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">
-                  Selecione os clientes para montar o roteiro do representante
-                </p>
+                <div className="flex items-center gap-4 mt-2">
+                  <div className="flex items-center gap-1.5 opacity-60">
+                    <span className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] flex items-center justify-center font-black">1</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">Filtrar Equipe</span>
+                  </div>
+                  <div className="w-4 h-px bg-border/40" />
+                  <div className="flex items-center gap-1.5 opacity-60">
+                    <span className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] flex items-center justify-center font-black">2</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">Selecionar Clientes</span>
+                  </div>
+                  <div className="w-4 h-px bg-border/40" />
+                  <div className="flex items-center gap-1.5 opacity-60">
+                    <span className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] flex items-center justify-center font-black">3</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">Gerar Roteiro</span>
+                  </div>
+                </div>
               </div>
             </div>
           </CardHeader>
@@ -368,14 +463,16 @@ export const VisitScheduler: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setStartPoint('current')}
+                    onClick={handleCaptureLocation}
+                    disabled={loadingCoords}
                     className={`flex items-center justify-center gap-2 h-10 rounded-md border text-[10px] font-bold uppercase transition-all ${
                       startPoint === 'current' 
                         ? 'bg-primary/10 border-primary text-primary' 
                         : 'bg-background border-border text-muted-foreground hover:bg-secondary/50'
                     }`}
                   >
-                    <Navigation className="w-3 h-3" /> Atual
+                    {loadingCoords ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Navigation className="w-3.5 h-3.5" />} 
+                    {loadingCoords ? 'Capturando...' : 'Atual'}
                   </button>
                 </div>
               </div>
