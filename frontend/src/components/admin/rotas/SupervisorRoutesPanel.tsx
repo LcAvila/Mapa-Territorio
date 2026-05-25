@@ -3,24 +3,46 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Search, Map as MapIcon, Calendar, User as UserIcon, TrendingUp, CheckCircle2, Clock, AlertCircle, X, MapPin, Navigation } from 'lucide-react';
+import { Loader2, Search, Map as MapIcon, Calendar, User as UserIcon, TrendingUp, CheckCircle2, Clock, AlertCircle, X, Navigation, Pencil, Trash2, MoreHorizontal, FileText } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { API_BASE_URL } from '@/lib/api-base';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context-core';
 
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { RouteDetailModal, RouteDetailData } from './RouteDetailModal';
 
 interface RouteSummary {
   id: number;
   name: string;
   representative: string;
   date: string;
+  semana?: string | null;
   total_stops: number;
   completed_stops: number;
   status: string;
@@ -55,28 +77,13 @@ function RouteMapView({ geoJSON }: { geoJSON: any }) {
         delete (container as any)._leaflet_id;
       }
 
-      // Determinar o centro
-      const startFeature = geoJSON.features.find((f: any) => f.properties.type === 'start');
-      const stopFeature = geoJSON.features.find((f: any) => f.properties.type === 'stop');
-      const centerCoords = startFeature?.geometry.coordinates || stopFeature?.geometry.coordinates || [-47.9297, -15.7797];
-      const center: [number, number] = [centerCoords[1], centerCoords[0]];
-
-      map = L.map(container, { zoomControl: false }).setView(center, 13);
+      map = L.map(container, { zoomControl: true }).setView([-5.0, -44.0], 7);
       mapRef.current = map;
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       }).addTo(map);
 
-      // Linha da Rota
-      const routeLine = geoJSON.features.find((f: any) => f.properties.type === 'route_line');
-      if (routeLine) {
-        L.geoJSON(routeLine, {
-          style: { color: '#3b82f6', weight: 5, opacity: 0.6, dashArray: '10, 10' }
-        }).addTo(map);
-      }
-
-      // Fix default marker icon issue com bundlers
       const defaultIcon = L.icon({
         iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
         iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -87,33 +94,52 @@ function RouteMapView({ geoJSON }: { geoJSON: any }) {
         shadowSize: [41, 41]
       });
 
-      // Marcadores de Paradas
-      const markers = geoJSON.features.filter((f: any) => f.properties.type !== 'route_line');
-      markers.forEach((f: any) => {
-        const marker = L.marker(
-          [f.geometry.coordinates[1], f.geometry.coordinates[0]],
-          { icon: defaultIcon }
-        ).addTo(map);
+      const markerGroup = L.featureGroup();
 
-        const typeLabel = f.properties.type === 'start' ? 'Início' : `Parada #${f.properties.sequence}`;
-        const nameLabel = f.properties.label || f.properties.city || 'Localização';
-        const statusHtml = f.properties.status
-          ? `<span style="display:inline-block;margin-top:6px;padding:1px 6px;border:1px solid #ccc;border-radius:4px;font-size:8px;font-weight:800;text-transform:uppercase;">${f.properties.status}</span>`
-          : '';
+      const routeLine = geoJSON.features.find((f: any) => f.properties.type === 'route_line');
+      if (routeLine) {
+        L.geoJSON(routeLine, {
+          style: { color: '#3b82f6', weight: 5, opacity: 0.7, dashArray: '8, 8' }
+        }).addTo(map);
+      }
 
-        marker.bindPopup(`
-          <div style="padding:4px;">
-            <p style="font-size:10px;font-weight:900;text-transform:uppercase;color:hsl(var(--primary));margin-bottom:4px;">${typeLabel}</p>
-            <p style="font-size:12px;font-weight:700;">${nameLabel}</p>
-            ${statusHtml}
-          </div>
-        `);
-      });
+      geoJSON.features
+        .filter((f: any) => f.properties.type !== 'route_line')
+        .forEach((f: any) => {
+          const [lng, lat] = f.geometry.coordinates;
+          const marker = L.marker([lat, lng], { icon: defaultIcon });
+          markerGroup.addLayer(marker);
 
-      // Invalidar tamanho após o mapa ser montado no DOM do Dialog
+          const typeLabel = f.properties.type === 'start' ? 'Início' : `Parada #${f.properties.sequence}`;
+          const nameLabel = f.properties.label || f.properties.city || 'Localização';
+          const statusHtml = f.properties.status
+            ? `<span style="display:inline-block;margin-top:6px;padding:1px 6px;border:1px solid #ccc;border-radius:4px;font-size:8px;font-weight:800;text-transform:uppercase;">${f.properties.status}</span>`
+            : '';
+
+          marker.bindPopup(`
+            <div style="padding:4px;">
+              <p style="font-size:10px;font-weight:900;text-transform:uppercase;color:hsl(var(--primary));margin-bottom:4px;">${typeLabel}</p>
+              <p style="font-size:12px;font-weight:700;">${nameLabel}</p>
+              ${statusHtml}
+            </div>
+          `);
+        });
+
+      markerGroup.addTo(map);
+
+      if (geoJSON.bounds) {
+        const { south, north, west, east } = geoJSON.bounds;
+        map.fitBounds([[south, west], [north, east]], { padding: [40, 40], maxZoom: 14 });
+      } else if (markerGroup.getLayers().length > 0) {
+        map.fitBounds(markerGroup.getBounds(), { padding: [40, 40], maxZoom: 14 });
+      }
+
       setTimeout(() => {
         map?.invalidateSize();
-      }, 200);
+        if (markerGroup.getLayers().length > 0) {
+          map.fitBounds(markerGroup.getBounds(), { padding: [40, 40], maxZoom: 14 });
+        }
+      }, 250);
     };
 
     initMap();
@@ -139,6 +165,20 @@ export const SupervisorRoutesPanel: React.FC = () => {
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
   const [routeGeoJSON, setRouteGeoJSON] = useState<any>(null);
   const [loadingMap, setLoadingMap] = useState(false);
+
+  // Editar / excluir
+  const [editingRoute, setEditingRoute] = useState<RouteSummary | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editWeek, setEditWeek] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingRoute, setDeletingRoute] = useState<RouteSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Detalhes do roteiro
+  const [detailRouteId, setDetailRouteId] = useState<number | null>(null);
+  const [routeDetails, setRouteDetails] = useState<RouteDetailData | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   const stats = useMemo(() => {
     if (routes.length === 0) return { completionRate: 0, inProgress: 0, pending: 0 };
@@ -219,6 +259,125 @@ export const SupervisorRoutesPanel: React.FC = () => {
     setSelectedRouteId(null);
     setRouteGeoJSON(null);
   }, []);
+
+  const selectedRoute = useMemo(
+    () => routes.find((r) => r.id === selectedRouteId) ?? null,
+    [routes, selectedRouteId]
+  );
+
+  const openEditDialog = (route: RouteSummary) => {
+    setEditingRoute(route);
+    setEditName(route.name.startsWith('Roteiro #') ? '' : route.name);
+    setEditDate(route.date);
+    setEditWeek(route.semana || '');
+  };
+
+  const closeEditDialog = () => {
+    setEditingRoute(null);
+    setEditName('');
+    setEditDate('');
+    setEditWeek('');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingRoute || !token) return;
+    const name = editName.trim();
+    if (!name) {
+      toast.error('Informe um nome para o roteiro.');
+      return;
+    }
+
+    try {
+      setSavingEdit(true);
+      const response = await fetch(`${API_BASE_URL}/api/visit-route/${editingRoute.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name,
+          route_date: editDate,
+          semana: editWeek || null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        toast.error(data.message || 'Erro ao salvar roteiro.');
+        return;
+      }
+      toast.success('Roteiro atualizado.');
+      setRoutes((prev) =>
+        prev.map((r) =>
+          r.id === editingRoute.id
+            ? {
+                ...r,
+                name: data.name || name,
+                date: data.date || editDate,
+                semana: data.semana ?? editWeek,
+              }
+            : r
+        )
+      );
+      closeEditDialog();
+    } catch {
+      toast.error('Erro de conexão ao salvar roteiro.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const openRouteDetails = async (routeId: number) => {
+    setDetailRouteId(routeId);
+    setRouteDetails(null);
+    setLoadingDetails(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/visit-route/${routeId}/details`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setRouteDetails(data);
+      } else {
+        toast.error(data.message || 'Erro ao carregar detalhes do roteiro.');
+        setDetailRouteId(null);
+      }
+    } catch {
+      toast.error('Erro de conexão ao carregar detalhes.');
+      setDetailRouteId(null);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  const closeRouteDetails = () => {
+    setDetailRouteId(null);
+    setRouteDetails(null);
+  };
+
+  const handleDeleteRoute = async () => {
+    if (!deletingRoute || !token) return;
+    try {
+      setDeleting(true);
+      const response = await fetch(`${API_BASE_URL}/api/visit-route/${deletingRoute.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        toast.error(data.message || 'Erro ao excluir roteiro.');
+        return;
+      }
+      toast.success('Roteiro excluído.');
+      setRoutes((prev) => prev.filter((r) => r.id !== deletingRoute.id));
+      if (selectedRouteId === deletingRoute.id) closeMapDialog();
+      setDeletingRoute(null);
+    } catch {
+      toast.error('Erro de conexão ao excluir roteiro.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -308,7 +467,11 @@ export const SupervisorRoutesPanel: React.FC = () => {
                     </TableCell>
                   </TableRow>
                 ) : routes.map(route => (
-                  <TableRow key={route.id} className="border-border/5 hover:bg-primary/5 transition-colors group">
+                  <TableRow
+                    key={route.id}
+                    className="border-border/5 hover:bg-primary/5 transition-colors group cursor-pointer"
+                    onClick={() => openRouteDetails(route.id)}
+                  >
                     <TableCell className="pl-6 py-4">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center">
@@ -319,7 +482,9 @@ export const SupervisorRoutesPanel: React.FC = () => {
                     </TableCell>
                     <TableCell className="py-4">
                       <div className="flex flex-col">
-                        <span className="text-xs font-bold text-foreground">{route.name}</span>
+                        <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors underline-offset-2 group-hover:underline">
+                          {route.name}
+                        </span>
                         <Badge variant="outline" className={`w-fit text-[9px] h-4 px-1.5 uppercase font-black ${
                           route.status === 'em_execucao' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 
                           route.status === 'completed' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 
@@ -346,15 +511,58 @@ export const SupervisorRoutesPanel: React.FC = () => {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="py-4 text-right pr-6">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary transition-colors"
-                        onClick={() => fetchRouteGeoJSON(route.id)}
-                      >
-                        <MapIcon className="w-4 h-4" />
-                      </Button>
+                    <TableCell className="py-4 text-right pr-6" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary transition-colors"
+                          title="Ver mapa"
+                          onClick={() => fetchRouteGeoJSON(route.id)}
+                        >
+                          <MapIcon className="w-4 h-4" />
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:bg-secondary"
+                              title="Mais ações"
+                            >
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem
+                              className="gap-2 cursor-pointer text-xs font-medium"
+                              onClick={() => openRouteDetails(route.id)}
+                            >
+                              <FileText className="w-3.5 h-3.5" /> Ver detalhes
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="gap-2 cursor-pointer text-xs font-medium"
+                              onClick={() => openEditDialog(route)}
+                            >
+                              <Pencil className="w-3.5 h-3.5" /> Editar roteiro
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="gap-2 cursor-pointer text-xs font-medium"
+                              onClick={() => fetchRouteGeoJSON(route.id)}
+                            >
+                              <MapIcon className="w-3.5 h-3.5" /> Ver no mapa
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="gap-2 cursor-pointer text-xs font-medium text-destructive focus:text-destructive"
+                              disabled={route.status === 'em_execucao'}
+                              onClick={() => setDeletingRoute(route)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Excluir roteiro
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -364,32 +572,143 @@ export const SupervisorRoutesPanel: React.FC = () => {
         </CardContent>
       </Card>
 
+      <RouteDetailModal
+        open={detailRouteId !== null}
+        onClose={closeRouteDetails}
+        loading={loadingDetails}
+        data={routeDetails}
+        onViewMap={
+          detailRouteId
+            ? () => {
+                closeRouteDetails();
+                fetchRouteGeoJSON(detailRouteId);
+              }
+            : undefined
+        }
+      />
+
+      {/* Modal editar roteiro */}
+      <Dialog open={editingRoute !== null} onOpenChange={(open) => !open && closeEditDialog()}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-black uppercase tracking-widest">
+              Editar Roteiro
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Defina o nome e ajuste data ou semana do roteiro #{editingRoute?.id}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-black uppercase text-muted-foreground">Nome do roteiro</Label>
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Ex: Visitas Região Sul"
+                maxLength={120}
+                className="h-10 text-sm"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase text-muted-foreground">Data</Label>
+                <Input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="h-10 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase text-muted-foreground">Semana</Label>
+                <select
+                  className="w-full h-10 px-3 bg-background border border-border rounded-md text-sm"
+                  value={editWeek}
+                  onChange={(e) => setEditWeek(e.target.value)}
+                >
+                  <option value="">Sem semana</option>
+                  <option value="Semana 1">Semana 1</option>
+                  <option value="Semana 2">Semana 2</option>
+                  <option value="Semana 3">Semana 3</option>
+                  <option value="Semana 4">Semana 4</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={closeEditDialog} disabled={savingEdit}>
+              Cancelar
+            </Button>
+            <Button size="sm" onClick={handleSaveEdit} disabled={savingEdit}>
+              {savingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmar exclusão */}
+      <AlertDialog open={deletingRoute !== null} onOpenChange={(open) => !open && setDeletingRoute(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir roteiro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O roteiro <strong>{deletingRoute?.name}</strong> e todas as paradas serão removidos permanentemente.
+              {deletingRoute?.status === 'em_execucao' && (
+                <span className="block mt-2 text-destructive font-medium">
+                  Roteiros em execução não podem ser excluídos.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting || deletingRoute?.status === 'em_execucao'}
+              onClick={(e) => {
+                e.preventDefault();
+                handleDeleteRoute();
+              }}
+            >
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Modal do Mapa tipo Waze */}
       {selectedRouteId !== null && (
         <Dialog open onOpenChange={(open) => {
           if (!open) closeMapDialog();
         }}>
-          <DialogContent className="max-w-4xl h-[80vh] p-0 overflow-hidden bg-background border-border/40 flex flex-col gap-0">
-            <DialogHeader className="p-4 border-b border-border/10 flex flex-row items-center justify-between shrink-0">
-              <div>
+          <DialogContent
+            showCloseButton={false}
+            className="max-w-4xl h-[80vh] p-0 overflow-hidden bg-background border-border/40 flex flex-col gap-0"
+          >
+            <DialogHeader className="p-4 pr-14 border-b border-border/10 flex flex-row items-start justify-between shrink-0 space-y-0">
+              <div className="min-w-0 flex-1">
                 <DialogTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                  <Navigation className="w-4 h-4 text-primary animate-pulse" /> 
-                  Visualização de Rota
+                  <Navigation className="w-4 h-4 text-primary shrink-0" />
+                  {selectedRoute?.name || 'Visualização de Rota'}
                 </DialogTitle>
-                <DialogDescription className="text-[10px] font-bold uppercase text-muted-foreground">
-                  Trajeto programado e progresso das visitas
+                <DialogDescription className="text-[10px] font-bold uppercase text-muted-foreground mt-1">
+                  {selectedRoute?.representative} · {selectedRoute?.date ? new Date(selectedRoute.date + 'T12:00:00').toLocaleDateString('pt-BR') : ''}
                 </DialogDescription>
               </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={closeMapDialog}>
+              <DialogClose
+                className="absolute right-4 top-4 rounded-full h-8 w-8 flex items-center justify-center opacity-70 ring-offset-background transition-opacity hover:opacity-100 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
                 <X className="w-4 h-4" />
-              </Button>
+                <span className="sr-only">Fechar</span>
+              </DialogClose>
             </DialogHeader>
             
             <div className="flex-1 relative bg-muted/20 overflow-hidden" style={{ minHeight: 0 }}>
               {loadingMap ? (
                 <div className="absolute inset-0 z-50 bg-background/60 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
                   <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <p className="text-[10px] font-black uppercase tracking-widest text-primary">Gerando mapa da rota...</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-primary">Localizando clientes no mapa...</p>
+                  <p className="text-[9px] text-muted-foreground">Corrigindo coordenadas pelo endereço cadastrado</p>
                 </div>
               ) : routeGeoJSON && (
                 <>

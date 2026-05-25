@@ -57,6 +57,7 @@ export const VisitScheduler: React.FC = () => {
 
   // Form states
   const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [routeName, setRouteName] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedWeek, setSelectedWeek] = useState<string>('');
   const [selectedClientIds, setSelectedClientIds] = useState<number[]>([]);
@@ -244,6 +245,7 @@ export const VisitScheduler: React.FC = () => {
         body: JSON.stringify({
           supervisorId: selectedUserId,
           date: selectedDate,
+          name: routeName.trim() || undefined,
           semana: selectedWeek || undefined,
           clientIds: selectedClientIds,
           startPoint,
@@ -258,6 +260,7 @@ export const VisitScheduler: React.FC = () => {
         });
         setSelectedClientIds([]);
         setSelectedUserId('');
+        setRouteName('');
         setSelectedWeek('');
       } else {
         const error = await response.json();
@@ -458,6 +461,18 @@ export const VisitScheduler: React.FC = () => {
                   <option key={u.id} value={u.id.toString()}>{u.full_name || u.username}</option>
                 ))}
               </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Nome do Roteiro</Label>
+              <Input
+                placeholder="Ex: Roteiro Norte — Maio"
+                value={routeName}
+                onChange={(e) => setRouteName(e.target.value)}
+                maxLength={120}
+                className="h-10 text-xs bg-background/50 border-border/85 focus-visible:ring-1 focus-visible:ring-primary/50"
+              />
+              <p className="text-[9px] text-muted-foreground">Opcional. Se vazio, será gerado automaticamente.</p>
             </div>
 
             <div className="space-y-1.5">

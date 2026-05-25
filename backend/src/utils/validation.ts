@@ -104,6 +104,12 @@ export const createCycleSchema = z.object({
   supervisor_user_id: z.number().int().positive('Supervisor obrigatório'),
 });
 
+export const updateVisitRouteSchema = z.object({
+  name: z.string().min(1, 'Nome obrigatório').max(120).optional(),
+  route_date: z.string().min(1, 'Data inválida').optional(),
+  semana: z.string().max(50).optional().nullable(),
+});
+
 // ─── Client Schemas ───────────────────────────────────────────────────────────
 
 export const createClienteSchema = z.object({
