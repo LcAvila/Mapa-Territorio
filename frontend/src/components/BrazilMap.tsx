@@ -1,4 +1,4 @@
-import { RotateCcw, Loader, Layers, Wind } from "lucide-react";
+import { RotateCcw, Loader, Layers } from "lucide-react";
 import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import { useEffect, useCallback, useRef, useState, useMemo } from "react";
 import {
@@ -79,7 +79,7 @@ function MapController({ center, zoom, flyToLocation, selectedUF }: { center: [n
     // E se não estivermos já num nível de zoom detalhado (evita resetar zoom manual)
     if (!hasFlyTo && map.getZoom() < 8) {
       if (selectedUF || isFirst.current) {
-        map.flyTo(center, zoom, { duration: 1.5, easeLinearity: 0.25 });
+        map.setView(center, zoom, { animate: false });
         isFirst.current = false;
       }
     }
@@ -93,10 +93,7 @@ function MapController({ center, zoom, flyToLocation, selectedUF }: { center: [n
         // Use a small timeout to ensure map is ready and not fighting other animations
         const timer = setTimeout(() => {
           try {
-            map.flyTo([lat, lon], flyToLocation.zoom || 14, {
-              duration: 2.5,
-              easeLinearity: 0.1
-            });
+            map.setView([lat, lon], flyToLocation.zoom || 14, { animate: false });
           } catch (e) {
             map.setView([lat, lon], flyToLocation.zoom || 14);
           }
@@ -252,14 +249,13 @@ function ZoomToFeature({
       const layer = L.geoJSON(geoJson as Parameters<typeof L.geoJSON>[0]);
       const bounds = layer.getBounds();
       if (bounds.isValid()) {
-        map.flyToBounds(bounds, {
+        map.fitBounds(bounds, {
           padding: [50, 50],
-          duration: 2.0,
-          easeLinearity: 0.5,
+          animate: false,
           maxZoom: maxZoom
         });
         // Ensure map is correctly aligned after transition
-        setTimeout(() => map.invalidateSize(), 2100);
+        setTimeout(() => map.invalidateSize(), 100);
       }
     } catch { /* ignore */ }
   }, [geoJson, map, maxZoom, skipIfZoomed]);
@@ -285,109 +281,54 @@ function HeatmapLayer({ points }: { points: [number, number, number][] }) {
 
 
 
-// ─── Wind Animation Overlay ──────────────────────────────────────────────────
-function WindZoomAnimation() {
-  const map = useMap();
-  const [zoomType, setZoomType] = useState<'in' | 'out' | null>(null);
-  const lastZoomRef = useRef(map.getZoom());
-
-  useEffect(() => {
-    // zoomstart é disparado no INÍCIO da animação do Leaflet
-    const handleZoomStart = () => {
-      // Infelizmente o Leaflet não nos dá o zoom de destino no zoomstart facilmente.
-      // Mas para flyTo e flyToBounds (zoom automático), podemos detectar a intenção.
-      // Como alternativa robusta, vamos escutar 'zoomstart' e tentar inferir 
-      // ou apenas disparar a animação visual que dura o tempo do flyTo.
-      
-      // Para fins de animação durante o zoom, o ideal é detectar a mudança de zoom 
-      // assim que ela começa.
-      const currentZoom = map.getZoom();
-      
-      // Como o zoomstart acontece ANTES da mudança, usamos um pequeno hack:
-      // Se o mapa está animando (flyTo), o zoom final será diferente.
-      // Para simplificar e garantir que aconteça DURANTE, vamos usar 'zoomstart'.
-      // Mas para saber se é IN ou OUT no início, precisamos de uma referência externa.
-      
-      // Melhor abordagem: Escutar 'movestart' e checar se há animação de zoom.
-    };
-
-    const handleZoomAnim = (e: L.LeafletEvent) => {
-      const zoomEvent = e as any;
-      if (zoomEvent.zoom > lastZoomRef.current) {
-        setZoomType('in');
-      } else if (zoomEvent.zoom < lastZoomRef.current) {
-        setZoomType('out');
-      }
-      lastZoomRef.current = zoomEvent.zoom;
-      
-      const timer = setTimeout(() => setZoomType(null), 1200);
-      return () => clearTimeout(timer);
-    };
-
-    // 'zoomanim' é disparado frame a frame durante o flyTo/zoom animado
-    map.on('zoomanim', handleZoomAnim);
+// ─── World Mask component to highlight Brazil ────────────────────────────────
+function WorldMask({ brazilGeo, theme }: { brazilGeo: GeoJSONFeatureCollection | null; theme: string }) {
+  const maskGeo = useMemo(() => {
+    if (!brazilGeo) return null;
     
-    return () => {
-      map.off('zoomanim', handleZoomAnim);
-    };
-  }, [map]);
+    // Create a world-covering polygon with holes for Brazil states
+    const worldPolygon = [
+      [-180, -90],
+      [180, -90],
+      [180, 90],
+      [-180, 90],
+      [-180, -90]
+    ];
+
+    const holes = brazilGeo.features.map(f => {
+      if (f.geometry.type === 'Polygon') {
+        return f.geometry.coordinates;
+      } else if (f.geometry.type === 'MultiPolygon') {
+        return f.geometry.coordinates.flat(1);
+      }
+      return [];
+    }).filter(h => h.length > 0);
+
+    return {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "Polygon",
+        coordinates: [worldPolygon, ...holes.flat(1)]
+      }
+    } as any;
+  }, [brazilGeo]);
+
+  if (!maskGeo) return null;
 
   return (
-    <AnimatePresence>
-      {zoomType && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 pointer-events-none z-[10000] flex items-center justify-center overflow-hidden"
-        >
-          {/* Create multiple wind lines */}
-          {[...Array(12)].map((_, i) => (
-            <motion.div
-              key={i}
-              initial={zoomType === 'in' ? { 
-                scale: 0.5, 
-                opacity: 0,
-                x: (Math.random() - 0.5) * 200,
-                y: (Math.random() - 0.5) * 200,
-                rotate: Math.random() * 360
-              } : { 
-                scale: 2, 
-                opacity: 0,
-                x: (Math.random() - 0.5) * 1000,
-                y: (Math.random() - 0.5) * 1000,
-                rotate: Math.random() * 360
-              }}
-              animate={{ 
-                scale: zoomType === 'in' ? 3 : 0.2,
-                opacity: [0, 0.5, 0],
-                x: zoomType === 'in' ? (Math.random() - 0.5) * 2000 : 0,
-                y: zoomType === 'in' ? (Math.random() - 0.5) * 2000 : 0,
-              }}
-              transition={{ 
-                duration: 0.8, 
-                ease: "easeOut",
-                delay: Math.random() * 0.2 
-              }}
-              className="absolute"
-            >
-              <Wind 
-                size={40 + Math.random() * 60} 
-                className="text-primary/30 blur-[1px]" 
-                strokeWidth={1}
-              />
-            </motion.div>
-          ))}
-          
-          {/* Radial "Speed Lines" effect */}
-          <motion.div 
-            initial={{ scale: zoomType === 'in' ? 0.8 : 1.2, opacity: 0 }}
-            animate={{ scale: zoomType === 'in' ? 1.5 : 0.5, opacity: [0, 0.2, 0] }}
-            className="absolute inset-0 border-[40px] border-primary/10 rounded-full blur-3xl"
-          />
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <Pane name="maskPane" style={{ zIndex: 50 }}>
+      <GeoJSON 
+        data={maskGeo} 
+        style={{
+          fillColor: "#000000", // Dark black shadow
+          fillOpacity: theme === 'light' ? 0.65 : 0.45,
+          color: "transparent",
+          weight: 0
+        }}
+        interactive={false}
+      />
+    </Pane>
   );
 }
 
@@ -478,7 +419,7 @@ export default function BrazilMap({
   const MAP_THEMES = {
     'dark': { label: 'Escuro', url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', opacity: 0.4 },
     'dark-labels': { label: 'Escuro + Labels', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', opacity: 0.5 },
-    'light': { label: 'Claro', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', opacity: 1.0 },
+    'light': { label: 'Claro', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', opacity: 0.35 },
     'satellite': { label: 'Satélite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opacity: 1.0 },
     'osm': { label: 'OpenStreetMap', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', opacity: 1.0 },
   } as const;
@@ -571,11 +512,11 @@ export default function BrazilMap({
 
     if (!isAllowed) {
       return {
-        fillColor: "hsl(220, 15%, 5%)",
+        fillColor: "#f1f5f9",
         weight: 0.1,
         opacity: 0,
         color: "transparent",
-        fillOpacity: 0,
+        fillOpacity: 0.5,
         interactive: false
       };
     }
@@ -599,18 +540,24 @@ export default function BrazilMap({
       }
     }
 
+    // Estilos base por tema para melhorar contraste
+    const isLightTheme = mapTheme === 'light';
+    const baseFillColor = isLightTheme ? "#ffffff" : "#334155"; // Escuro usa slate-700 original
+    const baseStrokeColor = isLightTheme ? "#64748b" : "#475569"; // Bordas sutis no escuro
+    const baseFillOpacity = isLightTheme ? 1.0 : 0.8;
+
     return {
-      fillColor: isSelected ? "hsl(168, 70%, 45%)" : "hsl(220, 15%, 25%)",
-      weight: isSelected ? 2 : 1.5,
+      fillColor: isSelected ? "hsl(168, 70%, 45%)" : baseFillColor,
+      weight: isSelected ? 2 : (isLightTheme ? 1.5 : 1.0),
       opacity: 1,
-      color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : "hsl(220, 15%, 35%)",
-      fillOpacity: isSelected ? 0.15 : 0.6,
+      color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : baseStrokeColor,
+      fillOpacity: isSelected ? 0.15 : baseFillOpacity,
     };
-  }, [selectedUF, isMapMoving, showUsuarios, apiTerritories, apiUsers, role, effectiveAssignedStates]);
+  }, [selectedUF, isMapMoving, showUsuarios, apiTerritories, apiUsers, role, effectiveAssignedStates, mapTheme]);
 
   const municipioStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
-    const blank = { fillColor: "hsl(220, 15%, 20%)", weight: 1, opacity: 0.6, color: "hsl(220, 15%, 28%)", fillOpacity: 0.4 };
+    const blank = { fillColor: "#f8fafc", weight: 1, opacity: 0.8, color: "#e2e8f0", fillOpacity: 0.7 };
     if (!selectedUF) return blank;
 
     const codArea = f?.properties?.codarea;
@@ -647,14 +594,14 @@ export default function BrazilMap({
       : userIds[0];
 
     if (filtroUsuario && !matchedUserId && !showUsuarios) {
-      return { fillColor: "hsl(220, 15%, 15%)", weight: 0.5, opacity: 0.3, color: "hsl(220, 15%, 20%)", fillOpacity: 0.2 };
+      return { fillColor: "#f1f5f9", weight: 0.5, opacity: 0.3, color: "#cbd5e1", fillOpacity: 0.2 };
     }
 
     const user = getUserById(matchedUserId!, apiUsers);
     if (!user) return blank;
 
     if (mostrarVagos && !user.isVago) {
-      return { fillColor: "hsl(220, 15%, 15%)", weight: 0.5, opacity: 0.3, color: "hsl(220, 15%, 20%)", fillOpacity: 0.2 };
+      return { fillColor: "#f1f5f9", weight: 0.5, opacity: 0.3, color: "#cbd5e1", fillOpacity: 0.2 };
     }
     const color = getUserColor(user);
     return {
@@ -679,7 +626,7 @@ export default function BrazilMap({
       fillColor: "transparent" as const,
       weight: isSel ? 2 : 0.5,
       opacity: isSel ? 1 : 0.2,
-      color: isSel && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : "hsl(220, 15%, 25%)",
+      color: isSel && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : "#cbd5e1",
       fillOpacity: 0,
       interactive: isAllowed 
     };
@@ -758,10 +705,13 @@ export default function BrazilMap({
     (layer as L.Path).on({
       mouseover: (e) => {
         const currentStyle = stateStyle(f);
+        const isLightTheme = mapTheme === 'light';
+        
         e.target.setStyle({ 
           color: 'hsl(var(--admin-sidebar-accent))', 
-          fillOpacity: Math.max(0.3, currentStyle.fillOpacity + 0.1), 
-          weight: 2.5 
+          fillColor: isLightTheme ? 'hsl(168, 70%, 80%)' : currentStyle.fillColor,
+          fillOpacity: isLightTheme ? 0.6 : Math.max(0.3, (currentStyle.fillOpacity || 0) + 0.1), 
+          weight: 3
         });
         e.target.bindTooltip(uf.nome, { sticky: true }).openTooltip();
       },
@@ -964,7 +914,10 @@ export default function BrazilMap({
         boxZoom={true}
         keyboard={true}
         attributionControl={false}
-        style={{ background: "hsl(220, 20%, 8%)" }}
+        zoomAnimation={false}
+        fadeAnimation={false}
+        markerZoomAnimation={false}
+        style={{ background: "#f8fafc" }}
         minZoom={minZoom}
         maxBounds={maxBounds}
         maxBoundsViscosity={1.0}
@@ -975,8 +928,6 @@ export default function BrazilMap({
           onMoveStart={() => setIsMapMoving(true)}
           onMoveEnd={() => setIsMapMoving(false)}
         />
-        {/* Wind Animation Overlay */}
-        <WindZoomAnimation />
 
         <MapEventHandler
           onBackgroundClick={() => {
@@ -993,12 +944,18 @@ export default function BrazilMap({
         {!neighborhoodGeo && munGeo && <ZoomToFeature geoJson={munGeo} maxZoom={15} skipIfZoomed={true} />}
         {!neighborhoodGeo && !munGeo && stateGeo && <ZoomToFeature geoJson={stateGeo} maxZoom={ufInfo?.zoom || 7} skipIfZoomed={true} />}
 
-        <TileLayer
-          key={mapTheme}
-          url={MAP_THEMES[mapTheme].url}
-          attribution=""
-          opacity={MAP_THEMES[mapTheme].opacity}
-        />
+        {/* World Shadow Mask (Only in light theme) */}
+        {mapTheme === 'light' && statesGeo && <WorldMask brazilGeo={statesGeo} theme={mapTheme} />}
+
+        <Pane name="backgroundTilePane" style={{ zIndex: 10 }}>
+          <TileLayer
+            key={mapTheme}
+            url={MAP_THEMES[mapTheme].url}
+            attribution=""
+            opacity={MAP_THEMES[mapTheme].opacity}
+            pane="backgroundTilePane"
+          />
+        </Pane>
 
         {/* Search Result Polygon Highlight */}
         {searchResultGeo && (
