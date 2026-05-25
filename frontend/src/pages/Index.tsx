@@ -16,11 +16,11 @@ import RoutingPanel from "@/components/RoutingPanel";
 import { useApiUsers, useApiClientes, useApiTerritories, Cliente, SearchSuggestion, GeoJSONFeature, SystemUser } from "@/hooks/use-api-data";
 import { RouteWaypoint } from "@/hooks/use-routing";
 import Loader from "@/components/Loader";
-import { HelpCircle, MapPinned, Play, Navigation } from "lucide-react";
+import { HelpCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { API_BASE_URL } from "@/lib/api-base";
 import { buildAssignedStates, assignedStatesKey } from "@/lib/user-territory";
-import { Card, CardContent } from "@/components/ui/card";
+
 import { Button } from "@/components/ui/button";
 
 const normalizeName = (s: string) => 
@@ -33,31 +33,7 @@ const normalizeName = (s: string) =>
 
   const { data: apiTerritories = [], isLoading: loadingTerritories } = useApiTerritories(!!token);
 
-  // Check for active routes today
-  const [activeRoute, setActiveRoute] = useState<any>(null);
 
-  useEffect(() => {
-    if (token && userId) {
-      const today = new Date().toISOString().split('T')[0];
-      fetch(`${API_BASE_URL}/api/visit-route/summary`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          // Find route for today for this user
-          // Note: In a real app, we'd have a specific endpoint for "my-routes"
-          // But for now we filter from summary if available
-          const myRoute = data.find(r => 
-            r.date === today && 
-            (r.status === 'em_execucao' || r.status === 'pending')
-          );
-          if (myRoute) setActiveRoute(myRoute);
-        }
-      })
-      .catch(err => console.error("Error fetching my routes:", err));
-    }
-  }, [token, userId]);
 
   const effectiveAssignedStates = useMemo(() => {
     if (role === 'admin') return [];
@@ -651,67 +627,7 @@ const normalizeName = (s: string) =>
         )}
       </main>
 
-      {/* Active Route Notification Widget */}
-      <AnimatePresence>
-        {activeRoute && (
-          <motion.div 
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            className="fixed bottom-24 right-6 z-[1000] w-72 pointer-events-auto"
-          >
-            <Card className="border-primary/40 bg-card/95 backdrop-blur-xl shadow-2xl overflow-hidden ring-1 ring-primary/20">
-              <div className="h-1 w-full bg-primary animate-pulse" />
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20">
-                    <MapPinned className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">Roteiro Ativo</h4>
-                    <p className="text-xs font-bold text-foreground truncate">
-                      {activeRoute.total_stops} paradas agendadas para hoje
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-primary transition-all duration-500" 
-                          style={{ width: `${activeRoute.completion_rate}%` }}
-                        />
-                      </div>
-                      <span className="text-[9px] font-black text-muted-foreground uppercase">
-                        {activeRoute.completion_rate}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2 mt-4">
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    className="h-9 text-[10px] font-black uppercase tracking-tighter"
-                    onClick={() => setActiveRoute(null)}
-                  >
-                    Ignorar
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    className="h-9 text-[10px] font-black uppercase tracking-tighter gap-1.5 shadow-lg shadow-primary/20"
-                    onClick={() => navigate(`/roteiro/${activeRoute.id}`)}
-                  >
-                    {activeRoute.status === 'em_execucao' ? (
-                      <><Play className="w-3 h-3" /> Continuar</>
-                    ) : (
-                      <><Navigation className="w-3 h-3" /> Iniciar</>
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
 
       {/* Right-click context menu */}
       {contextMenu && (

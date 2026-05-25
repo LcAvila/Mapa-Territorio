@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
@@ -16,13 +16,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
-// Lazy load do mapa para evitar problemas de SSR/Performance
-const MapContainer = React.lazy(() => import('react-leaflet').then(m => ({ default: m.MapContainer })));
-const TileLayer = React.lazy(() => import('react-leaflet').then(m => ({ default: m.TileLayer })));
-const GeoJSON = React.lazy(() => import('react-leaflet').then(m => ({ default: m.GeoJSON })));
-const Marker = React.lazy(() => import('react-leaflet').then(m => ({ default: m.Marker })));
-const Popup = React.lazy(() => import('react-leaflet').then(m => ({ default: m.Popup })));
-
 interface RouteSummary {
   id: number;
   name: string;
@@ -32,6 +25,109 @@ interface RouteSummary {
   completed_stops: number;
   status: string;
   completion_rate: number;
+}
+
+/**
+ * Componente que renderiza o mapa Leaflet de forma imperativa (sem react-leaflet MapContainer),
+ * evitando o erro "Map container is already initialized" que ocorre quando o React
+ * re-monta o componente (Strict Mode, Dialog Presence, etc.).
+ */
+function RouteMapView({ geoJSON }: { geoJSON: any }) {
+  const mapRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current || !geoJSON) return;
+
+    let map: any = null;
+
+    // Importar leaflet dinamicamente
+    const initMap = async () => {
+      const L = (await import('leaflet')).default;
+      await import('leaflet/dist/leaflet.css');
+
+      // Certificar que o container não tem mapa vinculado
+      const container = containerRef.current;
+      if (!container) return;
+      
+      // Limpar qualquer instância anterior do Leaflet neste container
+      if ((container as any)._leaflet_id) {
+        delete (container as any)._leaflet_id;
+      }
+
+      // Determinar o centro
+      const startFeature = geoJSON.features.find((f: any) => f.properties.type === 'start');
+      const stopFeature = geoJSON.features.find((f: any) => f.properties.type === 'stop');
+      const centerCoords = startFeature?.geometry.coordinates || stopFeature?.geometry.coordinates || [-47.9297, -15.7797];
+      const center: [number, number] = [centerCoords[1], centerCoords[0]];
+
+      map = L.map(container, { zoomControl: false }).setView(center, 13);
+      mapRef.current = map;
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+
+      // Linha da Rota
+      const routeLine = geoJSON.features.find((f: any) => f.properties.type === 'route_line');
+      if (routeLine) {
+        L.geoJSON(routeLine, {
+          style: { color: '#3b82f6', weight: 5, opacity: 0.6, dashArray: '10, 10' }
+        }).addTo(map);
+      }
+
+      // Fix default marker icon issue com bundlers
+      const defaultIcon = L.icon({
+        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+      });
+
+      // Marcadores de Paradas
+      const markers = geoJSON.features.filter((f: any) => f.properties.type !== 'route_line');
+      markers.forEach((f: any) => {
+        const marker = L.marker(
+          [f.geometry.coordinates[1], f.geometry.coordinates[0]],
+          { icon: defaultIcon }
+        ).addTo(map);
+
+        const typeLabel = f.properties.type === 'start' ? 'Início' : `Parada #${f.properties.sequence}`;
+        const nameLabel = f.properties.label || f.properties.city || 'Localização';
+        const statusHtml = f.properties.status
+          ? `<span style="display:inline-block;margin-top:6px;padding:1px 6px;border:1px solid #ccc;border-radius:4px;font-size:8px;font-weight:800;text-transform:uppercase;">${f.properties.status}</span>`
+          : '';
+
+        marker.bindPopup(`
+          <div style="padding:4px;">
+            <p style="font-size:10px;font-weight:900;text-transform:uppercase;color:hsl(var(--primary));margin-bottom:4px;">${typeLabel}</p>
+            <p style="font-size:12px;font-weight:700;">${nameLabel}</p>
+            ${statusHtml}
+          </div>
+        `);
+      });
+
+      // Invalidar tamanho após o mapa ser montado no DOM do Dialog
+      setTimeout(() => {
+        map?.invalidateSize();
+      }, 200);
+    };
+
+    initMap();
+
+    return () => {
+      if (map) {
+        map.remove();
+        map = null;
+      }
+      mapRef.current = null;
+    };
+  }, [geoJSON]);
+
+  return <div ref={containerRef} style={{ height: '100%', width: '100%' }} />;
 }
 
 export const SupervisorRoutesPanel: React.FC = () => {
@@ -101,6 +197,7 @@ export const SupervisorRoutesPanel: React.FC = () => {
   const fetchRouteGeoJSON = async (id: number) => {
     try {
       setLoadingMap(true);
+      setRouteGeoJSON(null);
       setSelectedRouteId(id);
       const response = await fetch(`${API_BASE_URL}/api/visit-route/${id}/geojson`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -118,14 +215,10 @@ export const SupervisorRoutesPanel: React.FC = () => {
     }
   };
 
-  const getMarkerColor = (feature: any) => {
-    const type = feature.properties?.type;
-    const status = feature.properties?.status;
-    if (type === 'start') return '#3b82f6'; // Blue
-    if (status === 'visitada') return '#10b981'; // Green
-    if (status === 'em_rota' || status === 'visitando') return '#f59e0b'; // Amber
-    return '#6b7280'; // Gray
-  };
+  const closeMapDialog = useCallback(() => {
+    setSelectedRouteId(null);
+    setRouteGeoJSON(null);
+  }, []);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -272,105 +365,65 @@ export const SupervisorRoutesPanel: React.FC = () => {
       </Card>
 
       {/* Modal do Mapa tipo Waze */}
-      <Dialog open={!!selectedRouteId} onOpenChange={(open) => !open && setSelectedRouteId(null)}>
-        <DialogContent className="max-w-4xl h-[80vh] p-0 overflow-hidden bg-background border-border/40">
-          <DialogHeader className="p-4 border-b border-border/10 flex flex-row items-center justify-between">
-            <div>
-              <DialogTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                <Navigation className="w-4 h-4 text-primary animate-pulse" /> 
-                Visualização de Rota
-              </DialogTitle>
-              <DialogDescription className="text-[10px] font-bold uppercase text-muted-foreground">
-                Trajeto programado e progresso das visitas
-              </DialogDescription>
-            </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setSelectedRouteId(null)}>
-              <X className="w-4 h-4" />
-            </Button>
-          </DialogHeader>
-          
-          <div className="flex-1 relative bg-muted/20">
-            {loadingMap ? (
-              <div className="absolute inset-0 z-50 bg-background/60 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Gerando mapa da rota...</p>
+      {selectedRouteId !== null && (
+        <Dialog open onOpenChange={(open) => {
+          if (!open) closeMapDialog();
+        }}>
+          <DialogContent className="max-w-4xl h-[80vh] p-0 overflow-hidden bg-background border-border/40 flex flex-col gap-0">
+            <DialogHeader className="p-4 border-b border-border/10 flex flex-row items-center justify-between shrink-0">
+              <div>
+                <DialogTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                  <Navigation className="w-4 h-4 text-primary animate-pulse" /> 
+                  Visualização de Rota
+                </DialogTitle>
+                <DialogDescription className="text-[10px] font-bold uppercase text-muted-foreground">
+                  Trajeto programado e progresso das visitas
+                </DialogDescription>
               </div>
-            ) : routeGeoJSON && (
-              <Suspense fallback={<div className="h-full w-full flex items-center justify-center"><Loader2 className="animate-spin" /></div>}>
-                <MapContainer 
-                  center={
-                    routeGeoJSON.features.find((f: any) => f.properties.type === 'start')?.geometry.coordinates.slice().reverse() || 
-                    routeGeoJSON.features.find((f: any) => f.properties.type === 'stop')?.geometry.coordinates.slice().reverse() || 
-                    [-15.7797, -47.9297]
-                  } 
-                  zoom={13} 
-                  style={{ height: '100%', width: '100%' }}
-                  zoomControl={false}
-                >
-                  <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  />
-                  
-                  {/* Linha da Rota */}
-                  <GeoJSON 
-                    data={routeGeoJSON.features.find((f: any) => f.properties.type === 'route_line')} 
-                    style={{ color: '#3b82f6', weight: 5, opacity: 0.6, dashArray: '10, 10' }}
-                  />
-
-                  {/* Marcadores de Paradas */}
-                  {routeGeoJSON.features.filter((f: any) => f.properties.type !== 'route_line').map((f: any, i: number) => (
-                    <Marker 
-                      key={i} 
-                      position={[f.geometry.coordinates[1], f.geometry.coordinates[0]]}
-                    >
-                      <Popup className="custom-popup">
-                        <div className="p-1">
-                          <p className="text-[10px] font-black uppercase text-primary mb-1">
-                            {f.properties.type === 'start' ? 'Início' : `Parada #${f.properties.sequence}`}
-                          </p>
-                          <p className="text-xs font-bold text-foreground">
-                            {f.properties.label || f.properties.city || 'Localização'}
-                          </p>
-                          {f.properties.status && (
-                            <Badge variant="outline" className="mt-2 text-[8px] uppercase font-black">
-                              {f.properties.status}
-                            </Badge>
-                          )}
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-                </MapContainer>
-                
-                {/* Overlay Informativo Estilo Waze */}
-                <div className="absolute bottom-6 left-6 right-6 z-[1000] flex gap-3 overflow-x-auto pb-2 no-scrollbar">
-                  {routeGeoJSON.features
-                    .filter((f: any) => f.properties.type === 'stop')
-                    .sort((a: any, b: any) => a.properties.sequence - b.properties.sequence)
-                    .map((stop: any) => (
-                      <Card key={stop.properties.sequence} className="min-w-[180px] bg-card/90 backdrop-blur-md border-border/40 shadow-2xl shrink-0 ring-1 ring-white/10">
-                        <CardContent className="p-3">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${
-                              stop.properties.status === 'visitada' ? 'bg-green-500/20 text-green-500' : 'bg-primary/20 text-primary'
-                            }`}>
-                              {stop.properties.sequence}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-[10px] font-black uppercase truncate">{stop.properties.city}</p>
-                              <p className="text-[8px] font-bold text-muted-foreground uppercase">{stop.properties.status}</p>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={closeMapDialog}>
+                <X className="w-4 h-4" />
+              </Button>
+            </DialogHeader>
+            
+            <div className="flex-1 relative bg-muted/20 overflow-hidden" style={{ minHeight: 0 }}>
+              {loadingMap ? (
+                <div className="absolute inset-0 z-50 bg-background/60 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <p className="text-[10px] font-black uppercase tracking-widest text-primary">Gerando mapa da rota...</p>
                 </div>
-              </Suspense>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+              ) : routeGeoJSON && (
+                <>
+                  <RouteMapView geoJSON={routeGeoJSON} />
+                  
+                  {/* Overlay Informativo Estilo Waze */}
+                  <div className="absolute bottom-6 left-6 right-6 z-[1000] flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+                    {routeGeoJSON.features
+                      .filter((f: any) => f.properties.type === 'stop')
+                      .sort((a: any, b: any) => a.properties.sequence - b.properties.sequence)
+                      .map((stop: any) => (
+                        <Card key={stop.properties.sequence} className="min-w-[180px] bg-card/90 backdrop-blur-md border-border/40 shadow-2xl shrink-0 ring-1 ring-white/10">
+                          <CardContent className="p-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${
+                                stop.properties.status === 'visitada' ? 'bg-green-500/20 text-green-500' : 'bg-primary/20 text-primary'
+                              }`}>
+                                {stop.properties.sequence}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase truncate">{stop.properties.city}</p>
+                                <p className="text-[8px] font-bold text-muted-foreground uppercase">{stop.properties.status}</p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };

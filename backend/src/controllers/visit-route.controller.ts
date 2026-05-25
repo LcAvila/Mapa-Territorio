@@ -14,8 +14,8 @@ export const startRoute = async (req: Request, res: Response) => {
 
 export const createManualRoute = async (req: Request, res: Response) => {
   try {
-    const { supervisorId, date, clientIds, startPoint, startLat, startLng } = req.body;
-    console.log('[CREATE_MANUAL_ROUTE] Payload:', { supervisorId, date, clientIdsLength: clientIds?.length });
+    const { supervisorId, date, semana, clientIds, startPoint, startLat, startLng } = req.body;
+    console.log('[CREATE_MANUAL_ROUTE] Payload:', { supervisorId, date, semana, clientIdsLength: clientIds?.length });
     
     if (!supervisorId || !date || !clientIds || !Array.isArray(clientIds)) {
       return res.status(400).json({ message: 'Dados incompletos para criação do roteiro.' });
@@ -23,6 +23,7 @@ export const createManualRoute = async (req: Request, res: Response) => {
     const result = await visitService.createManualRoute({
       supervisorId: Number(supervisorId),
       date: new Date(date),
+      semana: semana ? String(semana) : undefined,
       clientIds: clientIds.map(Number),
       startPoint,
       startLat: startLat ? Number(startLat) : undefined,

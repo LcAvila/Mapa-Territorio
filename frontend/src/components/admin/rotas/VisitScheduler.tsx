@@ -1,12 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import React, { useState, useEffect } from 'react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Calendar as CalendarIcon, 
-  Users, 
   Search, 
   Plus, 
   MapPin, 
@@ -15,10 +14,10 @@ import {
   ArrowRight,
   User as UserIcon,
   Trash2,
-  Filter,
   Sparkles,
   Home,
-  Navigation
+  Navigation,
+  Bookmark
 } from 'lucide-react';
 import { API_BASE_URL } from '@/lib/api-base';
 import { toast } from 'sonner';
@@ -59,6 +58,7 @@ export const VisitScheduler: React.FC = () => {
   // Form states
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedWeek, setSelectedWeek] = useState<string>('');
   const [selectedClientIds, setSelectedClientIds] = useState<number[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterUF, setFilterUF] = useState<string>('all');
@@ -96,6 +96,8 @@ export const VisitScheduler: React.FC = () => {
   useEffect(() => {
     if (selectedUserId) {
       fetchSuggestions(selectedUserId);
+    } else {
+      setSuggestions([]);
     }
   }, [selectedUserId]);
 
@@ -149,7 +151,7 @@ export const VisitScheduler: React.FC = () => {
 
   const filteredClientes = clientes.filter(c => {
     const matchesSearch = c.nome_cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         c.cidade.toLowerCase().includes(searchTerm.toLowerCase());
+                          c.cidade.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesUF = filterUF === 'all' || c.uf === filterUF;
     const matchesCity = filterCity === 'all' || c.cidade === filterCity;
     
@@ -219,7 +221,6 @@ export const VisitScheduler: React.FC = () => {
       let lat = currentCoords?.lat;
       let lng = currentCoords?.lng;
 
-      // Se o ponto for atual mas não tivermos as coordenadas ainda, tentamos capturar
       if (startPoint === 'current' && !lat) {
         if (navigator.geolocation) {
           try {
@@ -243,6 +244,7 @@ export const VisitScheduler: React.FC = () => {
         body: JSON.stringify({
           supervisorId: selectedUserId,
           date: selectedDate,
+          semana: selectedWeek || undefined,
           clientIds: selectedClientIds,
           startPoint,
           startLat: lat,
@@ -251,11 +253,12 @@ export const VisitScheduler: React.FC = () => {
       });
 
       if (response.ok) {
-        toast.success('Roteiro criado e enviado para o representante!', {
-          description: 'Ele receberá uma notificação no painel principal.'
+        toast.success('Roteiro criado com sucesso!', {
+          description: 'A lista foi ordenada de forma inteligente pelo percurso mais curto.'
         });
         setSelectedClientIds([]);
         setSelectedUserId('');
+        setSelectedWeek('');
       } else {
         const error = await response.json();
         toast.error(error.message || 'Erro ao criar roteiro.');
@@ -269,56 +272,62 @@ export const VisitScheduler: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="flex items-center justify-center p-12 w-full h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-xs text-muted-foreground font-black uppercase tracking-widest">Carregando painel...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 p-4 md:p-6 animate-in fade-in duration-500">
+    <div className="flex flex-col xl:flex-row gap-6 p-4 md:p-6 w-full max-w-7xl mx-auto">
+      {/* Coluna Principal: Clientes */}
       <div className="flex-1 space-y-6 min-w-0">
-        <Card className="border-border/40 shadow-xl overflow-hidden bg-card/30 backdrop-blur-md">
-          <CardHeader className="pb-4 border-b border-border/40 bg-muted/20">
+        <Card className="border border-border/40 shadow-xl overflow-hidden bg-card/40 backdrop-blur-xl rounded-2xl">
+          <CardHeader className="pb-4 border-b border-border/20 bg-muted/10">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="space-y-1">
-                <CardTitle className="text-base font-bold flex items-center gap-2">
+                <CardTitle className="text-base font-black uppercase tracking-wider flex items-center gap-2 text-foreground">
                   <MapPin className="w-4 h-4 text-primary" />
                   Agendamento de Visitas
                 </CardTitle>
-                <div className="flex items-center gap-4 mt-2">
-                  <div className="flex items-center gap-1.5 opacity-60">
-                    <span className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] flex items-center justify-center font-black">1</span>
-                    <span className="text-[9px] font-black uppercase tracking-widest">Filtrar Equipe</span>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[9px] flex items-center justify-center font-black">1</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Filtrar Equipe</span>
                   </div>
-                  <div className="w-4 h-px bg-border/40" />
-                  <div className="flex items-center gap-1.5 opacity-60">
-                    <span className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] flex items-center justify-center font-black">2</span>
-                    <span className="text-[9px] font-black uppercase tracking-widest">Selecionar Clientes</span>
+                  <div className="hidden sm:block w-3 h-px bg-border/40" />
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[9px] flex items-center justify-center font-black">2</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Selecionar Clientes</span>
                   </div>
-                  <div className="w-4 h-px bg-border/40" />
-                  <div className="flex items-center gap-1.5 opacity-60">
-                    <span className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] flex items-center justify-center font-black">3</span>
-                    <span className="text-[9px] font-black uppercase tracking-widest">Gerar Roteiro</span>
+                  <div className="hidden sm:block w-3 h-px bg-border/40" />
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[9px] flex items-center justify-center font-black">3</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Definir Semana</span>
                   </div>
                 </div>
               </div>
             </div>
           </CardHeader>
+          
           <CardContent className="p-0">
-            <div className="p-4 bg-muted/10 border-b border-border/10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Filtros Responsivos */}
+            <div className="p-4 bg-muted/5 border-b border-border/20 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-center">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                 <Input 
                   placeholder="Buscar cliente..." 
-                  className="pl-9 h-10 text-xs bg-background/50" 
+                  className="pl-9 h-10 text-xs bg-background/50 border-border/80 focus-visible:ring-1 focus-visible:ring-primary/50" 
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
               
               <select
-                className="h-10 px-3 bg-background/50 border border-border rounded-md text-xs outline-none focus:ring-1 focus:ring-primary/40"
+                className="w-full h-10 px-3 bg-background/50 border border-border/80 rounded-md text-xs outline-none focus:ring-1 focus:ring-primary/40 transition-colors hover:bg-background/80"
                 value={filterUF}
                 onChange={(e) => { setFilterUF(e.target.value); setFilterCity('all'); }}
               >
@@ -329,7 +338,7 @@ export const VisitScheduler: React.FC = () => {
               </select>
 
               <select
-                className="h-10 px-3 bg-background/50 border border-border rounded-md text-xs outline-none focus:ring-1 focus:ring-primary/40"
+                className="w-full h-10 px-3 bg-background/50 border border-border/80 rounded-md text-xs outline-none focus:ring-1 focus:ring-primary/40 transition-colors hover:bg-background/80"
                 value={filterCity}
                 onChange={(e) => setFilterCity(e.target.value)}
               >
@@ -339,19 +348,24 @@ export const VisitScheduler: React.FC = () => {
                 ))}
               </select>
 
-              <Button variant="ghost" className="h-10 text-[10px] font-black uppercase tracking-widest gap-2" onClick={() => {setSearchTerm(''); setFilterUF('all'); setFilterCity('all');}}>
-                <Trash2 className="w-3 h-3" /> Limpar
+              <Button 
+                variant="ghost" 
+                className="h-10 text-[9px] font-black uppercase tracking-widest gap-2 hover:bg-destructive/10 hover:text-destructive transition-all" 
+                onClick={() => {setSearchTerm(''); setFilterUF('all'); setFilterCity('all');}}
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Limpar Filtros
               </Button>
             </div>
 
+            {/* Tabela Responsiva */}
             <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-card sticky top-0 z-10 border-b border-border/20 shadow-sm">
+              <table className="w-full text-left border-collapse min-w-[500px]">
+                <thead className="bg-muted/10 sticky top-0 z-10 border-b border-border/20">
                   <tr>
                     <th className="p-4 w-12 text-center">
                       <input 
                         type="checkbox" 
-                        className="rounded border-border/40"
+                        className="rounded border-border/40 cursor-pointer text-primary focus:ring-primary/40"
                         checked={filteredClientes.length > 0 && filteredClientes.every(c => selectedClientIds.includes(c.id_cliente))}
                         onChange={(e) => {
                           if (e.target.checked) {
@@ -367,41 +381,49 @@ export const VisitScheduler: React.FC = () => {
                         }}
                       />
                     </th>
-                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground border-b border-border/10">Cliente</th>
-                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground border-b border-border/10">Localização</th>
+                    <th className="p-4 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cliente</th>
+                    <th className="p-4 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Bairro</th>
+                    <th className="p-4 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cidade / UF</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/10">
-                  {filteredClientes.map((client) => (
-                    <tr 
-                      key={client.id_cliente} 
-                      className={`hover:bg-primary/5 cursor-pointer transition-colors ${selectedClientIds.includes(client.id_cliente) ? 'bg-primary/5' : ''}`}
-                      onClick={() => toggleClient(client.id_cliente)}
-                    >
-                      <td className="p-4 text-center">
-                        <Checkbox 
-                          checked={selectedClientIds.includes(client.id_cliente)} 
-                          onCheckedChange={() => toggleClient(client.id_cliente)}
-                          className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                        />
-                      </td>
-                      <td className="p-4">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold text-foreground">{client.nome_cliente}</span>
-                          <span className="text-[10px] text-muted-foreground uppercase">{client.bairro}</span>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex flex-col">
-                          <span className="text-xs text-foreground/80">{client.cidade}</span>
-                          <span className="text-[10px] text-muted-foreground uppercase">{client.uf}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredClientes.map((client) => {
+                    const isSelected = selectedClientIds.includes(client.id_cliente);
+                    return (
+                      <tr 
+                        key={client.id_cliente} 
+                        className={`hover:bg-primary/5 cursor-pointer transition-all duration-200 border-l-2 ${isSelected ? 'bg-primary/5 border-l-primary' : 'border-l-transparent'}`}
+                        onClick={() => toggleClient(client.id_cliente)}
+                      >
+                        <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <Checkbox 
+                            checked={isSelected} 
+                            onCheckedChange={() => toggleClient(client.id_cliente)}
+                            className="data-[state=checked]:bg-primary data-[state=checked]:border-primary transition-all duration-200"
+                          />
+                        </td>
+                        <td className="p-4">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-foreground transition-colors hover:text-primary">{client.nome_cliente}</span>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider bg-secondary/50 px-2 py-0.5 rounded border border-border/30">
+                            {client.bairro || 'Sem Bairro'}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex flex-col">
+                            <span className="text-xs text-foreground/80">{client.cidade}</span>
+                            <span className="text-[10px] text-muted-foreground/60 font-black uppercase">{client.uf}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {filteredClientes.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="p-12 text-center text-muted-foreground italic text-xs">
+                      <td colSpan={4} className="p-12 text-center text-muted-foreground italic text-xs">
                         Nenhum cliente encontrado com os filtros aplicados.
                       </td>
                     </tr>
@@ -413,66 +435,83 @@ export const VisitScheduler: React.FC = () => {
         </Card>
       </div>
 
-      <div className="w-full lg:w-96 flex flex-col gap-4 shrink-0">
-        <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl shrink-0">
-          <CardHeader className="pb-3 border-b border-border/10">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
+      {/* Coluna Lateral: Configurações e Resumo */}
+      <div className="w-full xl:w-96 flex flex-col gap-6 shrink-0">
+        {/* Card de Configuração */}
+        <Card className="border border-border/40 bg-card/40 backdrop-blur-xl shadow-xl rounded-2xl overflow-hidden">
+          <CardHeader className="pb-3 border-b border-border/10 bg-muted/10">
+            <CardTitle className="text-xs font-black uppercase tracking-wider flex items-center gap-2 text-foreground">
               <CalendarIcon className="w-4 h-4 text-primary" />
               Configurar Roteiro
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-4 space-y-4">
+          <CardContent className="p-5 space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-[10px] font-bold uppercase text-muted-foreground tracking-tighter">Representante</Label>
+              <Label className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Representante</Label>
               <select 
-                className="w-full h-10 px-3 bg-background/50 border border-border rounded-md text-sm outline-none focus:ring-1 focus:ring-primary/40"
+                className="w-full h-10 px-3 bg-background/50 border border-border/85 rounded-md text-xs outline-none focus:ring-1 focus:ring-primary/40 transition-colors hover:bg-background/85"
                 value={selectedUserId}
                 onChange={(e) => setSelectedUserId(e.target.value)}
               >
-                <option value="">Selecionar...</option>
+                <option value="">Selecione o Representante</option>
                 {filteredUsers.map(u => (
                   <option key={u.id} value={u.id.toString()}>{u.full_name || u.username}</option>
                 ))}
               </select>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Semana da Visita</Label>
+              <select 
+                className="w-full h-10 px-3 bg-background/50 border border-border/85 rounded-md text-xs outline-none focus:ring-1 focus:ring-primary/40 transition-colors hover:bg-background/85"
+                value={selectedWeek}
+                onChange={(e) => setSelectedWeek(e.target.value)}
+              >
+                <option value="">Nenhuma / Sem Semana definida</option>
+                <option value="Semana 1">Semana 1</option>
+                <option value="Semana 2">Semana 2</option>
+                <option value="Semana 3">Semana 3</option>
+                <option value="Semana 4">Semana 4</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase text-muted-foreground tracking-tighter">Data da Visita</Label>
+                <Label className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Data da Visita</Label>
                 <Input 
                   type="date" 
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="h-10 text-sm"
+                  className="h-10 text-xs bg-background/50 border-border/85 focus-visible:ring-1 focus-visible:ring-primary/50"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase text-muted-foreground tracking-tighter">Ponto de Partida</Label>
+                <Label className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Ponto de Partida</Label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setStartPoint('base')}
-                    className={`flex items-center justify-center gap-2 h-10 rounded-md border text-[10px] font-bold uppercase transition-all ${
+                    className={`flex items-center justify-center gap-2 h-10 rounded-md border text-[9px] font-black uppercase transition-all duration-200 ${
                       startPoint === 'base' 
-                        ? 'bg-primary/10 border-primary text-primary' 
-                        : 'bg-background border-border text-muted-foreground hover:bg-secondary/50'
+                        ? 'bg-primary/10 border-primary text-primary shadow-sm' 
+                        : 'bg-background/50 border-border text-muted-foreground hover:bg-secondary/70'
                     }`}
                   >
-                    <Home className="w-3 h-3" /> Base
+                    <Home className="w-3.5 h-3.5" /> Base
                   </button>
                   <button
                     type="button"
                     onClick={handleCaptureLocation}
                     disabled={loadingCoords}
-                    className={`flex items-center justify-center gap-2 h-10 rounded-md border text-[10px] font-bold uppercase transition-all ${
+                    className={`flex items-center justify-center gap-2 h-10 rounded-md border text-[9px] font-black uppercase transition-all duration-200 ${
                       startPoint === 'current' 
-                        ? 'bg-primary/10 border-primary text-primary' 
-                        : 'bg-background border-border text-muted-foreground hover:bg-secondary/50'
+                        ? 'bg-primary/10 border-primary text-primary shadow-sm' 
+                        : 'bg-background/50 border-border text-muted-foreground hover:bg-secondary/70'
                     }`}
                   >
                     {loadingCoords ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Navigation className="w-3.5 h-3.5" />} 
-                    {loadingCoords ? 'Capturando...' : 'Atual'}
+                    {loadingCoords ? 'Obtendo...' : 'Atual'}
                   </button>
                 </div>
               </div>
@@ -480,46 +519,52 @@ export const VisitScheduler: React.FC = () => {
 
             <div className="pt-4 border-t border-border/10">
               <Button 
-                className="w-full h-11 gap-2 font-black uppercase text-xs tracking-widest shadow-lg shadow-primary/20"
+                className="w-full h-11 gap-2 font-black uppercase text-[10px] tracking-widest shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all"
                 disabled={selectedClientIds.length === 0 || !selectedUserId || submitting}
                 onClick={handleCreateRoute}
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                Gerar Roteiro ({selectedClientIds.length})
+                Gerar Roteiro Inteligente ({selectedClientIds.length})
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Selection List Summary */}
-        <div className="flex-1 min-h-[400px] flex flex-col">
+        {/* Resumo da Ordem de Visita ou Sugestões */}
+        <div className="flex-1 flex flex-col min-h-[350px]">
           {selectedClientIds.length > 0 ? (
-            <Card className="border-primary/20 bg-primary/5 animate-in zoom-in-95 duration-300 flex-1 overflow-hidden flex flex-col shadow-lg shadow-primary/5">
-              <CardHeader className="p-3 border-b border-primary/10 shrink-0">
-                <CardTitle className="text-[10px] uppercase font-black flex items-center gap-2">
-                  <ArrowRight className="w-3 h-3" />
-                  Ordem das Visitas
+            <Card className="border border-primary/20 bg-primary/5 flex-1 overflow-hidden flex flex-col shadow-lg shadow-primary/5 rounded-2xl">
+              <CardHeader className="p-4 border-b border-primary/10 bg-primary/[0.02] shrink-0">
+                <CardTitle className="text-[10px] uppercase font-black tracking-widest flex items-center gap-2 text-primary">
+                  <ArrowRight className="w-3.5 h-3.5" />
+                  Ordem de Percurso Recomendada
                 </CardTitle>
+                <p className="text-[9px] text-muted-foreground uppercase font-black tracking-tighter mt-1">
+                  Os clientes serão ordenados do mais próximo ao mais distante.
+                </p>
               </CardHeader>
-              <CardContent className="p-0 overflow-y-auto flex-1 custom-scrollbar">
-                <div className="divide-y divide-primary/10">
+              <CardContent className="p-0 overflow-y-auto flex-1 custom-scrollbar max-h-[400px] xl:max-h-none">
+                <div className="relative pl-7 pr-3 py-3 space-y-4">
+                  {/* Linha vertical conectando os pontos */}
+                  <div className="absolute left-[23px] top-6 bottom-8 w-0.5 border-l-2 border-dashed border-primary/30 z-0" />
+                  
                   {selectedClientIds.map((id, index) => {
                     const client = clientes.find(c => c.id_cliente === id);
                     return (
-                      <div key={id} className="p-3 flex items-center justify-between gap-3 hover:bg-primary/5 transition-colors group">
+                      <div key={id} className="relative z-10 flex items-center justify-between gap-3 group">
                         <div className="flex items-center gap-3 min-w-0">
-                          <span className="w-6 h-6 shrink-0 rounded-full bg-primary/20 text-primary text-[10px] flex items-center justify-center font-black">
+                          <span className="w-6 h-6 shrink-0 rounded-full bg-primary text-white text-[10px] flex items-center justify-center font-black shadow-md shadow-primary/30">
                             {index + 1}
                           </span>
                           <div className="min-w-0">
-                            <p className="text-[10px] font-black uppercase truncate group-hover:text-primary transition-colors">{client?.nome_cliente}</p>
-                            <p className="text-[9px] text-muted-foreground font-bold uppercase">{client?.cidade} - {client?.uf}</p>
+                            <p className="text-[10px] font-black uppercase truncate group-hover:text-primary transition-colors text-foreground">{client?.nome_cliente}</p>
+                            <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-tight">{client?.cidade} - {client?.uf}</p>
                           </div>
                         </div>
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-7 w-7 text-destructive shrink-0 hover:bg-destructive/10"
+                          className="h-7 w-7 text-destructive shrink-0 hover:bg-destructive/10 rounded-full"
                           onClick={() => toggleClient(id)}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -531,55 +576,57 @@ export const VisitScheduler: React.FC = () => {
               </CardContent>
             </Card>
           ) : (
-            <Card className="border-border/40 bg-card/30 backdrop-blur-sm flex-1 overflow-hidden flex flex-col shadow-xl">
-              <CardHeader className="p-4 border-b border-border/10 shrink-0 flex flex-row items-center justify-between bg-muted/20">
-                <CardTitle className="text-[10px] uppercase font-black flex items-center gap-2 tracking-widest">
+            <Card className="border border-border/40 bg-card/40 backdrop-blur-xl flex-1 overflow-hidden flex flex-col shadow-xl rounded-2xl">
+              <CardHeader className="p-4 border-b border-border/10 shrink-0 flex flex-row items-center justify-between bg-muted/10">
+                <CardTitle className="text-[10px] uppercase font-black flex items-center gap-2 tracking-widest text-foreground">
                   <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" /> 
-                  Sugestão de Visita
+                  Sugestões Inteligentes
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   {suggestions.length > 0 && (
                     <Button 
                       variant="ghost" 
                       size="sm" 
-                      className="h-7 px-2.5 text-[9px] font-black uppercase tracking-tighter bg-primary/5 hover:bg-primary/10 text-primary"
+                      className="h-7 px-2.5 text-[8px] font-black uppercase tracking-tighter bg-primary/5 hover:bg-primary/10 text-primary rounded-full transition-all"
                       onClick={() => {
                         const ids = suggestions.map(s => s.id_cliente);
                         setSelectedClientIds(prev => Array.from(new Set([...prev, ...ids])));
                       }}
                     >
-                      Selecionar Tudo
+                      Adicionar Todas
                     </Button>
                   )}
                   {loadingSuggestions && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />}
                 </div>
               </CardHeader>
-              <CardContent className="p-0 overflow-y-auto flex-1 custom-scrollbar">
+              <CardContent className="p-0 overflow-y-auto flex-1 custom-scrollbar max-h-[400px] xl:max-h-none">
                 {!selectedUserId ? (
-                  <div className="p-12 text-center opacity-40 flex flex-col items-center justify-center h-full">
-                    <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
-                      <UserIcon className="w-8 h-8" />
+                  <div className="p-12 text-center opacity-50 flex flex-col items-center justify-center h-full min-h-[250px]">
+                    <div className="w-12 h-12 bg-muted/50 rounded-full flex items-center justify-center mb-3 border border-border/20">
+                      <UserIcon className="w-6 h-6 text-muted-foreground" />
                     </div>
-                    <p className="text-[10px] font-black uppercase tracking-widest max-w-[150px] leading-relaxed">Selecione um representante para ver sugestões</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest max-w-[170px] leading-relaxed text-muted-foreground">
+                      Selecione um representante para carregar as melhores sugestões
+                    </p>
                   </div>
                 ) : suggestions.length === 0 && !loadingSuggestions ? (
-                  <div className="p-12 text-center opacity-40 flex flex-col items-center justify-center h-full">
-                    <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mb-4">
-                      <CheckCircle2 className="w-8 h-8 text-green-500" />
+                  <div className="p-12 text-center opacity-50 flex flex-col items-center justify-center h-full min-h-[250px]">
+                    <div className="w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center mb-3 border border-green-500/20">
+                      <CheckCircle2 className="w-6 h-6 text-green-500" />
                     </div>
-                    <p className="text-[10px] font-black uppercase tracking-widest">Tudo em dia!</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Tudo em dia para este usuário!</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-border/10">
                     {suggestions.map((s) => (
                       <div 
                         key={s.id_cliente} 
-                        className="p-4 hover:bg-primary/5 cursor-pointer transition-all group border-l-2 border-l-transparent hover:border-l-primary"
+                        className="p-4 hover:bg-primary/5 cursor-pointer transition-all duration-200 border-l-2 border-l-transparent hover:border-l-primary"
                         onClick={() => toggleClient(s.id_cliente)}
                       >
-                        <div className="flex justify-between items-start mb-2">
+                        <div className="flex justify-between items-start mb-2 gap-2">
                           <div className="min-w-0 flex-1">
-                            <p className="text-[11px] font-black uppercase truncate pr-2 group-hover:text-primary transition-colors">
+                            <p className="text-[10px] font-black uppercase truncate pr-1 group-hover:text-primary transition-colors text-foreground">
                               {s.nome_cliente}
                             </p>
                             <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-tight">
@@ -590,11 +637,12 @@ export const VisitScheduler: React.FC = () => {
                             {s.prioridade || 'Normal'}
                           </div>
                         </div>
-                        <div className="flex items-center justify-between bg-muted/30 p-2 rounded-md border border-border/10">
-                          <p className="text-[9px] text-muted-foreground font-black uppercase tracking-tighter">
+                        <div className="flex items-center justify-between bg-muted/40 p-2 rounded-md border border-border/10 mt-2">
+                          <p className="text-[8px] text-muted-foreground font-black uppercase tracking-widest flex items-center gap-1">
+                            <Bookmark className="w-3 h-3 text-primary/70" />
                             {s.reason}
                           </p>
-                          <div className="flex items-center gap-1.5 text-primary">
+                          <div className="flex items-center gap-1 text-primary">
                             <span className="text-[8px] font-black uppercase opacity-0 group-hover:opacity-100 transition-opacity">Adicionar</span>
                             <Plus className="w-3.5 h-3.5" />
                           </div>

@@ -168,6 +168,7 @@ model RouteSequence {
   id                     Int                  @id @default(autoincrement())
   route_cycle_id         Int?
   week_id                Int?
+  semana                 String?
   supervisor_user_id     Int
   route_date             DateTime?
   start_lat              Float?

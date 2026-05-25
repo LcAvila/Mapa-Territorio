@@ -275,7 +275,7 @@ export class RoutePlanningService {
     const waypoints = sequence.items.map(item => ({
       lat: item.stop_lat || 0,
       lng: item.stop_lng || 0,
-      label: item.clientSnapshot.client_name
+      label: item.clientSnapshot?.client_name || 'Sem Nome'
     }));
 
     // 1. Otimizar sequência
@@ -349,17 +349,20 @@ export class RoutePlanningService {
       orderBy: { created_at: 'desc' }
     });
 
-    return sequences.map(s => ({
-      id: s.id,
-      name: `Roteiro #${s.id}`,
-      representative: s.supervisor?.full_name || 'Sem Supervisor',
-      date: s.created_at.toISOString().split('T')[0],
-      total_stops: s.total_visits,
-      completed_stops: s.items.filter(i => i.status === 'visitada').length,
-      status: s.optimization_status,
-      completion_rate: s.total_visits > 0 
-        ? Math.round((s.items.filter(i => i.status === 'visitada').length / s.total_visits) * 100) 
-        : 0
-    }));
+    return sequences.map(s => {
+      const totalVisits = s.total_visits || 0;
+      return {
+        id: s.id,
+        name: `Roteiro #${s.id}`,
+        representative: s.supervisor?.full_name || 'Sem Supervisor',
+        date: s.created_at.toISOString().split('T')[0],
+        total_stops: totalVisits,
+        completed_stops: s.items.filter(i => i.status === 'visitada').length,
+        status: s.optimization_status,
+        completion_rate: totalVisits > 0 
+          ? Math.round((s.items.filter(i => i.status === 'visitada').length / totalVisits) * 100) 
+          : 0
+      };
+    });
   }
 }

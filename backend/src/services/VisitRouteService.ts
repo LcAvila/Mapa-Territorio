@@ -128,6 +128,7 @@ export class VisitRouteService {
   async createManualRoute(data: { 
     supervisorId: number, 
     date: Date, 
+    semana?: string,
     clientIds: number[],
     startPoint?: 'base' | 'current',
     startLat?: number,
@@ -138,11 +139,64 @@ export class VisitRouteService {
       where: { id_cliente: { in: data.clientIds } }
     });
 
+    // Sort clients by distance to optimize route sequence (Nearest Neighbor)
+    let sortedClients: typeof clients = [];
+    const remainingClients = [...clients];
+    
+    // Determine start coordinates
+    let currentLat = data.startLat;
+    let currentLng = data.startLng;
+    
+    // If no start coordinates provided, try to find a client with coordinates as starting point
+    if (currentLat === undefined || currentLng === undefined) {
+      const firstWithCoords = remainingClients.find(c => c.latitude !== null && c.longitude !== null);
+      if (firstWithCoords) {
+        currentLat = firstWithCoords.latitude!;
+        currentLng = firstWithCoords.longitude!;
+      }
+    }
+    
+    // Nearest neighbor algorithm
+    while (remainingClients.length > 0) {
+      if (currentLat !== undefined && currentLng !== undefined) {
+        let nearestIndex = -1;
+        let minDistance = Infinity;
+        
+        for (let i = 0; i < remainingClients.length; i++) {
+          const c = remainingClients[i];
+          if (c.latitude !== null && c.longitude !== null) {
+            const dist = this.calculateDistance(currentLat, currentLng, c.latitude, c.longitude);
+            if (dist < minDistance) {
+              minDistance = dist;
+              nearestIndex = i;
+            }
+          }
+        }
+        
+        if (nearestIndex !== -1) {
+          const nearestClient = remainingClients.splice(nearestIndex, 1)[0];
+          sortedClients.push(nearestClient);
+          currentLat = nearestClient.latitude!;
+          currentLng = nearestClient.longitude!;
+        } else {
+          // No more clients with coordinates, append remaining
+          sortedClients = [...sortedClients, ...remainingClients];
+          break;
+        }
+      } else {
+        // No starting coords and no clients have coords, just take them as is
+        sortedClients = [...sortedClients, ...remainingClients];
+        break;
+      }
+    }
+
     // 2. Criar a sequência principal
     const sequence = await prisma.routeSequence.create({
       data: {
         supervisor_user_id: data.supervisorId,
         route_date: data.date,
+        // @ts-ignore
+        semana: data.semana,
         total_visits: clients.length,
         optimization_status: 'pending',
         start_lat: data.startLat,
@@ -152,7 +206,7 @@ export class VisitRouteService {
     });
 
     // 3. Criar os itens do roteiro
-    const items = clients.map((c, index) => ({
+    const items = sortedClients.map((c, index) => ({
       route_sequence_id: sequence.id,
       sequence_number: index + 1,
       client_id: c.id_cliente,
@@ -200,6 +254,7 @@ export class VisitRouteService {
         items: {
           include: { 
             clientSnapshot: true,
+            // @ts-ignore
             client: {
               select: {
                 nome_cliente: true,
