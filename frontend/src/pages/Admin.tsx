@@ -757,6 +757,7 @@ export default function Admin() {
 
   // ── Brand / Personalização ────────────────────────────────────────────────
   const [brandLogo, setBrandLogo] = useState<string>(() => localStorage.getItem('brand_logo') || '/Logo.png');
+  const [brandLogoDark, setBrandLogoDark] = useState<string>(() => localStorage.getItem('brand_logo_dark') || '');
   const [brandName, setBrandName] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Território');
   const [brandNameDraft, setBrandNameDraft] = useState<string>(() => localStorage.getItem('brand_name') || 'Mapa Território');
   const [brandLogoHeightLogin, setBrandLogoHeightLogin] = useState<number>(() => Number(localStorage.getItem('brand_logo_height_login')) || 80);
@@ -825,6 +826,10 @@ export default function Admin() {
         if (settings.brand_logo) {
           setBrandLogo(settings.brand_logo);
           localStorage.setItem('brand_logo', settings.brand_logo);
+        }
+        if (settings.brand_logo_dark) {
+          setBrandLogoDark(settings.brand_logo_dark);
+          localStorage.setItem('brand_logo_dark', settings.brand_logo_dark);
         }
         if (settings.brand_name) {
           setBrandName(settings.brand_name);
@@ -930,6 +935,36 @@ export default function Admin() {
     reader.readAsDataURL(file);
   };
 
+  const handleLogoDarkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Selecione um arquivo de imagem'); return; }
+    if (file.size > 2 * 1024 * 1024) { toast.error('Imagem muito grande (máx. 2 MB)'); return; }
+    
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const b64 = ev.target?.result as string;
+      try {
+        const res = await fetch(`${API}/api/admin/settings`, {
+          method: 'PUT',
+          headers: authHeaders,
+          body: JSON.stringify({ brand_logo_dark: b64 })
+        });
+        if (res.ok) {
+          setBrandLogoDark(b64);
+          localStorage.setItem('brand_logo_dark', b64);
+          toast.success('Logo do modo escuro atualizada!');
+          window.dispatchEvent(new Event('storage'));
+        } else {
+          toast.error('Erro ao salvar logo no servidor');
+        }
+      } catch (error) {
+        toast.error('Erro de conexão ao salvar logo');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSaveBrandName = async () => {
     const name = brandNameDraft.trim() || 'Mapa Território';
     try {
@@ -966,6 +1001,24 @@ export default function Admin() {
       }
     } catch {
       toast.error('Erro ao resetar logo');
+    }
+  };
+
+  const handleRemoveLogoDark = async () => {
+    try {
+      const res = await fetch(`${API}/api/admin/settings`, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify({ brand_logo_dark: '' })
+      });
+      if (res.ok) {
+        setBrandLogoDark('');
+        localStorage.removeItem('brand_logo_dark');
+        toast.success('Logo do modo escuro removida');
+        window.dispatchEvent(new Event('storage'));
+      }
+    } catch {
+      toast.error('Erro ao remover logo');
     }
   };
 
@@ -3316,8 +3369,11 @@ export default function Admin() {
               systemTab={systemTab}
               setSystemTab={setSystemTab}
               brandLogo={brandLogo}
+              brandLogoDark={brandLogoDark}
               handleLogoUpload={handleLogoUpload}
+              handleLogoDarkUpload={handleLogoDarkUpload}
               handleRemoveLogo={handleRemoveLogo}
+              handleRemoveLogoDark={handleRemoveLogoDark}
               brandLogoHeightLogin={brandLogoHeightLogin}
               setBrandLogoHeightLogin={setBrandLogoHeightLogin}
               brandLogoHeightNavbar={brandLogoHeightNavbar}

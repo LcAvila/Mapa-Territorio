@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from '@/lib/api-base';
 import { buildAssignedStates } from '@/lib/user-territory';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function Login() {
     const [username, setUsername] = useState('');
@@ -18,7 +19,10 @@ export default function Login() {
 
     const [brandName, setBrandName] = useState(localStorage.getItem('brand_name') || 'Mapa Território');
     const [brandLogo, setBrandLogo] = useState(localStorage.getItem('brand_logo') || '/Logo.png');
+    const [brandLogoDark, setBrandLogoDark] = useState(localStorage.getItem('brand_logo_dark') || '');
     const [brandLogoHeight, setBrandLogoHeight] = useState(Number(localStorage.getItem('brand_logo_height_login')) || 80);
+
+    const { theme } = useTheme();
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -29,6 +33,13 @@ export default function Login() {
                     if (settings.brand_logo) {
                         setBrandLogo(settings.brand_logo);
                         localStorage.setItem('brand_logo', settings.brand_logo);
+                    }
+                    if (settings.brand_logo_dark) {
+                        setBrandLogoDark(settings.brand_logo_dark);
+                        localStorage.setItem('brand_logo_dark', settings.brand_logo_dark);
+                    } else if (settings.brand_logo_dark === '') {
+                        setBrandLogoDark('');
+                        localStorage.removeItem('brand_logo_dark');
                     }
                     if (settings.brand_name) {
                         setBrandName(settings.brand_name);
@@ -49,11 +60,14 @@ export default function Login() {
         const handleStorage = () => {
             setBrandName(localStorage.getItem('brand_name') || 'Mapa Território');
             setBrandLogo(localStorage.getItem('brand_logo') || '/Logo.png');
+            setBrandLogoDark(localStorage.getItem('brand_logo_dark') || '');
             setBrandLogoHeight(Number(localStorage.getItem('brand_logo_height_login')) || 80);
         };
         window.addEventListener('storage', handleStorage);
         return () => window.removeEventListener('storage', handleStorage);
     }, []);
+
+    const activeLogo = (theme === 'dark' && brandLogoDark) ? brandLogoDark : brandLogo;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -118,7 +132,7 @@ export default function Login() {
             {/* Left Side: Visual Space Content */}
             <section className="login-visual">
                 <header className="login-visual-brand">
-                    <img src={brandLogo} alt="Logo" className="login-brand-logo-img" style={{ height: `${brandLogoHeight}px`, width: 'auto' }} />
+                    <img src={activeLogo} alt="Logo" className="login-brand-logo-img" style={{ height: `${brandLogoHeight}px`, width: 'auto' }} />
                 </header>
 
                 <div className="login-visual-content">

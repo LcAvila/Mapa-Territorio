@@ -5,15 +5,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { 
   Settings, Palette, LayoutDashboard, Grid3X3, Trash2, Upload, 
-  ImageOff, RefreshCw, Save, Layers, Check, X 
+  ImageOff, RefreshCw, Save, Layers, Check, X, Moon 
 } from 'lucide-react';
 
 interface SystemConfigPanelProps {
   systemTab: 'visual' | 'sidebar' | 'buttons';
   setSystemTab: (tab: 'visual' | 'sidebar' | 'buttons') => void;
   brandLogo: string;
+  brandLogoDark?: string;
   handleLogoUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleLogoDarkUpload?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handleRemoveLogo: () => void;
+  handleRemoveLogoDark?: () => void;
   brandLogoHeightLogin: number;
   setBrandLogoHeightLogin: (val: number) => void;
   brandLogoHeightNavbar: number;
@@ -53,8 +56,11 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({
   systemTab,
   setSystemTab,
   brandLogo,
+  brandLogoDark,
   handleLogoUpload,
+  handleLogoDarkUpload,
   handleRemoveLogo,
+  handleRemoveLogoDark,
   brandLogoHeightLogin,
   setBrandLogoHeightLogin,
   brandLogoHeightNavbar,
@@ -141,78 +147,122 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({
               </div>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 space-y-8">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Logo Section */}
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[11px] font-black text-foreground uppercase tracking-wider">Logo da Empresa</label>
-                      <p className="text-[9px] text-muted-foreground leading-relaxed">Menu lateral e login.</p>
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                {/* Logo Section - Light & Dark Side by Side */}
+                <div className="lg:col-span-2 space-y-4">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-black text-foreground uppercase tracking-wider">Logos do Sistema</label>
+                    <p className="text-[9px] text-muted-foreground leading-relaxed">Configurações para os modos claro e escuro.</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Logo Principal */}
+                    <div className="space-y-3 p-3 rounded-xl bg-secondary/10 border border-border/20">
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-[10px] font-bold text-foreground uppercase tracking-tight">Logo Principal</label>
+                        <p className="text-[8px] text-muted-foreground">Modo Claro / Geral</p>
+                      </div>
+
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-full aspect-video rounded-lg border-2 border-dashed border-border/60 flex items-center justify-center bg-white/50 relative overflow-hidden group shadow-inner">
+                          {brandLogo ? (
+                            <>
+                              <img src={brandLogo} alt="Logo" className="w-full h-full object-contain p-2 transition-transform group-hover:scale-110 duration-500" />
+                              <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-sm">
+                                <Button variant="destructive" size="icon" className="w-7 h-7 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveLogo} title="Remover Logo">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-center p-2">
+                              <ImageOff className="w-4 h-4 text-muted-foreground/30 mx-auto mb-1" />
+                              <span className="text-[8px] font-bold text-muted-foreground uppercase opacity-40">Sem Logo</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="w-full">
+                          <input type="file" id="logo-upload-sys" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            className="w-full gap-1.5 h-8 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all text-[9px] uppercase tracking-wider" 
+                            onClick={() => document.getElementById('logo-upload-sys')?.click()}
+                          >
+                            <Upload className="w-3 h-3" /> Enviar Logo
+                          </Button>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="w-full aspect-video max-w-[180px] rounded-xl border-2 border-dashed border-border/60 flex items-center justify-center bg-secondary/20 relative overflow-hidden group shadow-inner">
-                        {brandLogo ? (
-                          <>
-                            <img src={brandLogo} alt="Logo" className="w-full h-full object-contain p-3 transition-transform group-hover:scale-110 duration-500" />
-                            <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-sm">
-                              <Button variant="destructive" size="icon" className="w-8 h-8 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveLogo} title="Remover Logo">
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="text-center p-3">
-                            <ImageOff className="w-5 h-5 text-muted-foreground/30 mx-auto mb-1" />
-                            <span className="text-[9px] font-bold text-muted-foreground uppercase opacity-40">Sem Logo</span>
-                          </div>
-                        )}
+                    {/* Logo Modo Escuro */}
+                    <div className="space-y-3 p-3 rounded-xl bg-secondary/10 border border-border/20">
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-[10px] font-bold text-foreground uppercase tracking-tight">Logo Dark</label>
+                        <p className="text-[8px] text-muted-foreground">Modo Escuro (Opcional)</p>
                       </div>
-                      
-                      <div className="w-full">
-                        <input type="file" id="logo-upload-sys" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          className="w-full gap-2 h-9 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all text-[10px] uppercase tracking-wider" 
-                          onClick={() => document.getElementById('logo-upload-sys')?.click()}
-                        >
-                          <Upload className="w-3 h-3" /> Enviar Logo
-                        </Button>
+
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-full aspect-video rounded-lg border-2 border-dashed border-border/60 flex items-center justify-center bg-slate-900 relative overflow-hidden group shadow-inner">
+                          {brandLogoDark ? (
+                            <>
+                              <img src={brandLogoDark} alt="Logo Dark" className="w-full h-full object-contain p-2 transition-transform group-hover:scale-110 duration-500" />
+                              <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-sm">
+                                <Button variant="destructive" size="icon" className="w-7 h-7 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveLogoDark} title="Remover Logo Dark">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-center p-2">
+                              <ImageOff className="w-4 h-4 text-muted-foreground/30 mx-auto mb-1" />
+                              <span className="text-[8px] font-bold text-muted-foreground uppercase opacity-40">Usando Padrão</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="w-full">
+                          <input type="file" id="logo-dark-upload-sys" accept="image/*" className="hidden" onChange={handleLogoDarkUpload} />
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            className="w-full gap-1.5 h-8 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all text-[9px] uppercase tracking-wider" 
+                            onClick={() => document.getElementById('logo-dark-upload-sys')?.click()}
+                          >
+                            <Moon className="w-3 h-3" /> Enviar Dark
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Ajuste de Tamanhos da Logo */}
-                  <div className="p-4 rounded-xl bg-secondary/20 border border-border/40 space-y-5">
-                    <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <div className="p-3 rounded-xl bg-secondary/5 border border-border/10 space-y-3">
                       <div className="flex items-center justify-between">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-foreground">Tamanho: Tela de Login</Label>
+                        <Label className="text-[9px] font-black uppercase tracking-tight text-foreground/70">Altura na Login</Label>
                         <span className="text-[10px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded-md font-bold">{brandLogoHeightLogin}px</span>
                       </div>
                       <input 
                         type="range" min="40" max="300" step="5"
                         value={brandLogoHeightLogin} 
                         onChange={(e) => setBrandLogoHeightLogin(Number(e.target.value))} 
-                        className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary" 
+                        className="w-full h-1 bg-border/50 rounded-lg appearance-none cursor-pointer accent-primary" 
                       />
-                      <p className="text-[8px] text-muted-foreground leading-tight italic">Ajusta a altura da logo centralizada na página de entrada.</p>
                     </div>
 
-                    <div className="h-px bg-border/40" />
-
-                    <div className="space-y-3">
+                    <div className="p-3 rounded-xl bg-secondary/5 border border-border/10 space-y-3">
                       <div className="flex items-center justify-between">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-foreground">Tamanho: Navbar</Label>
+                        <Label className="text-[9px] font-black uppercase tracking-tight text-foreground/70">Altura na Navbar</Label>
                         <span className="text-[10px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded-md font-bold">{brandLogoHeightNavbar}px</span>
                       </div>
                       <input 
                         type="range" min="20" max="80" step="2"
                         value={brandLogoHeightNavbar} 
                         onChange={(e) => setBrandLogoHeightNavbar(Number(e.target.value))} 
-                        className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary" 
+                        className="w-full h-1 bg-border/50 rounded-lg appearance-none cursor-pointer accent-primary" 
                       />
-                      <p className="text-[8px] text-muted-foreground leading-tight italic">Ajusta a altura da logo que aparece no topo do menu lateral.</p>
                     </div>
                   </div>
                 </div>
@@ -220,22 +270,22 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({
                 {/* Favicon Section */}
                 <div className="space-y-4">
                   <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-black text-foreground uppercase tracking-wider">Favicon do Sistema</label>
-                    <p className="text-[9px] text-muted-foreground leading-relaxed">Ícone da aba do navegador.</p>
+                    <label className="text-[11px] font-black text-foreground uppercase tracking-wider">Favicon</label>
+                    <p className="text-[9px] text-muted-foreground leading-relaxed">Ícone da aba.</p>
                   </div>
 
                   <div className="flex flex-col items-center gap-3">
-                    <div className="w-full aspect-video max-w-[180px] rounded-xl border-2 border-dashed border-border/60 flex items-center justify-center bg-secondary/20 relative overflow-hidden group shadow-inner">
+                    <div className="w-full aspect-video rounded-xl border-2 border-dashed border-border/60 flex items-center justify-center bg-secondary/20 relative overflow-hidden group shadow-inner">
                       <img 
                         src={brandFavicon} 
                         alt="Favicon Preview" 
-                        className="w-12 h-12 object-contain transition-transform group-hover:scale-110"
+                        className="w-10 h-10 object-contain transition-transform group-hover:scale-110"
                         onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.ico' }}
                       />
                       <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-sm">
                         {brandFavicon !== '/favicon.ico' && (
-                          <Button variant="destructive" size="icon" className="w-8 h-8 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveFavicon} title="Resetar Favicon">
-                            <Trash2 className="w-4 h-4" />
+                          <Button variant="destructive" size="icon" className="w-7 h-7 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveFavicon} title="Resetar Favicon">
+                            <Trash2 className="w-3.5 h-3.5" />
                           </Button>
                         )}
                       </div>
@@ -246,7 +296,7 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({
                       <Button 
                         variant="outline" 
                         size="sm"
-                        className="w-full gap-2 h-9 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all text-[10px] uppercase tracking-wider" 
+                        className="w-full gap-1.5 h-8 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all text-[9px] uppercase tracking-wider" 
                         onClick={() => document.getElementById('favicon-upload-sys')?.click()}
                       >
                         <Upload className="w-3 h-3" /> Mudar Favicon
@@ -258,26 +308,24 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({
                 {/* Name Section */}
                 <div className="space-y-4">
                   <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-black text-foreground uppercase tracking-wider">Nome do Sistema</label>
-                    <p className="text-[9px] text-muted-foreground leading-relaxed">Título da aba e identificação.</p>
+                    <label className="text-[11px] font-black text-foreground uppercase tracking-wider">Nome</label>
+                    <p className="text-[9px] text-muted-foreground leading-relaxed">Título do sistema.</p>
                   </div>
 
-                  <div className="space-y-4">
-                    <div className="flex flex-col gap-3">
-                      <Input 
-                        value={brandNameDraft}
-                        onChange={(e) => setBrandNameDraft(e.target.value)}
-                        placeholder="Mapa Território"
-                        className="h-10 text-xs sm:text-sm bg-background/50 border-border focus:ring-primary/20"
-                      />
-                      <Button 
-                        size="sm"
-                        className="gap-2 h-10 font-black uppercase tracking-widest text-[10px]"
-                        onClick={handleSaveBrandName}
-                      >
-                        <Save className="w-3.5 h-3.5" /> Salvar Nome
-                      </Button>
-                    </div>
+                  <div className="space-y-3">
+                    <Input 
+                      value={brandNameDraft}
+                      onChange={(e) => setBrandNameDraft(e.target.value)}
+                      placeholder="Mapa Território"
+                      className="h-9 text-[11px] bg-background/50 border-border focus:ring-primary/20"
+                    />
+                    <Button 
+                      size="sm"
+                      className="w-full gap-1.5 h-9 font-black uppercase tracking-widest text-[9px]"
+                      onClick={handleSaveBrandName}
+                    >
+                      <Save className="w-3 h-3" /> Salvar Nome
+                    </Button>
                   </div>
                 </div>
               </div>

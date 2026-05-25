@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { ThemeToggle } from "./ThemeToggle";
+import { useTheme } from "@/contexts/ThemeContext";
 import { API_BASE_URL } from "@/lib/api-base";
 import { buildAssignedStates } from "@/lib/user-territory";
 
@@ -82,8 +83,11 @@ export default function MapHeader({
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [brandLogo, setBrandLogo] = React.useState(localStorage.getItem('brand_logo') || '/Logo.png');
+  const [brandLogoDark, setBrandLogoDark] = React.useState(localStorage.getItem('brand_logo_dark') || '');
   const [brandName, setBrandName] = React.useState(localStorage.getItem('brand_name') || 'Mapa Território');
   const [brandLogoHeight, setBrandLogoHeight] = React.useState(Number(localStorage.getItem('brand_logo_height_navbar')) || 40);
+
+  const { theme } = useTheme();
 
   React.useEffect(() => {
     const fetchSettings = async () => {
@@ -94,6 +98,13 @@ export default function MapHeader({
           if (settings.brand_logo) {
             setBrandLogo(settings.brand_logo);
             localStorage.setItem('brand_logo', settings.brand_logo);
+          }
+          if (settings.brand_logo_dark) {
+            setBrandLogoDark(settings.brand_logo_dark);
+            localStorage.setItem('brand_logo_dark', settings.brand_logo_dark);
+          } else if (settings.brand_logo_dark === '') {
+            setBrandLogoDark('');
+            localStorage.removeItem('brand_logo_dark');
           }
           if (settings.brand_name) {
             setBrandName(settings.brand_name);
@@ -112,6 +123,7 @@ export default function MapHeader({
 
     const handleStorage = () => {
       setBrandLogo(localStorage.getItem('brand_logo') || '/Logo.png');
+      setBrandLogoDark(localStorage.getItem('brand_logo_dark') || '');
       setBrandName(localStorage.getItem('brand_name') || 'Mapa Território');
       setBrandLogoHeight(Number(localStorage.getItem('brand_logo_height_navbar')) || 40);
     };
@@ -204,12 +216,14 @@ export default function MapHeader({
     }
   };
 
+  const activeLogo = (theme === 'dark' && brandLogoDark) ? brandLogoDark : brandLogo;
+
   return (
     <header className="bg-card/95 backdrop-blur-sm border-b border-border px-2 md:px-4 py-2 flex items-center justify-between gap-2 md:gap-6 sticky top-0 z-[1000] shadow-sm overflow-hidden">
       {/* Logo / Brand */}
       <div className="flex items-center gap-2 shrink-0 cursor-pointer group" onClick={() => setShowAboutModal(true)}>
         <div className="relative">
-          <img src={brandLogo} alt="Logo" style={{ height: `${brandLogoHeight}px`, width: 'auto' }} className="w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
+          <img src={activeLogo} alt="Logo" style={{ height: `${brandLogoHeight}px`, width: 'auto' }} className="w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
           <div className="absolute inset-0 bg-primary/10 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
         </div>
       </div>
@@ -228,7 +242,7 @@ export default function MapHeader({
           
           <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto max-h-[70vh] custom-scrollbar">
             <div className="flex flex-col items-center text-center space-y-3 pb-4 border-b border-border">
-              <img src={brandLogo} alt="Logo" className="h-10 sm:h-12 w-auto object-contain" />
+              <img src={activeLogo} alt="Logo" className="h-10 sm:h-12 w-auto object-contain" />
               <div>
                 <h3 className="text-base sm:text-lg font-black tracking-tight text-foreground">{brandName}</h3>
                 <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Versão 2.4.0 • Enterprise</p>
