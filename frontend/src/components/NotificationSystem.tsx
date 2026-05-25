@@ -27,7 +27,7 @@ interface Notification {
 }
 
 export default function NotificationSystem() {
-  const { userId, token, tokenVersion } = useAuth();
+  const { userId, token, tokenVersion, logout } = useAuth();
   const [currentNotification, setCurrentNotification] = useState<Notification | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [sessionSeenIds, setSessionSeenIds] = useState<number[]>([]);
@@ -92,7 +92,12 @@ export default function NotificationSystem() {
           Pragma: 'no-cache',
         },
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        if (res.status === 401) {
+          logout();
+        }
+        return;
+      }
       const data = (await res.json()) as Notification[];
       // Busca a primeira notificação que o usuário ainda não viu (baseado no campo 'seen' do servidor)
       const candidate = data.find((n) => isNotificationForCurrentUser(n) && !n.seen);

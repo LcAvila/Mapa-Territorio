@@ -48,6 +48,7 @@ model User {
   email             String?
   supabase_id       String?               @unique
   userTypeId        Int?
+  canVisit          Boolean               @default(false)
   bairros           Bairro[]              @relation("UserBairros")
   blocosViagem      BlocosViagem[]
   clientes          Cliente[]             @relation("UserClientes")
@@ -97,6 +98,8 @@ model RouteCycle {
   blocks             RouteBlock[]
   exports            RouteExport[]
 
+  @@index([supervisor_user_id])
+  @@index([created_by])
   @@map("route_cycles")
 }
 
@@ -163,8 +166,8 @@ model RouteAssignment {
 
 model RouteSequence {
   id                     Int                  @id @default(autoincrement())
-  route_cycle_id         Int
-  week_id                Int
+  route_cycle_id         Int?
+  week_id                Int?
   supervisor_user_id     Int
   route_date             DateTime?
   start_lat              Float?
@@ -182,12 +185,15 @@ model RouteSequence {
   raw_response_json      Json?
   created_at             DateTime             @default(now())
 
-  cycle                  RouteCycle           @relation(fields: [route_cycle_id], references: [id], onDelete: Cascade)
-  week                   RouteCycleWeek       @relation(fields: [week_id], references: [id], onDelete: Cascade)
+  cycle                  RouteCycle?          @relation(fields: [route_cycle_id], references: [id], onDelete: Cascade)
+  week                   RouteCycleWeek?      @relation(fields: [week_id], references: [id], onDelete: Cascade)
   supervisor             User                 @relation(fields: [supervisor_user_id], references: [id])
   items                  RouteSequenceItem[]
   executionLogs          RouteExecutionLog[]
 
+  @@index([route_cycle_id])
+  @@index([week_id])
+  @@index([supervisor_user_id])
   @@map("route_sequences")
 }
 
@@ -195,8 +201,8 @@ model RouteSequenceItem {
   id                             Int                 @id @default(autoincrement())
   route_sequence_id              Int
   sequence_number                Int
-  client_snapshot_id             Int
-  client_id                      Int
+  client_snapshot_id             Int?
+  client_id                      Int?
   city                           String?
   state                          String?
   classification                 String?
@@ -210,10 +216,12 @@ model RouteSequenceItem {
   status                         String              @default("pendente") // pendente, agendada, em_rota, visitada, nao_visitada, remarcada, sem_sucesso, venda_feita
 
   sequence                       RouteSequence       @relation(fields: [route_sequence_id], references: [id], onDelete: Cascade)
-  clientSnapshot                 RouteClientSnapshot @relation(fields: [client_snapshot_id], references: [id])
+  clientSnapshot                 RouteClientSnapshot? @relation(fields: [client_snapshot_id], references: [id])
   checkins                       VisitCheckin[]
   results                        VisitResult[]
 
+  @@index([route_sequence_id])
+  @@index([client_snapshot_id])
   @@map("route_sequence_items")
 }
 
@@ -355,6 +363,8 @@ model UserPermission {
   user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, moduleId])
+  @@index([userId])
+  @@index([moduleId])
   @@map("user_permissions")
 }
 
@@ -591,6 +601,7 @@ model UserType {
   isSystemDefault Boolean  @default(false)
   updatedAt       DateTime @default(now()) @updatedAt
   isAdmin         Boolean  @default(false)
+  canVisit        Boolean  @default(false)
   icon            String   @default("User")
   users           User[]
 

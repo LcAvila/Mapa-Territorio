@@ -1,11 +1,8 @@
 /**
  * @file geocoding.ts
- * @description Esse aqui é o GPS do sistema, morou?
- * Ele pega o endereço que o usuário digitou e transforma em latitude e longitude (os números que o mapa entende).
- * Se não tiver a chave da API do HERE (o VIP das localizações), ele usa o Nominatim (do OpenStreetMap), 
- * que é 0800 mas às vezes dá uma vacilada se o endereço não tiver certinho.
- * 
- * @author Cria de Nova Iguaçu
+ * @description Geocoding service that converts addresses to coordinates.
+ * Uses HERE API (primary) or Nominatim/OSM (fallback when no API key).
+ * Includes in-memory cache and rate-limiting to comply with Nominatim usage policy.
  */
 
 import axios from 'axios';
@@ -34,67 +31,127 @@ interface HereGeocodeResponse {
   }>;
 }
 
+// ─── Geocoding Cache ──────────────────────────────────────────────────────────
+const geocodeCache = new Map<string, { result: GeocodeResult | null; expiresAt: number }>();
+const GEOCODE_CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
+const GEOCODE_CACHE_MAX = 5000;
+
+function getCacheKey(address: string): string {
+  return address.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function getCached(address: string): GeocodeResult | null | undefined {
+  const entry = geocodeCache.get(getCacheKey(address));
+  if (entry && entry.expiresAt > Date.now()) return entry.result;
+  return undefined; // undefined = not in cache
+}
+
+function setCache(address: string, result: GeocodeResult | null) {
+  if (geocodeCache.size >= GEOCODE_CACHE_MAX) {
+    const firstKey = geocodeCache.keys().next().value;
+    if (firstKey) geocodeCache.delete(firstKey);
+  }
+  geocodeCache.set(getCacheKey(address), { result, expiresAt: Date.now() + GEOCODE_CACHE_TTL });
+}
+
+// ─── Rate Limiter (Nominatim: max 1 req/sec) ─────────────────────────────────
+let lastNominatimCall = 0;
+const NOMINATIM_MIN_INTERVAL = 1100; // 1.1s to be safe
+
+async function waitForNominatimSlot(): Promise<void> {
+  const now = Date.now();
+  const elapsed = now - lastNominatimCall;
+  if (elapsed < NOMINATIM_MIN_INTERVAL) {
+    await new Promise(resolve => setTimeout(resolve, NOMINATIM_MIN_INTERVAL - elapsed));
+  }
+  lastNominatimCall = Date.now();
+}
+
+// ─── Input sanitization ───────────────────────────────────────────────────────
+function sanitizeAddress(address: string): string {
+  // Remove control characters and limit length
+  return address.replace(/[\x00-\x1f\x7f]/g, '').trim().slice(0, 500);
+}
+
 /**
- * geocodeAddress - A mágica que acha o lugar no mapa.
- * Se o endereço tiver incompleto, a chance de 'dar ruim' e não voltar nada é grande!
+ * Geocode an address to coordinates.
+ * Returns cached result if available, otherwise queries HERE or Nominatim.
  */
 export async function geocodeAddress(address: string): Promise<GeocodeResult | null> {
-  // Se tu esqueceu de colocar a chave do HERE no .env, vamos de Nominatim (que é de graça).
+  if (!address || address.trim().length < 3) return null;
+
+  const cleanAddress = sanitizeAddress(address);
+
+  // Check cache first
+  const cached = getCached(cleanAddress);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  // Use Nominatim if no HERE API key
   if (!API_KEY) {
     try {
-      console.log(`[Geocoding] Chave do HERE sumiu! Usando o 'plano B' (Nominatim) para: ${address}`);
+      await waitForNominatimSlot();
+      console.log(`[Geocoding] Using Nominatim for: ${cleanAddress}`);
       const endpoint = `https://nominatim.openstreetmap.org/search`;
       const response = await axios.get(endpoint, {
         params: {
-          q: `${address}, Brasil`,
+          q: `${cleanAddress}, Brasil`,
           format: 'json',
           limit: 1
         },
         headers: {
           'User-Agent': 'MapaTerritorio-App/1.0 (Integration)'
-        }
+        },
+        timeout: 10000
       });
       
       const items = response.data;
       if (items && items.length > 0) {
-        return {
+        const result: GeocodeResult = {
           lat: parseFloat(items[0].lat),
           lng: parseFloat(items[0].lon),
           formattedAddress: items[0].display_name
         };
+        setCache(cleanAddress, result);
+        return result;
       }
+      setCache(cleanAddress, null);
       return null;
     } catch (error) {
-      console.error('[Geocoding] Nominatim deu erro, mó climão:', error);
+      console.error('[Geocoding] Nominatim error:', error instanceof Error ? error.message : error);
       return null;
     }
   }
 
-  // Se tiver a chave do HERE (o bagulho é doido!), usa ela que é mais certeira.
+  // Use HERE API (primary)
   try {
     const response = await axios.get<HereGeocodeResponse>(GEOCODE_URL, {
       params: {
-        q: `${address}, Brasil`,
+        q: `${cleanAddress}, Brasil`,
         apiKey: API_KEY,
         in: 'countryCode:BRA',
         limit: 1
-      }
+      },
+      timeout: 10000
     });
 
     const items = response.data.items;
     if (items && items.length > 0) {
       const { lat, lng } = items[0].position;
-      return {
+      const result: GeocodeResult = {
         lat,
         lng,
         formattedAddress: items[0].address.label
       };
+      setCache(cleanAddress, result);
+      return result;
     }
 
+    setCache(cleanAddress, null);
     return null;
   } catch (error) {
-    console.error('[Geocoding] API do HERE chorou:', error);
+    console.error('[Geocoding] HERE API error:', error instanceof Error ? error.message : error);
     return null;
   }
 }
-

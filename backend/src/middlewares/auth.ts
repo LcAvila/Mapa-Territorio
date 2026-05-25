@@ -2,16 +2,50 @@ import { Request as ExRequest, Response as ExResponse, NextFunction as ExNextFun
 import { supabase, supabaseAdmin } from '../lib/supabase';
 import { prisma } from '../prisma';
 
-export interface AuthRequest extends ExRequest {
-  user?: any;
-  isHttpFallback?: boolean;
-  supabaseAdmin?: any;
+export interface AuthenticatedUser {
+  id: number;
+  username: string;
+  role: string;
+  tipo: string;
+  token_version: number;
+  permissions: Array<{ moduleId: string; canView: boolean; canEdit: boolean; module?: { id: string; name: string } }>;
+  subordinateIds: number[];
+  last_active: Date;
+  [key: string]: unknown;
 }
 
-// Simple in-memory cache for auth sessions to reduce Supabase/DB load
-// Key: token, Value: { user, expiresAt }
-const authCache = new Map<string, { user: any; expiresAt: number }>();
-const CACHE_TTL = 1000 * 60 * 5; // 5 minutes cache
+export interface AuthRequest extends ExRequest {
+  user?: AuthenticatedUser;
+  isHttpFallback?: boolean;
+  supabaseAdmin?: typeof supabaseAdmin;
+}
+
+// In-memory cache for auth sessions with size limit and automatic eviction
+const authCache = new Map<string, { user: AuthenticatedUser; expiresAt: number }>();
+const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
+const CACHE_MAX_SIZE = 500; // Max cached sessions
+
+// Periodic cleanup of expired entries (every 2 minutes)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of authCache) {
+    if (value.expiresAt <= now) authCache.delete(key);
+  }
+}, 1000 * 60 * 2);
+
+function cacheSet(token: string, user: AuthenticatedUser) {
+  // Evict oldest entries if cache is full
+  if (authCache.size >= CACHE_MAX_SIZE) {
+    const firstKey = authCache.keys().next().value;
+    if (firstKey) authCache.delete(firstKey);
+  }
+  authCache.set(token, { user, expiresAt: Date.now() + CACHE_TTL });
+}
+
+/** Invalidate cache entry (e.g. on logout or kick) */
+export function invalidateAuthCache(token: string) {
+  authCache.delete(token);
+}
 
 export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -71,14 +105,13 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
         // 2. Second attempt: Find by other fields if not found by supabase_id
         if (!foundUser) {
           console.log(`[AUTH] User not found by supabase_id, trying fallbacks...`);
-          const queryOptions: any = {
+          const queryOptions = {
             where: {
               OR: [
-                sbUser.email ? { email: { equals: sbUser.email, mode: 'insensitive' } } : null,
+                sbUser.email ? { email: { equals: sbUser.email, mode: 'insensitive' as const } } : null,
                 accessCode ? { code: accessCode } : null,
                 accessCode ? { username: accessCode } : null,
-                sbUser.email === 'avila.estudohtml@gmail.com' ? { username: 'admin' } : null
-              ].filter(Boolean) as any
+              ].filter((item): item is NonNullable<typeof item> => item !== null)
             },
             include: includeOptions
           };
@@ -104,7 +137,7 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
     } catch (err) {
       console.warn(`[AUTH] Prisma failed or timed out. Using Supabase HTTP Fallback...`);
       
-      const { data: httpUser, error: httpError } = await supabase
+      const { data: httpUser, error: httpError } = await supabaseAdmin
         .from('users')
         .select('*, permissions:user_permissions(*, module:modules(*))')
         .or(`supabase_id.eq.${sbUser.id},email.eq.${sbUser.email},code.eq.${accessCode},username.eq.${accessCode}`)
@@ -154,11 +187,8 @@ export const authenticate = async (req: AuthRequest, res: ExResponse, next: ExNe
       subordinateIds: user.managedUsers?.map((s: any) => s.id) || []
     };
 
-    // Store in cache
-    authCache.set(token, {
-      user: req.user,
-      expiresAt: Date.now() + CACHE_TTL
-    });
+    // Store in cache with size limit
+    cacheSet(token, req.user as AuthenticatedUser);
 
     // Update last_active in background (if possible), throttled to every 1 minute
     if (!req.isHttpFallback && user.id) {

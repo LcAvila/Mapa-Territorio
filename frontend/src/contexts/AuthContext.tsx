@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AuthContext } from './auth-context-core';
 import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
@@ -28,19 +28,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return stored ? Number(stored) : null;
     });
 
-    const clearLocalAuth = () => {
+    const clearLocalAuth = useCallback(() => {
         ['token', 'role', 'userId', 'userName', 'tipo', 'estado_end', 'assigned_state', 'assigned_states', 'defaultWorkspace', 'inactivityLimit', 'tokenVersion', 'lastActivityTime'].forEach(k => localStorage.removeItem(k));
         setToken(null); setRole(null); setUserId(null); setUserName(null); setTipo(null); setEstadoEnd(null); setAssignedState(null);
         setAssignedStates([]);
         setDefaultWorkspace(null); setInactivityLimit(null); setTokenVersion(null);
-    };
+    }, []);
 
-    const logout = async () => {
+    const logout = useCallback(async () => {
         // Clear local state first before signOut to avoid infinite loop in onAuthStateChange
         clearLocalAuth();
         // signOut last — this triggers onAuthStateChange but we no longer call logout() there
         await supabase.auth.signOut();
-    };
+    }, [clearLocalAuth]);
 
     useEffect(() => {
         // Initial session check
@@ -109,7 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return stored ? Number(stored) : null;
     });
 
-    const login = (newToken: string, newUserId: number, newRole: string, newUserName?: string, newTipo?: string, newEstadoEnd?: string, newDefaultWorkspace?: string, newInactivityLimit?: number, newTokenVersion?: number, newAssignedState?: string, newAssignedStates?: string[]) => {
+    const login = useCallback((newToken: string, newUserId: number, newRole: string, newUserName?: string, newTipo?: string, newEstadoEnd?: string, newDefaultWorkspace?: string, newInactivityLimit?: number, newTokenVersion?: number, newAssignedState?: string, newAssignedStates?: string[]) => {
         setToken(newToken);
         setRole(newRole);
         setUserId(newUserId);
@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (newDefaultWorkspace) localStorage.setItem('defaultWorkspace', newDefaultWorkspace);
         if (newInactivityLimit) localStorage.setItem('inactivityLimit', String(newInactivityLimit));
         if (newTokenVersion) localStorage.setItem('tokenVersion', String(newTokenVersion));
-    };
+    }, []);
 
     // Inactivity Tracker
     useEffect(() => {

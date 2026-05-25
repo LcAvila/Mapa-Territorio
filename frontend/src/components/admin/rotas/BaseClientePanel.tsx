@@ -645,7 +645,7 @@ export function BaseClientePanel({
               {/* Desktop Table View */}
               <div className="hidden lg:block">
                 <Table>
-                  <TableHeader className="bg-muted/50 sticky top-0 z-10 font-semibold backdrop-blur-sm">
+                  <TableHeader className="bg-card sticky top-0 z-10 font-semibold border-b border-border/20 shadow-sm">
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="whitespace-nowrap h-10 w-[100px]">Cod.</TableHead>
                       <TableHead className="whitespace-nowrap h-10 min-w-[250px]">Razão Social / Fantasia</TableHead>

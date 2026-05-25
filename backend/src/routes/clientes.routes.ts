@@ -14,6 +14,7 @@ import { prisma } from '../prisma';
 import { authenticate, requirePermission } from '../middlewares/auth';
 import { logUserActivity } from '../utils/logger';
 import { geocodeAddress } from '../utils/geocoding';
+import { validateBody, createClienteSchema } from '../utils/validation';
 
 const router = Router();
 
@@ -90,7 +91,7 @@ router.get('/', async (req, res) => {
       console.log(`[CLIENTES] Encontrados ${clientes.length} clientes via HTTP Fallback`);
     }
 
-    // Anotando no caderninho quem andou bisbilhotando os clientes
+    // Anotando no caderninho quem andou biobilhotando os clientes
     if (user) {
       logUserActivity(user.id, 'query', 'Usuário consultou a base de clientes', req, 'Cliente').catch(() => {});
     }
@@ -110,6 +111,11 @@ router.get('/', async (req, res) => {
 // ---------------------------------------------------------
 router.post('/', requirePermission('clientes', 'edit'), async (req, res) => {
   try {
+    const validation = validateBody(createClienteSchema, req.body);
+    if (!validation.success) {
+      return res.status(400).json({ message: 'Dados inválidos', details: validation.error });
+    }
+
     const user = (req as any).user;
     let { 
       codigo_cliente, 
@@ -209,6 +215,11 @@ router.post('/', requirePermission('clientes', 'edit'), async (req, res) => {
 // ---------------------------------------------------------
 router.put('/:id', requirePermission('clientes', 'edit'), async (req, res) => {
   try {
+    const validation = validateBody(createClienteSchema.partial(), req.body);
+    if (!validation.success) {
+      return res.status(400).json({ message: 'Dados inválidos', details: validation.error });
+    }
+
     const user = (req as any).user;
     const id = parseInt(req.params.id as string);
     let { 

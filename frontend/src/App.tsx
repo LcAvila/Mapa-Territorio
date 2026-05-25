@@ -4,11 +4,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import Profile from "./pages/Profile";
 import Ajuda from "./pages/Ajuda";
+import { RoteiroExecucao } from "./pages/RoteiroExecucao";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NotFound from "./pages/NotFound";
 import NotificationSystem from "./components/NotificationSystem";
@@ -37,32 +39,35 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="dark" storageKey="mapa-theme">
       <AuthProvider>
-        <NotificationSystem />
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-            <Routes>
-              <Route path="/login" element={<Login />} />
+        <ErrorBoundary>
+          <NotificationSystem />
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+              <Routes>
+                <Route path="/login" element={<Login />} />
 
-              <Route element={<ProtectedRoute />}>
-                <Route path="/" element={<RootRedirect />} />
-                <Route path="/admin" element={<Admin />} />
-                <Route path="/mapa" element={<Index />} />
-                <Route path="/perfil" element={<Profile />} />
-                <Route path="/ajuda" element={<Ajuda />} />
-              </Route>
+                <Route element={<ProtectedRoute />}>
+                  <Route path="/" element={<RootRedirect />} />
+                  <Route path="/admin" element={<Admin />} />
+                  <Route path="/mapa" element={<Index />} />
+                  <Route path="/perfil" element={<Profile />} />
+                  <Route path="/ajuda" element={<Ajuda />} />
+                  <Route path="/roteiro/:id" element={<RoteiroExecucao />} />
+                </Route>
 
 
-              {/* Rotas Administrativas */}
-              <Route element={<ProtectedRoute allowedRoles={['admin', 'supervisor', 'user']} />}>
-                <Route path="/admin" element={<Admin />} />
-              </Route>
+                {/* Rotas Administrativas */}
+                <Route element={<ProtectedRoute allowedRoles={['admin', 'supervisor', 'user']} />}>
+                  <Route path="/admin" element={<Admin />} />
+                </Route>
 
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </ErrorBoundary>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>

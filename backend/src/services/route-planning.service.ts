@@ -17,6 +17,29 @@ export class RoutePlanningService {
     const { name, start_date, end_date, supervisor_user_id, created_by } = data;
 
     try {
+      // Query subordinates and eligible clients outside the transaction block to reduce transaction scope and locks
+      console.log(`[ROUTE_PLANNING] Generating snapshot for supervisor ${supervisor_user_id}...`);
+      
+      const subordinates = await prisma.user.findUnique({
+        where: { id: supervisor_user_id },
+        include: { managedUsers: { select: { id: true } } }
+      });
+
+      const subordinateIds = subordinates?.managedUsers.map(u => u.id) || [];
+      console.log(`[ROUTE_PLANNING] Subordinate IDs:`, subordinateIds);
+      
+      const clients = await prisma.cliente.findMany({
+        where: {
+          OR: [
+            { userId: supervisor_user_id },
+            { userId: { in: subordinateIds } }
+          ],
+          status_ativo: true
+        }
+      });
+
+      console.log(`[ROUTE_PLANNING] Found ${clients.length} eligible clients.`);
+
       return await prisma.$transaction(async (tx) => {
         // 1. Criar o ciclo
         const cycle = await tx.routeCycle.create({
@@ -50,28 +73,6 @@ export class RoutePlanningService {
         }
 
         // 3. Gerar Snapshot de Clientes (Base Oficial)
-        console.log(`[ROUTE_PLANNING] Generating snapshot for supervisor ${supervisor_user_id}...`);
-        
-        const subordinates = await tx.user.findUnique({
-          where: { id: supervisor_user_id },
-          include: { managedUsers: { select: { id: true } } }
-        });
-
-        const subordinateIds = subordinates?.managedUsers.map(u => u.id) || [];
-        console.log(`[ROUTE_PLANNING] Subordinate IDs:`, subordinateIds);
-        
-        const clients = await tx.cliente.findMany({
-          where: {
-            OR: [
-              { userId: supervisor_user_id },
-              { userId: { in: subordinateIds } }
-            ],
-            status_ativo: true
-          }
-        });
-
-        console.log(`[ROUTE_PLANNING] Found ${clients.length} eligible clients.`);
-
         if (clients.length > 0) {
           const snapshotData = clients.map(c => ({
             route_cycle_id: cycle.id,
@@ -135,7 +136,13 @@ export class RoutePlanningService {
       'Pontual': snapshots.filter(s => s.classification === 'Pontual')
     };
 
-    const assignments: any[] = [];
+    const assignments: Array<{
+      route_cycle_id: number;
+      week_id: number;
+      client_snapshot_id: number;
+      assigned_by: number;
+      assignment_mode: string;
+    }> = [];
 
     // Lógica simplificada de distribuição equilibrada
     // 1. Estratégicos: Dividir entre semanas 1 e 2 prioritariamente
@@ -246,9 +253,23 @@ export class RoutePlanningService {
 
     if (!sequence || sequence.items.length < 2) return null;
 
+    // Validate start coordinates - warn if using fallback
+    if (!sequence.start_lat || !sequence.start_lng) {
+      console.warn(`[ROUTE_PLANNING] WARNING: Sequence ${sequenceId} has no start coordinates! ` +
+        `Supervisor ${sequence.supervisor?.full_name || sequence.supervisor_user_id} needs a base_logistica configured. ` +
+        `Cannot optimize route without a valid starting point.`);
+      
+      await prisma.routeSequence.update({
+        where: { id: sequenceId },
+        data: { optimization_status: 'failed' }
+      });
+      
+      throw new Error('Base logística não configurada para o supervisor. Configure o endereço base antes de otimizar a rota.');
+    }
+
     const startPoint = { 
-      lat: sequence.start_lat || -23.5505, // Default base se não informado
-      lng: sequence.start_lng || -46.6333 
+      lat: sequence.start_lat,
+      lng: sequence.start_lng
     };
 
     const waypoints = sequence.items.map(item => ({
@@ -278,25 +299,67 @@ export class RoutePlanningService {
         }
       });
 
-      // Atualizar itens com nova ordem e distâncias
-      for (let i = 0; i < orderedIndices.length; i++) {
-        const originalIdx = orderedIndices[i];
-        const item = sequence.items[originalIdx];
-        const section = route.sections[i]; // section i é a que chega no waypoint i+1
-
-        await tx.routeSequenceItem.update({
-          where: { id: item.id },
-          data: {
+      // Batch update items with new order and distances using raw SQL
+      if (orderedIndices.length > 0) {
+        const updates = orderedIndices.map((originalIdx, i) => {
+          const item = sequence.items[originalIdx];
+          const section = route.sections[i];
+          return {
+            id: item.id,
             sequence_number: i + 1,
-            distance_from_previous_km: section.summary.length / 1000,
-            duration_from_previous_minutes: Math.round(section.summary.duration / 60),
-            is_week_start: i === 0,
-            logistic_note: i === 0 ? `INÍCIO Semana - Sair da base` : undefined
-          }
+            distance_km: section.summary.length / 1000,
+            duration_min: Math.round(section.summary.duration / 60),
+            is_week_start: i === 0
+          };
         });
+
+        // Use CASE statement for batch update
+        const ids = updates.map(u => u.id);
+        const seqCases = updates.map(u => `WHEN ${u.id} THEN ${u.sequence_number}`).join(' ');
+        const distCases = updates.map(u => `WHEN ${u.id} THEN ${u.distance_km}`).join(' ');
+        const durCases = updates.map(u => `WHEN ${u.id} THEN ${u.duration_min}`).join(' ');
+        const weekCases = updates.map(u => `WHEN ${u.id} THEN ${u.is_week_start}`).join(' ');
+
+        await tx.$executeRawUnsafe(`
+          UPDATE "route_sequence_items" SET
+            "sequence_number" = CASE "id" ${seqCases} END,
+            "distance_from_previous_km" = CASE "id" ${distCases} END,
+            "duration_from_previous_minutes" = CASE "id" ${durCases} END,
+            "is_week_start" = CASE "id" ${weekCases} END
+          WHERE "id" IN (${ids.join(',')})
+        `);
       }
 
       return { success: true };
     });
+  }
+
+  /**
+   * Retorna um resumo dos roteiros em execução para supervisão.
+   */
+  async getSummary() {
+    const sequences = await prisma.routeSequence.findMany({
+      where: {
+        optimization_status: { in: ['completed', 'em_execucao'] }
+      },
+      include: {
+        supervisor: { select: { full_name: true } },
+        items: { select: { status: true } }
+      },
+      orderBy: { created_at: 'desc' }
+    });
+
+    return sequences.map(s => ({
+      id: s.id,
+      name: `Roteiro #${s.id}`,
+      representative: s.supervisor?.full_name || 'Sem Supervisor',
+      date: s.created_at.toISOString().split('T')[0],
+      total_stops: s.total_visits,
+      completed_stops: s.items.filter(i => i.status === 'visitada').length,
+      status: s.optimization_status,
+      completion_rate: s.total_visits > 0 
+        ? Math.round((s.items.filter(i => i.status === 'visitada').length / s.total_visits) * 100) 
+        : 0
+    }));
   }
 }

@@ -23,6 +23,16 @@ import { useApiUsers, useApiTerritories, useApiClientes, SystemUser, TerritoryAs
 import { API_BASE_URL } from "@/lib/api-base";
 import { buildAssignedStates } from "@/lib/user-territory";
 
+/** Escape HTML special characters to prevent XSS in Leaflet tooltips */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 interface BrazilMapProps {
   selectedUF: string | null;
   modo: "planejamento" | "atendimento";
@@ -198,18 +208,18 @@ function MapContextActions({
 function MapEventHandler({ onBackgroundClick, onBackgroundDblClick }: { onBackgroundClick: () => void; onBackgroundDblClick: () => void }) {
   const map = useMap();
   useEffect(() => {
-    map.on("click", (e) => {
-      // Small delay to allow click vs dblclick distinction if needed, 
-      // but here we just pass it through
+    const handleClick = () => {
       onBackgroundClick();
-    });
-    map.on("dblclick", (e) => {
+    };
+    const handleDblClick = (e: L.LeafletMouseEvent) => {
       L.DomEvent.stopPropagation(e);
       onBackgroundDblClick();
-    });
+    };
+    map.on("click", handleClick);
+    map.on("dblclick", handleDblClick);
     return () => {
-      map.off("click", onBackgroundClick);
-      map.off("dblclick", onBackgroundDblClick);
+      map.off("click", handleClick);
+      map.off("dblclick", handleDblClick);
     };
   }, [map, onBackgroundClick, onBackgroundDblClick]);
   return null;
@@ -785,14 +795,16 @@ export default function BrazilMap({
     const userDetails = userIds.map(id => {
       const u = getUserById(id, apiUsers);
       if (!u) return `ID: ${id}`;
-      return `${u.username} - ${u.full_name || u.fullName}`;
+      return escapeHtml(`${u.username} - ${u.full_name || u.fullName}`);
     });
 
+    const safeName = escapeHtml(name);
+    const safeUF = escapeHtml(selectedUF);
     const tooltipHtml = `
       <div class="p-2 space-y-1.5 min-w-[180px] text-slate-900">
         <div class="flex items-center justify-between gap-2 border-b border-slate-200 pb-1.5 mb-1">
-          <span class="font-bold text-sm text-primary-foreground bg-primary px-2 py-0.5 rounded">${name}</span>
-          <span class="text-[10px] font-bold text-slate-500">${selectedUF}</span>
+          <span class="font-bold text-sm text-primary-foreground bg-primary px-2 py-0.5 rounded">${safeName}</span>
+          <span class="text-[10px] font-bold text-slate-500">${safeUF}</span>
         </div>
         ${userIds.length > 0 ? `
           <div class="space-y-1.5">

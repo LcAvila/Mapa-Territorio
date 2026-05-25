@@ -30,21 +30,21 @@ router.get('/user-types', authenticate, async (req, res) => {
 
 // Create new user type
 router.post('/user-types', authenticate, requirePermission('settings', 'edit'), async (req: any, res) => {
-  const { name, color, icon, showInMenu, active, isAdmin } = req.body;
+  const { name, color, icon, showInMenu, active, isAdmin, canVisit } = req.body;
   if (!name) return res.status(400).json({ message: 'Nome é obrigatório' });
 
   try {
-    // @ts-ignore
+    // Usando SQL puro para evitar problemas com o Prisma Client desatualizado
     await prisma.$executeRawUnsafe(
-      `INSERT INTO "user_types" ("name", "color", "icon", "showInMenu", "active", "isAdmin", "isSystemDefault")
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      `INSERT INTO "user_types" ("name", "color", "icon", "showInMenu", "active", "isAdmin", "canVisit", "isSystemDefault")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       name, color || '#3b82f6', icon || 'User', !!showInMenu, 
-      active !== undefined ? !!active : true, !!isAdmin, false
+      active !== undefined ? !!active : true, !!isAdmin, !!canVisit, false
     );
     
-    // @ts-ignore
-    const type = await prisma.$queryRawUnsafe(`SELECT * FROM "user_types" WHERE "name" = $1`, name);
-    const createdType = Array.isArray(type) ? type[0] : null;
+    // Busca o objeto criado para retornar
+    const typeResults: any = await prisma.$queryRawUnsafe(`SELECT * FROM "user_types" WHERE "name" = $1`, name);
+    const createdType = Array.isArray(typeResults) ? typeResults[0] : null;
     
     await logUserActivity(req.user.id, 'create_user_type', `Criou tipo de usuário: ${name}`, req, 'UserType', createdType ? String(createdType.id) : 'N/A');
     res.status(201).json(createdType);
@@ -57,10 +57,10 @@ router.post('/user-types', authenticate, requirePermission('settings', 'edit'), 
 // Update user type
 router.put('/user-types/:id', authenticate, requirePermission('settings', 'edit'), async (req: any, res) => {
   const id = Number(req.params.id);
-  const { name, color, icon, showInMenu, active, isAdmin } = req.body;
+  const { name, color, icon, showInMenu, active, isAdmin, canVisit } = req.body;
 
   try {
-    // @ts-ignore
+    // Usando SQL puro para evitar problemas com o Prisma Client desatualizado
     await prisma.$executeRawUnsafe(
       `UPDATE "user_types" 
        SET "name" = COALESCE($1, "name"), 
@@ -69,9 +69,14 @@ router.put('/user-types/:id', authenticate, requirePermission('settings', 'edit'
            "showInMenu" = COALESCE($4, "showInMenu"), 
            "active" = COALESCE($5, "active"), 
            "isAdmin" = COALESCE($6, "isAdmin"),
+           "canVisit" = COALESCE($7, "canVisit"),
            "updatedAt" = NOW()
-       WHERE "id" = $7`,
-      name, color, icon, showInMenu, active, isAdmin, id
+       WHERE "id" = $8`,
+      name, color, icon, showInMenu !== undefined ? !!showInMenu : null, 
+      active !== undefined ? !!active : null, 
+      isAdmin !== undefined ? !!isAdmin : null, 
+      canVisit !== undefined ? !!canVisit : null, 
+      id
     );
 
     await logUserActivity(req.user.id, 'update_user_type', `Atualizou tipo de usuário: ${name || id}`, req, 'UserType', String(id));
@@ -280,9 +285,22 @@ router.get('/audit', requirePermission('audit', 'view'), async (req, res) => {
 // Clear audit logs (Admin only)
 router.delete('/audit/clear', requireAdmin, async (req: any, res) => {
   try {
-    await prisma.userActivity.deleteMany({});
-    await logUserActivity(req.user.id, 'clear_audit', 'Administrador limpou o histórico de auditoria', req, 'Audit');
-    res.json({ message: 'Histórico de auditoria removido com sucesso' });
+    // Require explicit confirmation to prevent accidental deletions
+    const { confirmToken, before } = req.body || {};
+    if (confirmToken !== 'CONFIRM_CLEAR_AUDIT') {
+      return res.status(400).json({ 
+        message: 'Envie confirmToken: "CONFIRM_CLEAR_AUDIT" no body para confirmar a exclusão.' 
+      });
+    }
+
+    const where: any = {};
+    if (before) {
+      where.timestamp = { lt: new Date(before) };
+    }
+
+    const deleted = await prisma.userActivity.deleteMany({ where });
+    await logUserActivity(req.user.id, 'clear_audit', `Administrador limpou ${deleted.count} registros de auditoria${before ? ` (antes de ${before})` : ''}`, req, 'Audit');
+    res.json({ message: `${deleted.count} registros de auditoria removidos com sucesso` });
   } catch (error) {
     res.status(500).json({ message: 'Erro ao limpar auditoria' });
   }
@@ -358,12 +376,17 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
       code, password, role, tipo, userTypeId, managedUserIds, full_name, photo, colorIndex, comissao, isVago, 
       telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
       cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, assigned_state, area_atuacao, base_logistica,
-      email, default_screen // Recebendo o email do frontend
+      email, default_screen, canVisit // Recebendo o email do frontend
     } = req.body;
   
   const permissions = req.body.permissions as { moduleId: string; canView: boolean; canEdit: boolean }[] | undefined;
   
   if (!code) return res.status(400).json({ message: 'Código é obrigatório' });
+
+  // Tenta garantir que a coluna existe (fallback silencioso)
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "canVisit" BOOLEAN DEFAULT false');
+  } catch (e) {}
 
   const existing = await prisma.user.findFirst({ 
     where: { code } 
@@ -375,9 +398,12 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
   try {
     // Step 1: Create in Supabase Auth via Admin API
     const authEmail = `${code}@mapaterritorio.com`;
+    if (!password || password.length < 8) {
+      return res.status(400).json({ message: 'Senha obrigatória com mínimo de 8 caracteres' });
+    }
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: authEmail,
-      password: password || 'Mapa@123',
+      password,
       email_confirm: true,
       user_metadata: { full_name, role: role || 'user' }
     });
@@ -429,38 +455,42 @@ router.post('/users', requirePermission('users', 'edit'), async (req: any, res) 
       select: PUBLIC_USER_FIELDS 
     });
 
-    // Salva o supabase_id usando Raw SQL para evitar erro de tipo/cliente preso
-    await prisma.$executeRawUnsafe('UPDATE "users" SET "supabase_id" = $1 WHERE "id" = $2', authUser.user.id, user.id);
+    // Salva o supabase_id e canVisit usando Raw SQL para evitar erro de tipo/cliente preso
+    await prisma.$executeRawUnsafe('UPDATE "users" SET "supabase_id" = $1, "canVisit" = $2 WHERE "id" = $3', authUser.user.id, !!canVisit, user.id);
 
-    // Step 3: Initialize permissions
+    // Step 3: Initialize permissions (bulk insert)
     try {
       if (permissions && permissions.length > 0) {
-        // Use custom permissions from request
-        for (const p of permissions) {
-          await prisma.$executeRawUnsafe(
-            'INSERT INTO "user_permissions" ("userId", "moduleId", "canView", "canEdit") VALUES ($1, $2, $3, $4)',
-            user.id, p.moduleId, p.canView, p.canEdit
-          );
-        }
+        const values = permissions.map((p: any, i: number) => {
+          const base = i * 4;
+          return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`;
+        }).join(', ');
+        const params = permissions.flatMap((p: any) => [user.id, p.moduleId, p.canView, p.canEdit]);
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO "user_permissions" ("userId", "moduleId", "canView", "canEdit") VALUES ${values}`,
+          ...params
+        );
       } else {
         // Fallback to default permissions for all modules
         const modules: any[] = await prisma.$queryRawUnsafe('SELECT "id" FROM "modules"');
         if (modules.length > 0) {
-          for (const m of modules) {
-             let canView = role === 'admin' || role === 'supervisor';
-             let canEdit = role === 'admin' || role === 'supervisor';
-
-             // Regra padrão: para não-admins, dashboard, clientes, territories e audit são somente visualizar
-             if (role !== 'admin' && ['dashboard', 'clientes', 'territories', 'audit', 'settings'].includes(m.id)) {
-               canView = true;
-               canEdit = false;
-             }
-
-             await prisma.$executeRawUnsafe(
-               'INSERT INTO "user_permissions" ("userId", "moduleId", "canView", "canEdit") VALUES ($1, $2, $3, $4)',
-               user.id, m.id, canView, canEdit
-             );
-          }
+          const values = modules.map((_, i) => {
+            const base = i * 4;
+            return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`;
+          }).join(', ');
+          const params = modules.flatMap((m) => {
+            let canView = role === 'admin' || role === 'supervisor';
+            let canEdit = role === 'admin' || role === 'supervisor';
+            if (role !== 'admin' && ['dashboard', 'clientes', 'territories', 'audit', 'settings'].includes(m.id)) {
+              canView = true;
+              canEdit = false;
+            }
+            return [user.id, m.id, canView, canEdit];
+          });
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO "user_permissions" ("userId", "moduleId", "canView", "canEdit") VALUES ${values}`,
+            ...params
+          );
         }
       }
     } catch (permError) {
@@ -481,7 +511,7 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
     password, role, tipo, userTypeId, managedUserIds, full_name, photo, colorIndex, comissao, isVago, 
     telefone, cpf_cnpj, birth_date, cargo, company_name, groupId,
     cep, logradouro, numero, complemento, bairro_end, cidade, estado_end, assigned_state, area_atuacao, base_logistica,
-    email, default_screen, permissions // Adicionando permissions e default_screen aqui
+    email, default_screen, permissions, canVisit // Adicionando permissions e default_screen aqui
   } = req.body;
 
   // Validação de e-mail no backend
@@ -489,10 +519,12 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
     return res.status(400).json({ message: 'O e-mail é obrigatório.' });
   }
 
+  // Tenta garantir que a coluna existe (fallback silencioso)
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "canVisit" BOOLEAN DEFAULT false');
+  } catch (e) {}
+
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return res.status(400).json({ message: 'O formato do e-mail é inválido.' });
-  }
   
   try {
     // 0. Fetch existing user with timeout and HTTP fallback
@@ -576,12 +608,17 @@ router.put('/users/:id', requirePermission('users', 'edit'), async (req: any, re
       area_atuacao,
       base_logistica,
       // @ts-ignore
-      default_screen,
+      default_screen: default_screen || undefined,
       birth_date: birth_date ? new Date(birth_date) : undefined,
       colorIndex: colorIndex !== undefined ? Number(colorIndex) : undefined,
       comissao: (comissao !== undefined && comissao !== '' && comissao !== null) ? parseFloat(String(comissao)) : (comissao === null ? null : undefined),
       isVago: isVago !== undefined ? (isVago ? 1 : 0) : undefined,
     };
+
+    // Atualiza canVisit separadamente via SQL puro para evitar erros de client desatualizado
+    if (canVisit !== undefined) {
+      await prisma.$executeRawUnsafe('UPDATE "users" SET "canVisit" = $1 WHERE "id" = $2', !!canVisit, id);
+    }
 
     // Campos que só admin pode mudar ou que tem lógica de role
     if (role) updateData.role = role;
@@ -1072,29 +1109,23 @@ router.post('/users/:id/permissions', authenticate, requirePermission('users', '
   const { permissions, role } = req.body;
 
   try {
-    // 1. Save permissions using Raw Queries to ensure persistence
+    // 1. Save permissions using bulk insert
     await prisma.$executeRawUnsafe('DELETE FROM "user_permissions" WHERE "userId" = $1', userId);
     
     if (Array.isArray(permissions) && permissions.length > 0) {
-      for (const p of permissions) {
-        await prisma.$executeRawUnsafe(
-          'INSERT INTO "user_permissions" ("userId", "moduleId", "canView", "canEdit") VALUES ($1, $2, $3, $4)',
-          userId, p.moduleId, !!p.canView, !!p.canEdit
-        );
-      }
+      const values = permissions.map((_: any, i: number) => {
+        const base = i * 4;
+        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`;
+      }).join(', ');
+      const params = permissions.flatMap((p: any) => [userId, p.moduleId, !!p.canView, !!p.canEdit]);
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "user_permissions" ("userId", "moduleId", "canView", "canEdit") VALUES ${values}`,
+        ...params
+      );
     }
 
-    // 2. Handle role update (explicit or automatic)
-    let finalRole = role;
-    
-    // Heurística de auto-promoção se não foi enviado um role específico
-    if (!finalRole) {
-      const coreModules = ['users', 'clientes', 'territories', 'notifications'];
-      const hasCoreEdit = coreModules.every(slug => 
-        permissions.find((p: any) => p.moduleId === slug)?.canEdit === true
-      );
-      if (hasCoreEdit) finalRole = 'admin';
-    }
+    // 2. Handle role update (only if explicitly provided - no auto-promotion)
+    let finalRole = role; // role must be explicitly sent by admin
 
     let roleUpdated = false;
     if (finalRole) {

@@ -186,7 +186,7 @@ export default function Profile() {
     return (
         <div className="min-h-screen bg-background">
             {/* Header */}
-            <div className="bg-card/30 backdrop-blur border-b border-border/40 px-6 py-4 flex items-center justify-between sticky top-0 z-10 transition-colors">
+            <div className="bg-background/95 backdrop-blur-sm border-b border-border/40 px-6 py-4 flex items-center justify-between sticky top-0 z-50 shadow-sm transition-colors">
                 <div className="flex items-center gap-3">
                     <button onClick={() => navigate('/')} className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-lg hover:bg-secondary/60">
                         <ArrowLeft className="w-5 h-5" />

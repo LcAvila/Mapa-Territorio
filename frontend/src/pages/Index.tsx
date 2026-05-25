@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context-core";
-import BrazilMap from "@/components/BrazilMap";
+import React from "react";
+const BrazilMap = React.lazy(() => import("@/components/BrazilMap"));
 import MapHeader from "@/components/MapHeader";
 import MapLegend from "@/components/MapLegend";
 import DetailPanel from "@/components/DetailPanel";
@@ -477,31 +478,33 @@ const normalizeName = (s: string) =>
       />
 
       <main className="flex-1 relative overflow-hidden flex">
-        <BrazilMap
-          selectedUF={selectedUF}
-        modo={modo}
-        filtroUsuario={filtroUsuario}
-        assignedStates={effectiveAssignedStates}
-        mostrarVagos={mostrarVagos}
-        onSelectUF={handleSelectUF}
-          onSelectMunicipio={handleSelectMunicipio}
-          searchQuery={searchQuery}
-          municipioCodeForBairros={municipioCodeForBairros}
-          selectedMunicipioCode={selectedMunicipio?.id}
-          selectedMunicipioName={selectedMunicipio?.nome || ""}
-          onDeactivateBairros={() => setMunicipioCodeForBairros(null)}
-          showClientes={showClientes}
-          showHeatmap={showHeatmap}
-          showUsuarios={showUsuarios}
-          onContextMenuState={handleContextMenuState}
-          onContextMenuMunicipio={handleContextMenuMunicipio}
-          flyToLocation={flyToLocation}
-          searchResultGeo={searchResultGeo}
-          selectedClients={selectedClients}
-          onSelectClients={setSelectedClients}
-          onResetMap={() => setFlyToLocation({ center: [-14.2, -51.9], zoom: 4 })}
-          onZoomToLocation={(center, zoom) => setFlyToLocation({ center, zoom })}
-        />
+        <React.Suspense fallback={<Loader />}>
+          <BrazilMap
+            selectedUF={selectedUF}
+            modo={modo}
+            filtroUsuario={filtroUsuario}
+            assignedStates={effectiveAssignedStates}
+            mostrarVagos={mostrarVagos}
+            onSelectUF={handleSelectUF}
+            onSelectMunicipio={handleSelectMunicipio}
+            searchQuery={searchQuery}
+            municipioCodeForBairros={municipioCodeForBairros}
+            selectedMunicipioCode={selectedMunicipio?.id}
+            selectedMunicipioName={selectedMunicipio?.nome || ""}
+            onDeactivateBairros={() => setMunicipioCodeForBairros(null)}
+            showClientes={showClientes}
+            showHeatmap={showHeatmap}
+            showUsuarios={showUsuarios}
+            onContextMenuState={handleContextMenuState}
+            onContextMenuMunicipio={handleContextMenuMunicipio}
+            flyToLocation={flyToLocation}
+            searchResultGeo={searchResultGeo}
+            selectedClients={selectedClients}
+            onSelectClients={setSelectedClients}
+            onResetMap={() => setFlyToLocation({ center: [-14.2, -51.9], zoom: 4 })}
+            onZoomToLocation={(center, zoom) => setFlyToLocation({ center, zoom })}
+          />
+        </React.Suspense>
 
         {/* Legend overlay - bottom left */}
         {selectedUF && (

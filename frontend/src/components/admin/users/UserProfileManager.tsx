@@ -83,6 +83,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ user, onClose, 
     area_atuacao: user.area_atuacao || '',
     base_logistica: user.base_logistica || '',
     userTypeId: user.userTypeId || '',
+    canVisit: !!user.canVisit,
     default_screen: user.default_screen || 'mapa',
     managedUserIds: (user as any).managedUsers?.map((u: any) => u.id) || []
   });
@@ -168,6 +169,7 @@ function maskCEP(val: string) {
       area_atuacao: user.area_atuacao || '',
       base_logistica: user.base_logistica || '',
       userTypeId: user.userTypeId || '',
+      canVisit: !!user.canVisit,
       default_screen: user.default_screen || 'mapa',
       managedUserIds: (user as any).managedUsers?.map((u: any) => u.id) || []
     });
@@ -648,21 +650,36 @@ function maskCEP(val: string) {
           {activeTab === 'org' && (
             <FormGrid>
               <div className="section-title">Ambiente de Trabalho</div>
-              <div className="field">
-                <Label>Área de Trabalho Padrão</Label>
-                <select 
-                  className="w-full h-10 px-3 bg-background border rounded-md text-sm"
-                  value={formData.default_screen} 
-                  onChange={e => setFormData({...formData, default_screen: e.target.value})}
-                >
-                  <option value="mapa">Mapa Principal</option>
-                  <option value="dashboard">Dashboard</option>
-                  <option value="baserotas">Base Cliente</option>
-                  <option value="territories">Territórios</option>
-                  <option value="rotas_menu">Planejamento de Áreas</option>
-                  <option value="settings">Configurações</option>
-                </select>
-                <p className="text-[10px] text-muted-foreground mt-1">Define qual tela será carregada automaticamente após o login do usuário.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6 col-span-full">
+                <div className="field">
+                  <Label>Área de Trabalho Padrão</Label>
+                  <select 
+                    className="w-full h-10 px-3 bg-background border rounded-md text-sm"
+                    value={formData.default_screen} 
+                    onChange={e => setFormData({...formData, default_screen: e.target.value})}
+                  >
+                    <option value="mapa">Mapa Principal</option>
+                    <option value="dashboard">Dashboard</option>
+                    <option value="baserotas">Base Cliente</option>
+                    <option value="territories">Territórios</option>
+                    <option value="rotas_menu">Planejamento de Áreas</option>
+                    <option value="settings">Configurações</option>
+                  </select>
+                  <p className="text-[10px] text-muted-foreground mt-1">Define qual tela será carregada automaticamente após o login do usuário.</p>
+                </div>
+
+                <div className="field">
+                  <div className="flex items-center justify-between p-4 rounded-xl border border-border/40 bg-primary/5 hover:bg-primary/10 transition-colors mt-2">
+                    <div className="space-y-0.5">
+                      <Label className="text-xs font-bold text-primary">Habilitar Visitas</Label>
+                      <p className="text-[10px] text-muted-foreground leading-tight">Permite que este usuário específico apareça no agendamento de visitas.</p>
+                    </div>
+                    <Switch 
+                      $active={formData.canVisit}
+                      onClick={() => setFormData({ ...formData, canVisit: !formData.canVisit })}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="section-title mt-4">Dados Organizacionais</div>

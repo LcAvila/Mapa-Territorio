@@ -168,6 +168,8 @@ router.post('/', authenticate, requirePermission('notifications', 'edit'), async
 
   try {
     const user = req.user;
+    if (!user) return res.status(401).json({ message: 'Não autenticado' });
+
     let finalTargetUserIds: number[] = [];
 
     // --- Lógica de Restrição por Hierarquia e Tipo ---
@@ -222,7 +224,9 @@ router.post('/', authenticate, requirePermission('notifications', 'edit'), async
 
     console.log('[NOTIFICATIONS] Insert successful');
 
-    await logUserActivity(req.user.id, 'send_notification', `Enviou alerta: ${title}`, req, 'Notification');
+    if (req.user) {
+      await logUserActivity(req.user.id, 'send_notification', `Enviou alerta: ${title}`, req, 'Notification');
+    }
     
     res.status(201).json({ message: 'Notificação enviada com sucesso' });
   } catch (error: any) {
@@ -239,7 +243,9 @@ router.post('/', authenticate, requirePermission('notifications', 'edit'), async
 router.delete('/clear', authenticate, requirePermission('notifications', 'edit'), async (req: AuthRequest, res) => {
   try {
     await prisma.$executeRawUnsafe('DELETE FROM "notifications"');
-    await logUserActivity(req.user.id, 'clear_notifications', 'Limpou o histórico de notificações', req);
+    if (req.user) {
+      await logUserActivity(req.user.id, 'clear_notifications', 'Limpou o histórico de notificações', req);
+    }
     res.json({ message: 'Histórico removido com sucesso' });
   } catch (error) {
     console.error('Error clearing notifications:', error);

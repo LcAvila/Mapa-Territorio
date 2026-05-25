@@ -188,7 +188,7 @@ import {
   Baby, UserCircle, UserCheck, UserX,
   ArrowUp, ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, ArrowUpLeft,
   Circle, Square, Triangle, Hexagon, Octagon,
-  CheckCircle, XCircle, AlertTriangle, Info, HelpCircle as HelpIcon,
+  CheckCircle, CheckCircle2, XCircle, AlertTriangle, Info, HelpCircle as HelpIcon,
   Zap as Lightning, Flame as Fire, Sparkles as Magic,
   Hash
 } from 'lucide-react';
@@ -197,7 +197,7 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger
 } from '@/components/ui/tabs';
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -219,16 +219,11 @@ import { REP_COLOR_PALETTE, getNextColorIndex, getRepColor, type SystemUser } fr
 import { UF_DATA } from '@/data/uf-codes';
 
 import { BaseClientePanel } from '../components/admin/rotas/BaseClientePanel';
-import { ClustersPanel } from '../components/admin/rotas/ClustersPanel';
-import { BlocosPanel } from '../components/admin/rotas/BlocosPanel';
-import { RoteirosPanel } from '../components/admin/rotas/RoteirosPanel';
-import { AgendaPanel } from '../components/admin/rotas/AgendaPanel';
-import { DensidadePanel } from '../components/admin/rotas/DensidadePanel';
-import { RotaSequencialPanel } from '../components/admin/rotas/RotaSequencialPanel';
-import { ResumoRoteiroPanel } from '../components/admin/rotas/ResumoRoteiroPanel';
-import { PlanningDashboard } from '../components/admin/rotas/PlanningDashboard';
-import { RotasProvider } from '../contexts/RotasContext';
-import MiniMapBrasil from '../components/admin/MiniMapBrasil';
+import { SupervisorRoutesPanel } from '../components/admin/rotas/SupervisorRoutesPanel';
+import { VisitScheduler } from '../components/admin/rotas/VisitScheduler';
+const MiniMapBrasil = React.lazy(() => import('../components/admin/MiniMapBrasil'));
+import { AuditLogsPanel } from '../components/admin/AuditLogsPanel';
+import { SystemConfigPanel } from '../components/admin/SystemConfigPanel';
 import UserProfileManager from '../components/admin/users/UserProfileManager';
 import ProfileImageCropper from '../components/admin/users/ProfileImageCropper';
 import SpaceButton from '../components/admin/SpaceButton';
@@ -267,10 +262,10 @@ interface SystemNotification { id: number; title: string; message: string; creat
 interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; ipAddress?: string; }
 interface ModulePermission { userId: number; moduleId: string; canView: boolean; canEdit: boolean; }
 
-type TabId = 'dashboard' | 'users' | 'territories' | 'groups' | 'notifications' | 'audit' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'cycles' | 'roteiro_seq' | 'resumo_roteiro' | 'user_types' | 'system' | 'reps' | `user_type_${number}`;
+type TabId = 'dashboard' | 'users' | 'territories' | 'groups' | 'notifications' | 'audit' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'cycles' | 'roteiro_seq' | 'resumo_roteiro' | 'user_types' | 'system' | 'reps' | 'visitas' | 'visitas_agendar' | `user_type_${number}`;
 
 interface NavItem {
-  id: TabId | 'settings' | 'rotas_menu' | 'users_menu' | 'ajuda';
+  id: TabId | 'settings' | 'rotas_menu' | 'users_menu' | 'visitas_menu' | 'ajuda';
   label: string;
   icon: React.ElementType;
   count?: number;
@@ -595,7 +590,7 @@ function SidebarContent({
 }
 
 export default function Admin() {
-  const { token, logout, userId, tokenVersion } = useAuth();
+  const { token, logout, userId, tokenVersion, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const quillRef = React.useRef<ReactQuill | null>(null);
 
@@ -1230,6 +1225,12 @@ export default function Admin() {
     { id: 'ajuda' as const, label: 'Ajuda', icon: HelpCircle },
     { id: 'baserotas' as const, label: 'Base Cliente', icon: Database, restrict: ['admin', 'supervisor', 'user'] },
     {
+      id: 'visitas_menu' as const, label: 'Visitas', icon: MapPinned, restrict: ['admin', 'supervisor', 'user'], subItems: [
+        { id: 'visitas' as const, label: 'Acompanhamento', icon: Activity },
+        { id: 'visitas_agendar' as const, label: 'Agendamento', icon: Calendar },
+      ]
+    },
+    {
       id: 'users_menu' as const, label: 'Usuários', icon: UsersRound, restrict: ['admin'], subItems: [
         { id: 'users' as const, label: 'Todos os Usuários', icon: UserPlus, count: users.length },
         // Dynamic User Types submenus
@@ -1242,18 +1243,6 @@ export default function Admin() {
             count: users.filter(u => u.userTypeId === t.id).length
           })),
         { id: 'groups' as const, label: 'Grupos', icon: UsersRound, count: groups.length },
-      ]
-    },
-    {
-      id: 'rotas_menu' as const, label: 'Planejamento de Áreas', icon: Truck, restrict: ['admin'], subItems: [
-        { id: 'cycles' as const, label: 'Ciclos', icon: Settings },
-        { id: 'roteiro_seq' as const, label: 'Roteiro Sequencial', icon: Route },
-        { id: 'resumo_roteiro' as const, label: 'Resumo Roteiro', icon: BarChart2 },
-        { id: 'clusters' as const, label: 'Clusters', icon: Layers },
-        { id: 'blocos' as const, label: 'Blocos', icon: Grid3X3 },
-        { id: 'roteiros' as const, label: 'Roteiros HERE', icon: Map },
-        { id: 'agenda' as const, label: 'Agenda', icon: Calendar },
-        { id: 'densidade' as const, label: 'Densidade', icon: Activity },
       ]
     },
     { id: 'territories' as const, label: 'Territórios', icon: MapPin, restrict: ['admin', 'supervisor'] },
@@ -1273,7 +1262,9 @@ export default function Admin() {
     const moduleMap: Record<string, string> = {
       'baserotas': 'clientes',
       'territories': 'territories',
-      'rotas_menu': 'routes',
+      'visitas_menu': 'routes',
+      'visitas': 'routes',
+      'visitas_agendar': 'routes',
       'users_menu': 'users',
       'notifications': 'notifications',
       'audit': 'audit',
@@ -1369,6 +1360,7 @@ export default function Admin() {
     cargo: string; groupId: string; tipo: 'normal' | 'representante' | 'promotor' | 'supervisor'; colorIndex: number;
     cep: string; logradouro: string; numero: string; complemento: string; bairro_end: string; cidade: string; estado_end: string; assigned_state?: string; area_atuacao: string; base_logistica: string;
     userTypeId: string;
+    canVisit: boolean;
     default_screen: string;
     managedUserIds: number[];
     permissions: { moduleId: string; canView: boolean; canEdit: boolean }[];
@@ -1380,6 +1372,7 @@ export default function Admin() {
     cargo: '', groupId: '', tipo: 'normal', colorIndex: 0,
     cep: '', logradouro: '', numero: '', complemento: '', bairro_end: '', cidade: '', estado_end: '', assigned_state: '', area_atuacao: '', base_logistica: '',
     userTypeId: '',
+    canVisit: false,
     default_screen: 'mapa',
     managedUserIds: [],
     permissions: []
@@ -1453,7 +1446,8 @@ export default function Admin() {
     icon: 'User',
     showInMenu: false,
     active: true,
-    isAdmin: false
+    isAdmin: false,
+    canVisit: false
   });
 
   const handleSaveUserType = async (e: React.FormEvent) => {
@@ -1576,15 +1570,17 @@ export default function Admin() {
     code: string; photo: string; photoBorderColor: string; telefone: string; birthDate: string;
     cargo: string; companyName: string; groupId: string;
     userTypeId: string;
+    canVisit: boolean;
     managedUserIds: number[];
   }>({
     username: '', fullName: '', document: '', password: '', confirmPassword: '',
     role: 'user',
     code: '', photo: '', photoBorderColor: '#FFD700', telefone: '', birthDate: '',
     cargo: '', companyName: '', groupId: '',
-    userTypeId: '',
-    managedUserIds: []
-  });
+      userTypeId: '',
+      canVisit: false,
+      managedUserIds: []
+    });
   const [showEditPwd, setShowEditPwd] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isRepModalOpen, setIsRepModalOpen] = useState(false);
@@ -1855,13 +1851,13 @@ export default function Admin() {
   };
 
   useEffect(() => {
-    if (!initialLoadDone) {
+    if (!initialLoadDone && !authLoading && token) {
       fetchAll();
       fetchMyPermissions();
       fetchNotifications();
       fetchSystemSettings();
     }
-  }, [initialLoadDone, fetchAll, fetchMyPermissions, fetchNotifications, fetchSystemSettings]);
+  }, [initialLoadDone, authLoading, token, fetchAll, fetchMyPermissions, fetchNotifications, fetchSystemSettings]);
 
 
   useEffect(() => {
@@ -2191,6 +2187,7 @@ export default function Admin() {
       area_atuacao: newUser.area_atuacao,
       base_logistica: newUser.base_logistica,
       default_screen: newUser.default_screen,
+      canVisit: newUser.canVisit,
       userTypeId: newUser.userTypeId ? Number(newUser.userTypeId) : null,
       managedUserIds: newUser.managedUserIds,
       permissions: newUser.permissions
@@ -2247,6 +2244,7 @@ export default function Admin() {
       company_name: editUserForm.companyName,
       groupId: editUserForm.groupId ? Number(editUserForm.groupId) : null,
       userTypeId: editUserForm.userTypeId ? Number(editUserForm.userTypeId) : null,
+      canVisit: editUserForm.canVisit,
       managedUserIds: editUserForm.managedUserIds
     };
 
@@ -3006,11 +3004,13 @@ export default function Admin() {
                       </div>
                       <div className={`${isDashMapOpen ? 'block' : 'hidden md:block'} p-2 pb-1 bg-admin-sidebar-bg/3 h-[180px] sm:h-auto overflow-hidden animate-in fade-in zoom-in duration-300`}>
                         <div className="w-full h-full flex items-center justify-center scale-[0.85] sm:scale-100 origin-center transition-transform">
+                        <React.Suspense fallback={<Loader2 className="animate-spin" />}>
                           <MiniMapBrasil
                             territories={territories}
                             filterUF={dashFilterUF === 'all' ? '' : dashFilterUF}
                             onClickUF={uf => setDashFilterUF(prev => prev === uf ? 'all' : uf)}
                           />
+                        </React.Suspense>
                         </div>
                       </div>
                     </div>
@@ -3290,6 +3290,7 @@ export default function Admin() {
                                 companyName: u.company_name || u.companyName || '',
                                 groupId: String(u.groupId || ''),
                                 userTypeId: String(u.userTypeId || ''),
+                                canVisit: !!u.canVisit,
                                 managedUserIds: u.managedUsers?.map(m => m.id) || []
                               });
                               setIsUserModalOpen(true);
@@ -3311,629 +3312,46 @@ export default function Admin() {
 
           {/* ━━ SISTEMA (Personalização e Tipos de Usuário) ━━ */}
           {activeTab === 'system' && (canEdit('settings') || role === 'admin') && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              {/* Navegação de Sub-Abas */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border/40 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center border border-primary/20 shadow-sm">
-                    <Settings className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-black uppercase tracking-wider">Configurações do Sistema</h2>
-                    <p className="text-xs text-muted-foreground">Personalize a aparência e comportamento da plataforma.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center bg-secondary/30 p-1 rounded-xl border border-border/40 w-full sm:w-auto overflow-x-auto no-scrollbar">
-                  <button
-                    onClick={() => setSystemTab('visual')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${systemTab === 'visual' ? 'bg-background text-primary shadow-sm ring-1 ring-border/50' : 'text-muted-foreground hover:text-foreground'}`}
-                  >
-                    <Palette className="w-3.5 h-3.5" /> Identidade Visual
-                  </button>
-                  <button
-                    onClick={() => setSystemTab('sidebar')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${systemTab === 'sidebar' ? 'bg-background text-primary shadow-sm ring-1 ring-border/50' : 'text-muted-foreground hover:text-foreground'}`}
-                  >
-                    <LayoutDashboard className="w-3.5 h-3.5" /> Sidebar
-                  </button>
-                  <button
-                    onClick={() => setSystemTab('buttons')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${systemTab === 'buttons' ? 'bg-background text-primary shadow-sm ring-1 ring-border/50' : 'text-muted-foreground hover:text-foreground'}`}
-                  >
-                    <Grid3X3 className="w-3.5 h-3.5" /> Botões
-                  </button>
-                </div>
-              </div>
-
-              {/* Conteúdo da Sub-Aba: IDENTIDADE VISUAL */}
-              {systemTab === 'visual' && (
-                <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl overflow-hidden">
-                    <CardHeader className="p-5 sm:p-6 border-b border-border/10">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-primary/15 rounded-xl flex items-center justify-center shrink-0 border border-primary/20 shadow-inner">
-                          <Palette className="w-5 h-5 text-primary" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-sm sm:text-base uppercase tracking-widest font-black">Identidade Visual</CardTitle>
-                          <CardDescription className="text-[10px] sm:text-xs">Configure a logo, o favicon e o nome do seu sistema.</CardDescription>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="p-4 sm:p-6 space-y-8">
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* Logo Section */}
-                        <div className="space-y-6">
-                          <div className="space-y-4">
-                            <div className="flex flex-col gap-1">
-                              <label className="text-[11px] font-black text-foreground uppercase tracking-wider">Logo da Empresa</label>
-                              <p className="text-[9px] text-muted-foreground leading-relaxed">Menu lateral e login.</p>
-                            </div>
-
-                            <div className="flex flex-col items-center gap-3">
-                              <div className="w-full aspect-video max-w-[180px] rounded-xl border-2 border-dashed border-border/60 flex items-center justify-center bg-secondary/20 relative overflow-hidden group shadow-inner">
-                                {brandLogo ? (
-                                  <>
-                                    <img src={brandLogo} alt="Logo" className="w-full h-full object-contain p-3 transition-transform group-hover:scale-110 duration-500" />
-                                    <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-sm">
-                                      <Button variant="destructive" size="icon" className="w-8 h-8 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveLogo} title="Remover Logo">
-                                        <Trash2 className="w-4 h-4" />
-                                      </Button>
-                                    </div>
-                                  </>
-                                ) : (
-                                  <div className="text-center p-3">
-                                    <ImageOff className="w-5 h-5 text-muted-foreground/30 mx-auto mb-1" />
-                                    <span className="text-[9px] font-bold text-muted-foreground uppercase opacity-40">Sem Logo</span>
-                                  </div>
-                                )}
-                              </div>
-                              
-                              <div className="w-full">
-                                <input type="file" id="logo-upload-sys" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  className="w-full gap-2 h-9 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all text-[10px] uppercase tracking-wider" 
-                                  onClick={() => document.getElementById('logo-upload-sys')?.click()}
-                                >
-                                  <Upload className="w-3 h-3" /> Enviar Logo
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Ajuste de Tamanhos da Logo */}
-                          <div className="p-4 rounded-xl bg-secondary/20 border border-border/40 space-y-5">
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <Label className="text-[10px] font-black uppercase tracking-widest text-foreground">Tamanho: Tela de Login</Label>
-                                <span className="text-[10px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded-md font-bold">{brandLogoHeightLogin}px</span>
-                              </div>
-                              <input 
-                                type="range" min="40" max="300" step="5"
-                                value={brandLogoHeightLogin} 
-                                onChange={async (e) => {
-                                  const val = Number(e.target.value);
-                                  setBrandLogoHeightLogin(val);
-                                  try {
-                                    await fetch(`${API}/api/admin/settings`, {
-                                      method: 'PUT',
-                                      headers: authHeaders,
-                                      body: JSON.stringify({ brand_logo_height_login: val })
-                                    });
-                                    localStorage.setItem('brand_logo_height_login', String(val));
-                                    window.dispatchEvent(new Event('storage'));
-                                  } catch {}
-                                }} 
-                                className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary" 
-                              />
-                              <p className="text-[8px] text-muted-foreground leading-tight italic">Ajusta a altura da logo centralizada na página de entrada.</p>
-                            </div>
-
-                            <div className="h-px bg-border/40" />
-
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <Label className="text-[10px] font-black uppercase tracking-widest text-foreground">Tamanho: Navbar</Label>
-                                <span className="text-[10px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded-md font-bold">{brandLogoHeightNavbar}px</span>
-                              </div>
-                              <input 
-                                type="range" min="20" max="80" step="2"
-                                value={brandLogoHeightNavbar} 
-                                onChange={async (e) => {
-                                  const val = Number(e.target.value);
-                                  setBrandLogoHeightNavbar(val);
-                                  try {
-                                    await fetch(`${API}/api/admin/settings`, {
-                                      method: 'PUT',
-                                      headers: authHeaders,
-                                      body: JSON.stringify({ brand_logo_height_navbar: val })
-                                    });
-                                    localStorage.setItem('brand_logo_height_navbar', String(val));
-                                    window.dispatchEvent(new Event('storage'));
-                                  } catch {}
-                                }} 
-                                className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary" 
-                              />
-                              <p className="text-[8px] text-muted-foreground leading-tight italic">Ajusta a altura da logo que aparece no topo do menu lateral.</p>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Favicon Section */}
-                        <div className="space-y-4">
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[11px] font-black text-foreground uppercase tracking-wider">Favicon do Sistema</label>
-                            <p className="text-[9px] text-muted-foreground leading-relaxed">Ícone da aba do navegador.</p>
-                          </div>
-
-                          <div className="flex flex-col items-center gap-3">
-                            <div className="w-full aspect-video max-w-[180px] rounded-xl border-2 border-dashed border-border/60 flex items-center justify-center bg-secondary/20 relative overflow-hidden group shadow-inner">
-                              <img 
-                                src={brandFavicon} 
-                                alt="Favicon Preview" 
-                                className="w-12 h-12 object-contain transition-transform group-hover:scale-110"
-                                onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.ico' }}
-                              />
-                              <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-sm">
-                                {brandFavicon !== '/favicon.ico' && (
-                                  <Button variant="destructive" size="icon" className="w-8 h-8 rounded-full shadow-lg shadow-destructive/20" onClick={handleRemoveFavicon} title="Resetar Favicon">
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="w-full">
-                              <input type="file" id="favicon-upload-sys" accept="image/*" className="hidden" onChange={handleFaviconUpload} />
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                className="w-full gap-2 h-9 border-primary/20 hover:border-primary/50 hover:bg-primary/5 font-bold transition-all text-[10px] uppercase tracking-wider" 
-                                onClick={() => document.getElementById('favicon-upload-sys')?.click()}
-                              >
-                                <Upload className="w-3 h-3" /> Mudar Favicon
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Name Section */}
-                        <div className="space-y-4">
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[11px] font-black text-foreground uppercase tracking-wider">Nome do Sistema</label>
-                            <p className="text-[9px] text-muted-foreground leading-relaxed">Título da aba e identificação.</p>
-                          </div>
-
-                          <div className="space-y-4">
-                            <div className="flex flex-col gap-3">
-                              <Input 
-                                value={brandNameDraft} 
-                                onChange={e => setBrandNameDraft(e.target.value)} 
-                                placeholder="Ex: Mapa Território" 
-                                className="h-10 font-bold text-sm bg-background/50 border-border/60 focus:border-primary/50 transition-all" 
-                              />
-                              <Button onClick={handleSaveBrandName} className="w-full gap-2 h-10 font-black uppercase tracking-widest shadow-lg shadow-primary/20 text-[10px]">
-                                <Save className="w-3.5 h-3.5" /> Salvar Nome
-                              </Button>
-                            </div>
-
-                            <div className="p-3 rounded-xl bg-primary/5 border border-primary/10">
-                              <p className="text-[9px] text-primary/70 font-medium leading-relaxed italic">
-                                O nome acima será usado como o título principal da aba do navegador ao lado do seu favicon.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {/* Conteúdo da Sub-Aba: SIDEBAR */}
-              {systemTab === 'sidebar' && (
-                <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl overflow-hidden">
-                    <CardHeader className="p-5 sm:p-6 border-b border-border/10">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-primary/15 rounded-xl flex items-center justify-center shrink-0 border border-primary/20 shadow-inner">
-                            <LayoutDashboard className="w-5 h-5 text-primary" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-sm sm:text-base uppercase tracking-widest font-black">Estilos da Sidebar</CardTitle>
-                            <CardDescription className="text-[10px] sm:text-xs">Personalize cores de fundo, texto e estados de seleção.</CardDescription>
-                          </div>
-                        </div>
-                        <Button 
-                          onClick={handleSaveSidebarStyleBatch} 
-                          className="gap-2 h-9 px-6 font-black uppercase tracking-widest shadow-lg shadow-primary/20 text-[10px]"
-                        >
-                          <Save className="w-3.5 h-3.5" /> Salvar Estilos
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="p-4 sm:p-6">
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                        {/* Lado Esquerdo: Cores de Fundo */}
-                        <div className="space-y-8">
-                          <div className="space-y-4">
-                            <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                              <Palette className="w-3.5 h-3.5 text-primary" /> Fundo Principal
-                            </Label>
-                            <div className="flex flex-wrap gap-1.5">
-                              {[
-                                { name: 'Padrão (verde)', color: '#155e21' },
-                                { name: 'Amarelo Compactor', color: '#FFCC00' },
-                                { name: 'Vermelho Compactor', color: '#E4002B' },
-                                { name: 'Azul Compactor', color: '#0057B8' },
-                                { name: 'Oceano', color: '#155e75' },
-                                { name: 'Floresta', color: '#065f46' },
-                                { name: 'Índigo', color: '#3730a3' },
-                                { name: 'Coral', color: '#ea580c' },
-                                { name: 'Roxo', color: '#5b21b6' },
-                                { name: 'Noite', color: '#0f172a' },
-                                { name: 'Grafite', color: '#334155' },
-                                { name: 'Ardósia', color: '#1e293b' },
-                              ].map(item => (
-                                <button
-                                  key={item.color}
-                                  type="button"
-                                  onClick={() => handleSaveSidebarStyle('brand_sidebar_color', item.color)}
-                                  className={`group relative w-5 h-5 shrink-0 rounded-sm transition-all hover:scale-105 flex items-center justify-center ${brandSidebarColor === item.color ? 'ring-1 ring-primary ring-offset-1 ring-offset-background' : 'hover:ring-1 hover:ring-border'}`}
-                                  style={{ backgroundColor: item.color }}
-                                  title={item.name}
-                                >
-                                  {brandSidebarColor === item.color && (
-                                    <Check className={`w-2.5 h-2.5 ${item.color === '#FFCC00' ? 'text-black/70' : 'text-white'}`} />
-                                  )}
-                                </button>
-                              ))}
-                            </div>
-                            
-                            <div className="flex items-center gap-3 pt-2">
-                              <div className="shrink-0">
-                                <Input 
-                                  type="color" 
-                                  value={brandSidebarColor?.startsWith('#') ? brandSidebarColor : '#155e21'} 
-                                  onChange={e => handleSaveSidebarStyle('brand_sidebar_color', e.target.value)}
-                                  className="w-10 h-10 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
-                                />
-                              </div>
-                              <div className="flex-1 relative">
-                                <Input 
-                                  type="text"
-                                  value={brandSidebarColor}
-                                  onChange={e => setBrandSidebarColor(e.target.value)}
-                                  placeholder="HEX, RGB ou RGBA"
-                                  className="h-10 font-mono text-xs uppercase bg-background/50 border-border/60"
-                                />
-                                {brandSidebarColor && (
-                                  <button onClick={() => handleRemoveSidebarStyle('brand_sidebar_color')} className="absolute right-3 top-1/2 -translate-y-1/2 text-destructive hover:opacity-70"><Trash2 className="w-3.5 h-3.5" /></button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="h-px bg-border/20" />
-
-                          {/* Cor do Item Pai Ativo */}
-                          <div className="space-y-4">
-                            <div className="flex flex-col gap-1">
-                              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                                <Layers className="w-3.5 h-3.5 text-primary" /> Fundo: Aba Pai Ativa
-                              </Label>
-                              <p className="text-[9px] text-muted-foreground italic">Cor de fundo do menu pai quando um filho está selecionado.</p>
-                            </div>
-                            
-                            <div className="flex items-center gap-3">
-                              <div className="shrink-0">
-                                <Input 
-                                  type="color" 
-                                  value={brandSidebarParentActiveBgColor?.startsWith('#') ? brandSidebarParentActiveBgColor : '#1a7a2a'} 
-                                  onChange={e => handleSaveSidebarStyle('brand_sidebar_parent_active_bg_color', e.target.value)}
-                                  className="w-10 h-10 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
-                                />
-                              </div>
-                              <div className="flex-1 relative">
-                                <Input 
-                                  type="text"
-                                  value={brandSidebarParentActiveBgColor}
-                                  onChange={e => setBrandSidebarParentActiveBgColor(e.target.value)}
-                                  placeholder="Ex: rgba(255, 255, 255, 0.1)"
-                                  className="h-10 font-mono text-xs uppercase bg-background/50 border-border/60"
-                                />
-                                {brandSidebarParentActiveBgColor && (
-                                  <button onClick={() => handleRemoveSidebarStyle('brand_sidebar_parent_active_bg_color')} className="absolute right-3 top-1/2 -translate-y-1/2 text-destructive hover:opacity-70"><Trash2 className="w-3.5 h-3.5" /></button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Lado Direito: Cores de Texto e Seleção */}
-                        <div className="space-y-6 bg-secondary/10 p-5 rounded-2xl border border-border/40">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
-                            {/* Cor do Texto */}
-                            <div className="space-y-2">
-                              <Label className="text-[10px] font-black uppercase tracking-widest text-foreground">Cor do Texto</Label>
-                              <div className="flex gap-2">
-                                <Input 
-                                  type="color" 
-                                  value={brandSidebarTextColor?.startsWith('#') ? brandSidebarTextColor : '#ffffff'} 
-                                  onChange={e => handleSaveSidebarStyle('brand_sidebar_text_color', e.target.value)}
-                                  className="w-9 h-9 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
-                                />
-                                <div className="relative flex-1">
-                                  <Input 
-                                    type="text"
-                                    value={brandSidebarTextColor}
-                                    onChange={e => setBrandSidebarTextColor(e.target.value)}
-                                    placeholder="Texto Base"
-                                    className="h-9 text-[10px] uppercase bg-background border-border/60 pr-8"
-                                  />
-                                  {brandSidebarTextColor && (
-                                    <button onClick={() => handleRemoveSidebarStyle('brand_sidebar_text_color')} className="absolute right-2 top-1/2 -translate-y-1/2 text-destructive hover:opacity-70"><X className="w-3 h-3" /></button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Texto Selecionado */}
-                            <div className="space-y-2">
-                              <Label className="text-[10px] font-black uppercase tracking-widest text-foreground">Texto Selecionado</Label>
-                              <div className="flex gap-2">
-                                <Input 
-                                  type="color" 
-                                  value={brandSidebarTextActiveColor?.startsWith('#') ? brandSidebarTextActiveColor : '#ffffff'} 
-                                  onChange={e => handleSaveSidebarStyle('brand_sidebar_text_active_color', e.target.value)}
-                                  className="w-9 h-9 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
-                                />
-                                <div className="relative flex-1">
-                                  <Input 
-                                    type="text"
-                                    value={brandSidebarTextActiveColor}
-                                    onChange={e => setBrandSidebarTextActiveColor(e.target.value)}
-                                    placeholder="Texto Ativo"
-                                    className="h-9 text-[10px] uppercase bg-background border-border/60 pr-8"
-                                  />
-                                  {brandSidebarTextActiveColor && (
-                                    <button onClick={() => handleRemoveSidebarStyle('brand_sidebar_text_active_color')} className="absolute right-2 top-1/2 -translate-y-1/2 text-destructive hover:opacity-70"><X className="w-3 h-3" /></button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Fundo do Hover */}
-                            <div className="space-y-2">
-                              <Label className="text-[10px] font-black uppercase tracking-widest text-foreground">Fundo do Hover</Label>
-                              <div className="flex gap-2">
-                                <Input 
-                                  type="color" 
-                                  value={brandSidebarHoverColor?.startsWith('#') ? brandSidebarHoverColor : '#ffffff'} 
-                                  onChange={e => handleSaveSidebarStyle('brand_sidebar_hover_color', e.target.value)}
-                                  className="w-9 h-9 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
-                                />
-                                <div className="relative flex-1">
-                                  <Input 
-                                    type="text"
-                                    value={brandSidebarHoverColor}
-                                    onChange={e => setBrandSidebarHoverColor(e.target.value)}
-                                    placeholder="Hover BG"
-                                    className="h-9 text-[10px] uppercase bg-background border-border/60 pr-8"
-                                  />
-                                  {brandSidebarHoverColor && (
-                                    <button onClick={() => handleRemoveSidebarStyle('brand_sidebar_hover_color')} className="absolute right-2 top-1/2 -translate-y-1/2 text-destructive hover:opacity-70"><X className="w-3 h-3" /></button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Fundo Selecionado */}
-                            <div className="space-y-2">
-                              <Label className="text-[10px] font-black uppercase tracking-widest text-foreground">Fundo Selecionado</Label>
-                              <div className="flex gap-2">
-                                <Input 
-                                  type="color" 
-                                  value={brandSidebarActiveBgColor?.startsWith('#') ? brandSidebarActiveBgColor : '#ffffff'} 
-                                  onChange={e => handleSaveSidebarStyle('brand_sidebar_active_bg_color', e.target.value)}
-                                  className="w-9 h-9 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
-                                />
-                                <div className="relative flex-1">
-                                  <Input 
-                                    type="text"
-                                    value={brandSidebarActiveBgColor}
-                                    onChange={e => setBrandSidebarActiveBgColor(e.target.value)}
-                                    placeholder="Ativo BG"
-                                    className="h-9 text-[10px] uppercase bg-background border-border/60 pr-8"
-                                  />
-                                  {brandSidebarActiveBgColor && (
-                                    <button onClick={() => handleRemoveSidebarStyle('brand_sidebar_active_bg_color')} className="absolute right-2 top-1/2 -translate-y-1/2 text-destructive hover:opacity-70"><X className="w-3 h-3" /></button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 mt-4">
-                            <p className="text-[10px] text-primary/70 leading-relaxed font-medium">
-                              <span className="font-black uppercase">Dica:</span> Utilize cores com transparência (RGBA) no Hover e no Fundo Selecionado para preservar os detalhes visuais da sidebar.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {/* Conteúdo da Sub-Aba: BOTÕES */}
-              {systemTab === 'buttons' && (
-                <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <Card className="border-border/40 bg-card/50 backdrop-blur-sm shadow-xl overflow-hidden">
-                    <CardHeader className="p-5 sm:p-6 border-b border-border/10">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-primary/15 rounded-xl flex items-center justify-center shrink-0 border border-primary/20 shadow-inner">
-                            <Grid3X3 className="w-5 h-5 text-primary" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-sm sm:text-base uppercase tracking-widest font-black">Estilos de Botões</CardTitle>
-                            <CardDescription className="text-[10px] sm:text-xs">Customize as cores dos botões principais de todo o sistema.</CardDescription>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button 
-                            variant="outline"
-                            onClick={() => {
-                              setBrandButtonBgColor('');
-                              setBrandButtonTextColor('');
-                              setBrandButtonHoverBgColor('');
-                              setBrandButtonHoverTextColor('');
-                              toast.info('Cores dos botões resetadas. Clique em Salvar para confirmar.');
-                            }} 
-                            className="h-9 px-4 font-black uppercase tracking-widest text-[10px]"
-                          >
-                            Resetar
-                          </Button>
-                          <Button 
-                            onClick={handleSaveSidebarStyleBatch} 
-                            className="gap-2 h-9 px-6 font-black uppercase tracking-widest shadow-lg shadow-primary/20 text-[10px]"
-                          >
-                            <Save className="w-3.5 h-3.5" /> Salvar Estilos
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="p-4 sm:p-6">
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                        {/* Configurações de Cores */}
-                        <div className="space-y-8">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            {/* Fundo do Botão */}
-                            <div className="space-y-3">
-                              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cor de Fundo</Label>
-                              <div className="flex gap-2">
-                                <Input 
-                                  type="color" 
-                                  value={brandButtonBgColor?.startsWith('#') ? brandButtonBgColor : '#155e21'} 
-                                  onChange={e => setBrandButtonBgColor(e.target.value)}
-                                  className="w-10 h-10 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
-                                />
-                                <Input 
-                                  type="text"
-                                  value={brandButtonBgColor}
-                                  onChange={e => setBrandButtonBgColor(e.target.value)}
-                                  placeholder="Cor Base"
-                                  className="h-10 text-[10px] uppercase font-mono bg-background border-border/60"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Texto do Botão */}
-                            <div className="space-y-3">
-                              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cor do Texto</Label>
-                              <div className="flex gap-2">
-                                <Input 
-                                  type="color" 
-                                  value={brandButtonTextColor?.startsWith('#') ? brandButtonTextColor : '#ffffff'} 
-                                  onChange={e => setBrandButtonTextColor(e.target.value)}
-                                  className="w-10 h-10 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
-                                />
-                                <Input 
-                                  type="text"
-                                  value={brandButtonTextColor}
-                                  onChange={e => setBrandButtonTextColor(e.target.value)}
-                                  placeholder="Cor do Texto"
-                                  className="h-10 text-[10px] uppercase font-mono bg-background border-border/60"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Fundo Hover */}
-                            <div className="space-y-3">
-                              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fundo (Hover)</Label>
-                              <div className="flex gap-2">
-                                <Input 
-                                  type="color" 
-                                  value={brandButtonHoverBgColor?.startsWith('#') ? brandButtonHoverBgColor : '#1a7a2a'} 
-                                  onChange={e => setBrandButtonHoverBgColor(e.target.value)}
-                                  className="w-10 h-10 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
-                                />
-                                <Input 
-                                  type="text"
-                                  value={brandButtonHoverBgColor}
-                                  onChange={e => setBrandButtonHoverBgColor(e.target.value)}
-                                  placeholder="Hover BG"
-                                  className="h-10 text-[10px] uppercase font-mono bg-background border-border/60"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Texto Hover */}
-                            <div className="space-y-3">
-                              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Texto (Hover)</Label>
-                              <div className="flex gap-2">
-                                <Input 
-                                  type="color" 
-                                  value={brandButtonHoverTextColor?.startsWith('#') ? brandButtonHoverTextColor : '#ffffff'} 
-                                  onChange={e => setBrandButtonHoverTextColor(e.target.value)}
-                                  className="w-10 h-10 p-1 bg-background border-border rounded-lg cursor-pointer shadow-sm"
-                                />
-                                <Input 
-                                  type="text"
-                                  value={brandButtonHoverTextColor}
-                                  onChange={e => setBrandButtonHoverTextColor(e.target.value)}
-                                  placeholder="Hover Texto"
-                                  className="h-10 text-[10px] uppercase font-mono bg-background border-border/60"
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
-                            <p className="text-[10px] text-primary/70 leading-relaxed font-medium">
-                              <span className="font-black uppercase">Nota:</span> Estas cores serão aplicadas a todos os botões que utilizam a cor primária do sistema (como o botão de salvar, novo usuário, etc).
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Preview dos Botões */}
-                        <div className="bg-secondary/10 p-8 rounded-2xl border border-border/40 flex flex-col items-center justify-center gap-6">
-                          <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Pré-visualização em Tempo Real</Label>
-                          
-                          <div className="flex flex-col gap-4 w-full max-w-[240px]">
-                            <Button className="w-full h-11 font-black uppercase tracking-widest shadow-lg shadow-primary/20">
-                              Botão Primário
-                            </Button>
-                            
-                            <Button className="w-full h-11 font-black uppercase tracking-widest shadow-lg shadow-primary/20 flex items-center gap-2">
-                              <Save className="w-4 h-4" /> Salvar Registro
-                            </Button>
-
-                            <div className="mt-4 p-4 bg-background/50 rounded-xl border border-border/40 flex flex-col items-center gap-2">
-                              <p className="text-[9px] font-bold text-muted-foreground uppercase">Estado de Hover (Simulado)</p>
-                              <Button 
-                                className="w-full h-11 font-black uppercase tracking-widest shadow-lg shadow-primary/20"
-                                style={{
-                                  backgroundColor: brandButtonHoverBgColor || undefined,
-                                  color: brandButtonHoverTextColor || undefined
-                                }}
-                              >
-                                Botão Hover
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-            </div>
+            <SystemConfigPanel
+              systemTab={systemTab}
+              setSystemTab={setSystemTab}
+              brandLogo={brandLogo}
+              handleLogoUpload={handleLogoUpload}
+              handleRemoveLogo={handleRemoveLogo}
+              brandLogoHeightLogin={brandLogoHeightLogin}
+              setBrandLogoHeightLogin={setBrandLogoHeightLogin}
+              brandLogoHeightNavbar={brandLogoHeightNavbar}
+              setBrandLogoHeightNavbar={setBrandLogoHeightNavbar}
+              brandFavicon={brandFavicon}
+              handleFaviconUpload={handleFaviconUpload}
+              handleRemoveFavicon={handleRemoveFavicon}
+              brandNameDraft={brandNameDraft}
+              setBrandNameDraft={setBrandNameDraft}
+              handleSaveBrandName={handleSaveBrandName}
+              brandSidebarColor={brandSidebarColor}
+              setBrandSidebarColor={setBrandSidebarColor}
+              brandSidebarTextColor={brandSidebarTextColor}
+              setBrandSidebarTextColor={setBrandSidebarTextColor}
+              brandSidebarTextActiveColor={brandSidebarTextActiveColor}
+              setBrandSidebarTextActiveColor={setBrandSidebarTextActiveColor}
+              brandSidebarHoverColor={brandSidebarHoverColor}
+              setBrandSidebarHoverColor={setBrandSidebarHoverColor}
+              brandSidebarActiveBgColor={brandSidebarActiveBgColor}
+              setBrandSidebarActiveBgColor={setBrandSidebarActiveBgColor}
+              brandSidebarParentActiveBgColor={brandSidebarParentActiveBgColor}
+              setBrandSidebarParentActiveBgColor={setBrandSidebarParentActiveBgColor}
+              handleSaveSidebarStyle={handleSaveSidebarStyle}
+              handleSaveSidebarStyleBatch={handleSaveSidebarStyleBatch}
+              handleRemoveSidebarStyle={handleRemoveSidebarStyle}
+              brandButtonBgColor={brandButtonBgColor}
+              setBrandButtonBgColor={setBrandButtonBgColor}
+              brandButtonTextColor={brandButtonTextColor}
+              setBrandButtonTextColor={setBrandButtonTextColor}
+              brandButtonHoverBgColor={brandButtonHoverBgColor}
+              setBrandButtonHoverBgColor={setBrandButtonHoverBgColor}
+              brandButtonHoverTextColor={brandButtonHoverTextColor}
+              setBrandButtonHoverTextColor={setBrandButtonHoverTextColor}
+            />
           )}
 
           {/* ━━ TERRITÓRIOS ━━ */}
@@ -4201,12 +3619,14 @@ export default function Admin() {
                     </CardHeader>
                     <CardContent className={`${isTerritoryMapOpen ? 'flex' : 'hidden lg:flex'} p-4 bg-primary/5 justify-center animate-in fade-in zoom-in duration-300`}>
                       <div style={{ width: '100%', maxWidth: '350px' }}>
-                        <MiniMapBrasil 
-                          territories={computedTerritories.flatMap(t => t.userIds.map(id => ({ id: t.id, municipio: t.municipio, uf: t.uf, userId: id, modo: 'atendimento' as const })))} 
-                          filterUF={filterUF === 'all' ? '' : filterUF} 
-                          filterRep="" 
-                          onClickUF={uf => setFilterUF(prev => prev === uf ? 'all' : uf)} 
-                        />
+                        <React.Suspense fallback={<Loader2 className="animate-spin" />}>
+                          <MiniMapBrasil 
+                            territories={computedTerritories.flatMap(t => t.userIds.map(id => ({ id: t.id, municipio: t.municipio, uf: t.uf, userId: id, modo: 'atendimento' as const })))} 
+                            filterUF={filterUF === 'all' ? '' : filterUF} 
+                            filterRep="" 
+                            onClickUF={uf => setFilterUF(prev => prev === uf ? 'all' : uf)} 
+                          />
+                        </React.Suspense>
                       </div>
                     </CardContent>
                   </Card>
@@ -4588,156 +4008,12 @@ export default function Admin() {
 
           {/* ━━ AUDITORIA ━━ */}
           {activeTab === 'audit' && (
-            <div className="space-y-4">
-              <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
-                <CardHeader className="p-4 sm:pb-3 border-b border-border/10">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-xs sm:text-sm flex items-center gap-2">
-                      <Filter className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-                      Filtros de Auditoria
-                    </CardTitle>
-                    <span className="text-[10px] font-bold text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded-full sm:hidden">
-                      {filteredAudit.length} registros
-                    </span>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 sm:p-5">
-                  <div className="flex flex-col gap-3">
-                    {/* Linha 1: Usuário */}
-                    <div className="flex-1">
-                      <Select value={auditFilterUser} onValueChange={setAuditFilterUser}>
-                        <SelectTrigger className="w-full h-10 bg-background/50 border-border text-xs sm:text-sm">
-                          <SelectValue placeholder="Todos os Usuários" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos os Usuários</SelectItem>
-                          {reps.map(r => (
-                            <SelectItem key={r.id} value={r.code || String(r.id)}>
-                              {r.code ? `${r.code} — ` : ''}{r.full_name || r.fullName || r.username}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Linha 2: UF e Ação */}
-                    <div className="flex gap-2">
-                      <Select value={auditFilterUF} onValueChange={setAuditFilterUF}>
-                        <SelectTrigger className="flex-1 h-10 bg-background/50 border-border text-xs sm:text-sm">
-                          <SelectValue placeholder="UF" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todas UFs</SelectItem>
-                          {UF_DATA.map(u => (
-                            <SelectItem key={u.sigla} value={u.sigla || 'empty'}>{u.sigla}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-
-                      <Select value={auditFilterAction} onValueChange={setAuditFilterAction}>
-                        <SelectTrigger className="flex-[2] h-10 bg-background/50 border-border text-xs sm:text-sm">
-                          <SelectValue placeholder="Todas as Ações" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todas as Ações</SelectItem>
-                          {Object.entries(auditActionLabel).map(([k, v]) => (
-                            <SelectItem key={k} value={k || 'empty'}>{v}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Linha 3: Botão Limpar e Contador Desktop */}
-                    <div className="flex items-center justify-between gap-3 pt-1">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-9 gap-1.5 flex-1 sm:flex-none text-xs font-bold hover:bg-destructive/10 hover:text-destructive border border-dashed border-border sm:border-none" 
-                        onClick={() => { setAuditFilterUser('all'); setAuditFilterAction('all'); setAuditFilterUF('all'); }}
-                      >
-                        <X className="w-3.5 h-3.5" /> Limpar Filtros
-                      </Button>
-                      <span className="hidden sm:inline text-[11px] font-bold text-muted-foreground uppercase tracking-widest opacity-60">
-                        {filteredAudit.length} registros encontrados
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card className="border-border/40 overflow-hidden bg-card/30 backdrop-blur-sm">
-                <CardContent className="p-0">
-                  {loadingAudit ? (
-                    <div className="py-20 text-center flex flex-col items-center gap-3">
-                      <Loader2 className="w-8 h-8 animate-spin text-primary opacity-50" />
-                      <p className="text-sm text-muted-foreground">Carregando auditoria...</p>
-                    </div>
-                  ) : filteredAudit.length === 0 ? (
-                    <div className="py-24 text-center text-muted-foreground">
-                      <ScrollText className="w-12 h-12 mx-auto mb-4 opacity-10" />
-                      <p className="text-sm font-medium">Nenhum registro encontrado</p>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Desktop Table View */}
-                      <div className="hidden md:block overflow-auto max-h-[calc(100vh-380px)] custom-scrollbar">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="hover:bg-transparent border-border/10 bg-secondary/20">
-                              <TableHead className="pl-6 h-11 text-[10px] font-black uppercase tracking-wider">Data/Hora</TableHead>
-                              <TableHead className="h-11 text-[10px] font-black uppercase tracking-wider">Ação</TableHead>
-                              <TableHead className="h-11 text-[10px] font-black uppercase tracking-wider">Entidade</TableHead>
-                              <TableHead className="h-11 text-[10px] font-black uppercase tracking-wider">Detalhes</TableHead>
-                              <TableHead className="w-24 pr-6 h-11 text-[10px] font-black uppercase tracking-wider">Por</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredAudit.map(log => (
-                              <TableRow key={log.id} className="border-border/10 hover:bg-primary/5 transition-colors group">
-                                <TableCell className="pl-6 py-4 text-[10px] text-muted-foreground tabular-nums whitespace-nowrap font-medium">{new Date(log.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</TableCell>
-                                <TableCell className="py-4"><span className="text-[9px] bg-primary/10 text-primary px-2.5 py-1 rounded-full font-bold uppercase tracking-tighter whitespace-nowrap">{auditActionLabel[log.action] || log.action}</span></TableCell>
-                                <TableCell className="py-4 text-xs font-bold text-foreground/90">{log.entity}</TableCell>
-                                <TableCell className="py-4 text-[11px] text-muted-foreground max-w-[320px] truncate group-hover:text-foreground/70 transition-colors">{log.details}</TableCell>
-                                <TableCell className="py-4 text-[10px] font-bold text-muted-foreground pr-6 uppercase">{log.performedBy}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-
-                      {/* Mobile Card View */}
-                      <div className="md:hidden divide-y divide-border/10 max-h-[calc(100vh-320px)] overflow-y-auto custom-scrollbar">
-                        {filteredAudit.map(log => (
-                          <div key={log.id} className="p-4 space-y-2.5 active:bg-secondary/40 transition-colors">
-                            <div className="flex justify-between items-start">
-                              <span className="text-[9px] font-black bg-primary/10 text-primary px-2 py-0.5 rounded-md uppercase tracking-tighter">
-                                {auditActionLabel[log.action] || log.action}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground font-mono font-bold opacity-60">
-                                {new Date(log.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                            <div className="bg-secondary/20 p-2.5 rounded-lg border border-border/30">
-                              <p className="text-[11px] font-black text-foreground/90 mb-1">{log.entity}</p>
-                              <p className="text-[11px] text-muted-foreground leading-relaxed italic">"{log.details}"</p>
-                            </div>
-                            <div className="flex items-center gap-1.5 pt-0.5">
-                              <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                <User className="w-2.5 h-2.5 text-primary" />
-                              </div>
-                              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-wider">{log.performedBy}</span>
-                              {log.ipAddress && (
-                                <span className="text-[8px] text-muted-foreground/40 ml-auto font-mono">{log.ipAddress}</span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+            <AuditLogsPanel 
+              auditLogs={auditLogs}
+              reps={reps}
+              loadingAudit={loadingAudit}
+              fetchAuditLogs={fetchAuditLogs}
+            />
           )}
 
           {/* ━━ PERSONALIZAÇÃO ━━ */}
@@ -4756,7 +4032,7 @@ export default function Admin() {
                 </div>
                 <Button className="gap-2 h-11 px-6 font-black uppercase tracking-widest shadow-lg shadow-primary/20" onClick={() => {
                   setEditingUserTypeId(null);
-                  setUserTypeForm({ name: '', color: '#3b82f6', icon: 'User', showInMenu: false, active: true, isAdmin: false });
+                  setUserTypeForm({ name: '', color: '#3b82f6', icon: 'User', showInMenu: false, active: true, isAdmin: false, canVisit: false });
                   setIsUserTypeModalOpen(true);
                 }}>
                   <Plus className="w-4 h-4" /> Novo Tipo
@@ -4787,7 +4063,7 @@ export default function Admin() {
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
                               <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full hover:bg-primary/10" onClick={() => {
                                 setEditingUserTypeId(type.id);
-                                setUserTypeForm({ name: type.name, color: type.color, icon: type.icon || 'User', showInMenu: type.showInMenu, active: type.active, isAdmin: type.isAdmin });
+                                setUserTypeForm({ name: type.name, color: type.color, icon: type.icon || 'User', showInMenu: type.showInMenu, active: type.active, isAdmin: type.isAdmin, canVisit: !!type.canVisit });
                                 setIsUserTypeModalOpen(true);
                               }}><Pencil className="w-4 h-4" /></Button>
                               {!type.isSystemDefault && (
@@ -4836,19 +4112,13 @@ export default function Admin() {
             />
           )}
 
-          {/* ━━ PLANEJAMENTO DE ÁREAS (Novo Módulo) ━━ */}
-          {['cycles', 'clusters', 'blocos', 'roteiros', 'agenda', 'densidade', 'roteiro_seq', 'resumo_roteiro'].includes(activeTab) && (
-            <RotasProvider>
-              <PlanningDashboard 
-                activeTab={activeTab} 
-                onSwitchToReps={() => setActiveTab('reps')}
-                canCreateClients={role === 'admin' || canEdit('settings') || (myPermissions.find(p => p.moduleId === 'clientes')?.canEdit || false)}
-                isMobileFilterOpen={isDashFiltersOpen}
-                clientesData={clientes as any}
-                loadingClientes={loadingClientes}
-                onRefreshClientes={fetchClientes}
-              />
-            </RotasProvider>
+          {/* ━━ VISITAS ━━ */}
+          {activeTab === 'visitas' && (
+            <SupervisorRoutesPanel />
+          )}
+
+          {activeTab === 'visitas_agendar' && (
+            <VisitScheduler />
           )}
 
           <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
@@ -4985,7 +4255,7 @@ export default function Admin() {
 
                           {/* ABA: AMBIENTE */}
                           <TabsContent value="ambiente" className="mt-0 space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
                               <div className="space-y-1.5">
                                 <Label className="text-[10px] font-bold uppercase tracking-widest text-primary">Área de Trabalho Padrão</Label>
                                 <select 
@@ -4997,10 +4267,22 @@ export default function Admin() {
                                   <option value="dashboard">Dashboard</option>
                                   <option value="baserotas">Base Cliente</option>
                                   <option value="territories">Territórios</option>
-                                  <option value="rotas_menu">Planejamento de Áreas</option>
                                   <option value="settings">Configurações</option>
                                 </select>
                                 <p className="text-[10px] text-muted-foreground italic">Define qual tela será carregada automaticamente após o login do usuário.</p>
+                              </div>
+
+                              <div className="space-y-4 pt-2">
+                                <div className="flex items-center justify-between p-3 rounded-lg border border-border/40 bg-secondary/10">
+                                  <div className="space-y-0.5">
+                                    <Label className="text-[10px] font-bold uppercase">Habilitar Visitas</Label>
+                                    <p className="text-[9px] text-muted-foreground">Permitir que este usuário realize roteiros de visita.</p>
+                                  </div>
+                                  <Switch 
+                                    checked={newUser.canVisit}
+                                    onCheckedChange={(checked) => setNewUser({ ...newUser, canVisit: checked })}
+                                  />
+                                </div>
                               </div>
                             </div>
                           </TabsContent>
@@ -5233,76 +4515,127 @@ export default function Admin() {
 
           {/* Modal de Criação/Edição de Tipo de Usuário */}
           <Dialog open={isUserTypeModalOpen} onOpenChange={setIsUserTypeModalOpen}>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>{editingUserTypeId ? 'Editar Tipo de Usuário' : 'Novo Tipo de Usuário'}</DialogTitle>
-                <DialogDescription>
-                  {editingUserTypeId ? 'Edite as configurações do tipo de usuário.' : 'Crie um novo tipo de usuário para o sistema.'}
+            <DialogContent className="max-w-[500px] w-[95vw] max-h-[90vh] p-0 overflow-hidden flex flex-col border-none shadow-2xl">
+              <DialogHeader className="p-6 pb-4 border-b border-border/40 bg-muted/20 shrink-0">
+                <DialogTitle className="flex items-center gap-2 text-lg">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                    {editingUserTypeId ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                  </div>
+                  {editingUserTypeId ? 'Editar Tipo de Usuário' : 'Novo Tipo de Usuário'}
+                </DialogTitle>
+                <DialogDescription className="text-xs">
+                  Configure as propriedades e permissões globais para este tipo de usuário.
                 </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleSaveUserType} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Nome</Label>
-                  <Input 
-                    value={userTypeForm.name} 
-                    onChange={e => setUserTypeForm({ ...userTypeForm, name: e.target.value })}
-                    placeholder="Ex: Gerente, Supervisor, etc."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Cor</Label>
-                  <div className="flex gap-2">
-                    <Input 
-                      type="color" 
-                      value={userTypeForm.color} 
-                      onChange={e => setUserTypeForm({ ...userTypeForm, color: e.target.value })}
-                      className="w-16 h-10 p-1"
-                    />
-                    <Input 
-                      value={userTypeForm.color} 
-                      onChange={e => setUserTypeForm({ ...userTypeForm, color: e.target.value })}
-                      className="flex-1"
-                    />
+
+              <form onSubmit={handleSaveUserType} className="flex-1 overflow-y-auto custom-scrollbar flex flex-col">
+                <div className="flex-1 p-6 space-y-6">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Nome do Tipo</Label>
+                      <Input 
+                        value={userTypeForm.name} 
+                        onChange={e => setUserTypeForm({ ...userTypeForm, name: e.target.value })} 
+                        placeholder="Ex: Gerente, Supervisor, etc." 
+                        className="h-10 text-sm"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Cor de Identificação</Label>
+                        <div className="flex gap-2">
+                          <Input 
+                            type="color" 
+                            value={userTypeForm.color} 
+                            onChange={e => setUserTypeForm({ ...userTypeForm, color: e.target.value })}
+                            className="w-12 h-10 p-1 cursor-pointer"
+                          />
+                          <Input 
+                            value={userTypeForm.color} 
+                            onChange={e => setUserTypeForm({ ...userTypeForm, color: e.target.value })} 
+                            className="h-10 text-xs font-mono uppercase flex-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Status</Label>
+                        <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-border bg-background/50">
+                          <Switch 
+                            checked={userTypeForm.active}
+                            onCheckedChange={(checked) => setUserTypeForm({ ...userTypeForm, active: checked })}
+                          />
+                          <span className="text-xs font-medium">{userTypeForm.active ? 'Ativo' : 'Inativo'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Ícone Representativo</Label>
+                      <div className="grid grid-cols-8 sm:grid-cols-10 gap-1.5 p-2 rounded-xl border border-border bg-secondary/20 max-h-[180px] overflow-y-auto custom-scrollbar">
+                        {Object.entries(ICON_LIST).map(([iconName, IconComponent]) => (
+                          <button
+                            key={iconName}
+                            type="button"
+                            onClick={() => setUserTypeForm({ ...userTypeForm, icon: iconName })}
+                            className={`p-2 rounded-lg flex items-center justify-center transition-all hover:bg-primary/20 ${
+                              userTypeForm.icon === iconName ? 'bg-primary text-primary-foreground ring-2 ring-primary shadow-lg' : 'bg-background hover:scale-110'
+                            }`}
+                            title={iconName}
+                          >
+                            <IconComponent className="w-4 h-4" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between p-3 rounded-xl border border-border/40 bg-secondary/10 hover:bg-secondary/20 transition-colors">
+                        <div className="space-y-0.5">
+                          <Label className="text-xs font-bold">Tipo Administrativo</Label>
+                          <p className="text-[10px] text-muted-foreground leading-tight">Garante acesso total às configurações do sistema.</p>
+                        </div>
+                        <Switch 
+                          checked={userTypeForm.isAdmin}
+                          onCheckedChange={(checked) => setUserTypeForm({ ...userTypeForm, isAdmin: checked })}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between p-3 rounded-xl border border-border/40 bg-primary/5 hover:bg-primary/10 transition-colors">
+                        <div className="space-y-0.5">
+                          <Label className="text-xs font-bold text-primary">Habilitar para Visitas</Label>
+                          <p className="text-[10px] text-muted-foreground leading-tight">Usuários deste tipo aparecerão no agendamento.</p>
+                        </div>
+                        <Switch 
+                          checked={userTypeForm.canVisit}
+                          onCheckedChange={(checked) => setUserTypeForm({ ...userTypeForm, canVisit: checked })}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between p-3 rounded-xl border border-border/40 bg-secondary/10 hover:bg-secondary/20 transition-colors">
+                        <div className="space-y-0.5">
+                          <Label className="text-xs font-bold">Visível no Menu</Label>
+                          <p className="text-[10px] text-muted-foreground leading-tight">Exibir este tipo no menu de atalhos lateral.</p>
+                        </div>
+                        <Switch 
+                          checked={userTypeForm.showInMenu}
+                          onCheckedChange={(checked) => setUserTypeForm({ ...userTypeForm, showInMenu: checked })}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Ícone</Label>
-                  <div className="grid grid-cols-8 gap-2 max-h-[300px] overflow-y-auto custom-scrollbar p-2 border border-border/40 rounded-lg bg-secondary/20">
-                    {Object.entries(ICON_LIST).map(([iconName, IconComponent]) => (
-                      <button
-                        key={iconName}
-                        type="button"
-                        onClick={() => setUserTypeForm({ ...userTypeForm, icon: iconName })}
-                        className={`p-2 rounded-lg flex items-center justify-center transition-all hover:bg-primary/20 ${
-                          userTypeForm.icon === iconName ? 'bg-primary text-primary-foreground ring-2 ring-primary' : 'bg-background hover:scale-110'
-                        }`}
-                        title={iconName}
-                      >
-                        <IconComponent className="w-5 h-5" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch 
-                    checked={userTypeForm.showInMenu}
-                    onCheckedChange={(checked) => setUserTypeForm({ ...userTypeForm, showInMenu: checked })}
-                  />
-                  <Label>Mostrar no menu lateral</Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch 
-                    checked={userTypeForm.active}
-                    onCheckedChange={(checked) => setUserTypeForm({ ...userTypeForm, active: checked })}
-                  />
-                  <Label>Ativo</Label>
-                </div>
-                <div className="flex gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setIsUserTypeModalOpen(false)} className="flex-1">Cancelar</Button>
-                  <Button type="submit" className="flex-1">
-                    {editingUserTypeId ? 'Atualizar' : 'Criar'}
+
+                <DialogFooter className="p-6 bg-muted/20 border-t border-border/40 shrink-0 flex flex-row gap-2">
+                  <Button type="button" variant="outline" onClick={() => setIsUserTypeModalOpen(false)} className="flex-1 text-xs font-bold uppercase tracking-widest h-11">
+                    Cancelar
                   </Button>
-                </div>
+                  <Button type="submit" className="flex-1 gap-2 text-xs font-black uppercase tracking-widest shadow-lg shadow-primary/20 h-11">
+                    <CheckCircle2 className="w-4 h-4" />
+                    {editingUserTypeId ? 'Atualizar' : 'Criar Tipo'}
+                  </Button>
+                </DialogFooter>
               </form>
             </DialogContent>
           </Dialog>
@@ -5332,11 +4665,11 @@ export default function Admin() {
                     {/* Estatísticas Rápidas */}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-4 rounded-xl border border-border/50 bg-secondary/20 text-center">
-                        <p className="text-2xl font-black text-primary">{selectedTerritory.clientCount}</p>
+                        <p className="text-2xl font-black text-primary">{selectedTerritory.clientCount || 0}</p>
                         <p className="text-[10px] font-bold text-muted-foreground uppercase mt-1">Clientes</p>
                       </div>
                       <div className="p-4 rounded-xl border border-border/50 bg-secondary/20 text-center">
-                        <p className="text-2xl font-black text-primary">{selectedTerritory.userIds.length}</p>
+                        <p className="text-2xl font-black text-primary">{(selectedTerritory.userIds || []).length}</p>
                         <p className="text-[10px] font-bold text-muted-foreground uppercase mt-1">Usuários</p>
                       </div>
                     </div>
@@ -5348,7 +4681,7 @@ export default function Admin() {
                         <span className="text-xs font-bold uppercase tracking-widest">Responsáveis com Clientes</span>
                       </div>
                       <div className="space-y-2">
-                        {selectedTerritory.userIds.length === 0 ? (
+                        {(!selectedTerritory.userIds || selectedTerritory.userIds.length === 0) ? (
                           <p className="text-xs text-muted-foreground italic text-center py-2">Nenhum usuário vinculado</p>
                         ) : selectedTerritory.userIds.map(id => {
                           const u = users.find(u => u.id === id);
@@ -5392,14 +4725,14 @@ export default function Admin() {
           {/* Modal Detalhado de UF (Novo) */}
           <Dialog open={isUFDetailOpen} onOpenChange={setIsUFDetailOpen}>
             <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] p-0 overflow-hidden border-none shadow-2xl">
+              <DialogHeader className="sr-only">
+                <DialogTitle>Detalhes do Estado {ufDetailData?.uf || ''}</DialogTitle>
+                <DialogDescription>Gestão detalhada de territórios, usuários e clientes.</DialogDescription>
+              </DialogHeader>
               {ufDetailData && (
                 <div className="flex flex-col h-full bg-background">
                   {/* Header do Modal */}
                   <div className="p-6 bg-primary/10 border-b border-border/40 relative">
-                    <DialogHeader className="sr-only">
-                      <DialogTitle>{ufDetailData.nome} - {ufDetailData.uf}</DialogTitle>
-                      <DialogDescription>Gestão detalhada de territórios, usuários e clientes no estado de {ufDetailData.nome}.</DialogDescription>
-                    </DialogHeader>
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
                         <div className="w-14 h-14 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center font-black text-2xl shadow-lg shadow-primary/20">
@@ -5681,7 +5014,7 @@ export default function Admin() {
                 </div>
                 <div className="max-h-[400px] overflow-y-auto border rounded-lg">
                   <table className="w-full">
-                    <thead className="bg-muted/50 sticky top-0">
+                    <thead className="bg-card sticky top-0 z-10 border-b border-border/20 shadow-sm">
                       <tr>
                         <th className="p-3 text-left font-bold text-xs uppercase">Selecionar</th>
                         <th className="p-3 text-left font-bold text-xs uppercase">Nome</th>
