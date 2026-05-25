@@ -65,7 +65,7 @@ export default function MapLegend({
           </div>
           <div>
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-foreground/80">
-              {selectedUF ? `Equipe ${selectedUF}` : "Usuários Responsáveis"}
+              {selectedUF ? `Equipe ${selectedUF}` : "Reps Responsáveis"}
             </h3>
           </div>
         </div>

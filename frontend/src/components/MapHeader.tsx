@@ -378,7 +378,7 @@ export default function MapHeader({
                 className={`h-8 gap-1.5 sm:gap-2 px-2 sm:px-3 ${showUsuarios ? 'bg-blue-600 text-white shadow-sm hover:bg-blue-700' : 'text-muted-foreground hover:bg-background'}`}
               >
                 <UserCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span className="hidden md:inline text-xs font-semibold">Usuários</span>
+                <span className="hidden md:inline text-xs font-semibold">Reps</span>
               </Button>
               <div className="w-[1px] h-4 bg-border/40 mx-0.5" />
 
@@ -428,7 +428,7 @@ export default function MapHeader({
                     {/* User Multi-Select Filter (Admin/Supervisor Only) */}
                     {(role === 'admin' || role === 'supervisor') && (
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Filtrar Usuários</label>
+                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Filtrar Reps</label>
                         <Popover>
                           <PopoverTrigger asChild>
                             <Button 
@@ -437,9 +437,9 @@ export default function MapHeader({
                               className="w-full justify-between h-9 text-xs bg-secondary/50 border-border hover:bg-secondary"
                             >
                               <span className="truncate max-w-[120px]">
-                                {!filtroUsuario ? "Todos Usuários" : 
+                                {!filtroUsuario ? "Todos Reps" : 
                                   !filtroUsuario.includes(',') ? 
-                                    (users.find(u => String(u.id) === filtroUsuario)?.username || "1 Usuário") :
+                                    (users.find(u => String(u.id) === filtroUsuario)?.username || "1 Rep") :
                                     `${filtroUsuario.split(',').length} Selecionados`}
                               </span>
                               <ChevronDown className="w-3 h-3 text-muted-foreground" />
@@ -451,7 +451,7 @@ export default function MapHeader({
                                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                                 <input
                                   type="text"
-                                  placeholder="Pesquisar usuário..."
+                                  placeholder="Pesquisar Rep..."
                                   value={userSearchQuery}
                                   onChange={(e) => setUserSearchQuery(e.target.value)}
                                   className="w-full bg-secondary/50 text-xs pl-8 pr-8 py-1.5 rounded-md border border-border focus:outline-none focus:ring-1 focus:ring-primary/40"
@@ -472,7 +472,7 @@ export default function MapHeader({
                                 onClick={() => onFilterUser?.(null)}
                                 className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded-md transition-colors ${!filtroUsuario ? 'bg-primary/10 text-primary' : 'hover:bg-secondary'}`}
                               >
-                                <Users size={14} /> Todos Usuários
+                                <Users size={14} /> Todos Reps
                                 {!filtroUsuario && <Check size={14} className="ml-auto" />}
                               </button>
                               <div className="h-px bg-border/50 my-1" />

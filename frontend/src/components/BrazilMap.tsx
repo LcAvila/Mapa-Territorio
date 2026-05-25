@@ -79,7 +79,10 @@ function MapController({ center, zoom, flyToLocation, selectedUF }: { center: [n
     // E se não estivermos já num nível de zoom detalhado (evita resetar zoom manual)
     if (!hasFlyTo && map.getZoom() < 8) {
       if (selectedUF || isFirst.current) {
-        map.setView(center, zoom, { animate: false });
+        map.setView(center, zoom, { 
+          animate: true,
+          duration: 1.5
+        });
         isFirst.current = false;
       }
     }
@@ -93,7 +96,18 @@ function MapController({ center, zoom, flyToLocation, selectedUF }: { center: [n
         // Use a small timeout to ensure map is ready and not fighting other animations
         const timer = setTimeout(() => {
           try {
-            map.setView([lat, lon], flyToLocation.zoom || 14, { animate: false });
+            // Se for um zoom detalhado (ex: aproximar cliente), usa flyTo para animação cinemática
+            if (flyToLocation.zoom >= 14) {
+              map.flyTo([lat, lon], flyToLocation.zoom, {
+                duration: 2,
+                easeLinearity: 0.25
+              });
+            } else {
+              map.setView([lat, lon], flyToLocation.zoom || 14, { 
+                animate: true,
+                duration: 1.5
+              });
+            }
           } catch (e) {
             map.setView([lat, lon], flyToLocation.zoom || 14);
           }
@@ -249,13 +263,13 @@ function ZoomToFeature({
       const layer = L.geoJSON(geoJson as Parameters<typeof L.geoJSON>[0]);
       const bounds = layer.getBounds();
       if (bounds.isValid()) {
-        map.fitBounds(bounds, {
+        map.flyToBounds(bounds, {
           padding: [50, 50],
-          animate: false,
+          duration: 1.5,
           maxZoom: maxZoom
         });
         // Ensure map is correctly aligned after transition
-        setTimeout(() => map.invalidateSize(), 100);
+        setTimeout(() => map.invalidateSize(), 1600);
       }
     } catch { /* ignore */ }
   }, [geoJson, map, maxZoom, skipIfZoomed]);
@@ -521,39 +535,55 @@ export default function BrazilMap({
       };
     }
 
-    // If showUsuarios is active, show state color based on assignments
-    if (showUsuarios && uf) {
+    // Se já existe um estado selecionado, os outros estados não devem ter preenchimento sólido (para não ficarem brancos)
+    const hasSelection = !!selectedUF;
+
+    // Se o botão "Reps" estiver ativo e NÃO houver estado selecionado, pintamos os estados com as cores dos responsáveis
+    if (showUsuarios && !hasSelection && uf) {
       const stateTerritories = apiTerritories.filter(t => t.uf === uf.sigla);
       if (stateTerritories.length > 0) {
-        // Get the color of the first user found in this state
-        const firstUserId = stateTerritories[0].userId;
-        const user = firstUserId ? getUserById(firstUserId, apiUsers) : null;
-        const color = user ? getUserColor(user) : "hsl(210, 80%, 40%)";
+        // Se houver um filtro de Rep específico, tentamos encontrar esse Rep no estado
+        const matchedUserId = filtroUsuario 
+          ? stateTerritories.find(t => filtroUsuario.split(',').map(f => Number(f.trim())).includes(t.userId || 0))?.userId
+          : stateTerritories[0].userId;
 
-        return {
-          fillColor: color,
-          weight: isSelected ? 2 : 1.5,
-          opacity: 1,
-          color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : color,
-          fillOpacity: 0.4,
-        };
+        if (matchedUserId) {
+          const user = getUserById(matchedUserId, apiUsers);
+          if (user) {
+            const color = getUserColor(user);
+            return {
+              fillColor: color,
+              weight: isSelected ? 2 : 1.5,
+              opacity: 1,
+              color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : color,
+              fillOpacity: 0.6,
+            };
+          }
+        }
       }
     }
 
     // Estilos base por tema para melhorar contraste
     const isLightTheme = mapTheme === 'light';
-    const baseFillColor = isLightTheme ? "#ffffff" : "#334155"; // Escuro usa slate-700 original
-    const baseStrokeColor = isLightTheme ? "#64748b" : "#475569"; // Bordas sutis no escuro
-    const baseFillOpacity = isLightTheme ? 1.0 : 0.8;
+    
+    // CORRIGIDO: Se houver seleção e este não for o estado selecionado, ele deve ser transparente ou sutil
+    const baseFillColor = isLightTheme ? "#ffffff" : "#334155";
+    const baseStrokeColor = isLightTheme ? "#64748b" : "#475569";
+    
+    // Se houver seleção de QUALQUER estado, estados não selecionados ficam quase transparentes
+    const baseFillOpacity = hasSelection 
+      ? (isSelected ? 0.15 : 0) // O selecionado mantém um pouco, os outros 0
+      : (isLightTheme ? 1.0 : 0.8); // Sem seleção, mantém o preenchimento normal
 
     return {
       fillColor: isSelected ? "hsl(168, 70%, 45%)" : baseFillColor,
       weight: isSelected ? 2 : (isLightTheme ? 1.5 : 1.0),
-      opacity: 1,
+      opacity: hasSelection && !isSelected ? 0.3 : 1, // Esmaece estados não selecionados
       color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : baseStrokeColor,
       fillOpacity: isSelected ? 0.15 : baseFillOpacity,
+      interactive: !hasSelection || isSelected // Desativa interação nos outros quando um está aberto
     };
-  }, [selectedUF, isMapMoving, showUsuarios, apiTerritories, apiUsers, role, effectiveAssignedStates, mapTheme]);
+  }, [selectedUF, isMapMoving, showUsuarios, apiTerritories, apiUsers, role, effectiveAssignedStates, mapTheme, filtroUsuario]);
 
   const municipioStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
@@ -587,17 +617,22 @@ export default function BrazilMap({
 
     if (userIds.length === 0) return blank;
     
-    // Always show user colors when there are users assigned
-    // The filter controls which users to show, not whether to show colors at all
-    const matchedUserId = (showUsuarios || filtroUsuario) 
-      ? (filtroUsuario ? userIds.find(id => filtroUsuario.split(',').map(f => Number(f.trim())).includes(id)) : userIds[0])
+    // O botão "Reps" (showUsuarios) agora é o interruptor mestre para as cores do território
+    if (!showUsuarios) {
+      return blank;
+    }
+
+    // Identifica qual representante mostrar baseado no filtro selecionado (se houver)
+    const matchedUserId = filtroUsuario
+      ? userIds.find(id => filtroUsuario.split(',').map(f => Number(f.trim())).includes(id))
       : userIds[0];
 
-    if (filtroUsuario && !matchedUserId && !showUsuarios) {
+    // Se houver um filtro de Rep ativo e este município não pertencer a ele, não mostra cor
+    if (!matchedUserId) {
       return { fillColor: "#f1f5f9", weight: 0.5, opacity: 0.3, color: "#cbd5e1", fillOpacity: 0.2 };
     }
 
-    const user = getUserById(matchedUserId!, apiUsers);
+    const user = getUserById(matchedUserId, apiUsers);
     if (!user) return blank;
 
     if (mostrarVagos && !user.isVago) {
@@ -607,7 +642,7 @@ export default function BrazilMap({
     return {
       fillColor: color, weight: user.isVago ? 2 : 1.5, opacity: 1,
       color: user.isVago ? "hsl(0, 70%, 50%)" : color,
-      fillOpacity: (showUsuarios || (filtroUsuario && matchedUserId)) ? 0.8 : (user.isVago ? 0.3 : 0.55),
+      fillOpacity: 0.8, // Opacidade fixa quando ativo
       dashArray: user.isVago ? "6 4" : undefined,
     };
   }, [citiesList, municipioNamesByCode, selectedUF, modo, filtroUsuario, mostrarVagos, searchQuery, apiTerritories, apiUsers, selectedClients, showUsuarios]);
@@ -704,18 +739,18 @@ export default function BrazilMap({
 
     (layer as L.Path).on({
       mouseover: (e) => {
-        const currentStyle = stateStyle(f);
+        // Se já tiver um estado selecionado, não destaca as bordas de outros estados ao passar o mouse
+        if (selectedUF) return;
+
         const isLightTheme = mapTheme === 'light';
-        
         e.target.setStyle({ 
           color: 'hsl(var(--admin-sidebar-accent))', 
-          fillColor: isLightTheme ? 'hsl(168, 70%, 80%)' : currentStyle.fillColor,
-          fillOpacity: isLightTheme ? 0.6 : Math.max(0.3, (currentStyle.fillOpacity || 0) + 0.1), 
-          weight: 3
+          weight: isLightTheme ? 2.5 : 2
         });
         e.target.bindTooltip(uf.nome, { sticky: true }).openTooltip();
       },
       mouseout: (e) => {
+        // Restaura o estilo original (que depende de selectedUF)
         e.target.setStyle(stateStyle(f));
         e.target.closeTooltip();
       },
@@ -729,7 +764,7 @@ export default function BrazilMap({
         onContextMenuState?.(uf.nome, uf.sigla, e.originalEvent.clientX, e.originalEvent.clientY);
       },
     });
-  }, [stateStyle, onSelectUF, onContextMenuState, statesMetadata, role, effectiveAssignedStates]);
+  }, [stateStyle, onSelectUF, onContextMenuState, statesMetadata, role, effectiveAssignedStates, selectedUF, mapTheme]);
 
   const onEachMunicipio = useCallback((feature: unknown, layer: L.Layer) => {
     const f = feature as GeoJSONFeature;

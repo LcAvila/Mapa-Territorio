@@ -205,7 +205,7 @@ export default function DetailPanel({
                 className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-md text-xs font-semibold transition-all bg-purple-600 text-white hover:bg-purple-700 shadow-md"
               >
                 <UserPlus className="w-4 h-4" />
-                Atribuir Usuários
+                Atribuir Reps
               </button>
             )}
 
@@ -243,7 +243,7 @@ export default function DetailPanel({
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-card border border-border rounded-lg max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-              <h3 className="font-semibold text-foreground">Atribuir Usuários</h3>
+              <h3 className="font-semibold text-foreground">Atribuir Reps</h3>
               <button onClick={() => setShowAssignModal(false)} className="p-1 rounded-md hover:bg-secondary transition-colors">
                 <XIcon className="w-4 h-4" />
               </button>
@@ -251,7 +251,7 @@ export default function DetailPanel({
             
             <div className="p-4 flex-1 overflow-y-auto space-y-2">
               <p className="text-sm text-muted-foreground mb-2">
-                Selecione os usuários para atribuir a {municipio} ({uf}):
+                Selecione os Reps para atribuir a {municipio} ({uf}):
               </p>
               
               {usersInState.length === 0 ? (
