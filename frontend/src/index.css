@@ -1063,6 +1063,19 @@
   border-radius: 3px;
 }
 
+.admin-content--help {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-help-wrap {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
 /* Admin cards */
 .admin-card {
   background: hsl(var(--admin-card-bg));

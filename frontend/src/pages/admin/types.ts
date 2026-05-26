@@ -74,6 +74,9 @@ export interface ClienteData {
 
 export type TabId =
   | 'dashboard'
+  | 'ajuda'
+  | 'visitas'
+  | 'visitas_agendar'
   | 'users'
   | 'territories'
   | 'groups'
@@ -96,7 +99,7 @@ export type TabId =
   | `user_type_${number}`;
 
 export interface NavItem {
-  id: TabId | 'settings' | 'rotas_menu' | 'users_menu' | 'ajuda';
+  id: TabId | 'settings' | 'rotas_menu' | 'users_menu' | 'visitas_menu' | 'ajuda';
   label: string;
   icon: React.ElementType;
   count?: number;

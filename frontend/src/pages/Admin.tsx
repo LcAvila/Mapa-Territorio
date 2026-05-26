@@ -221,6 +221,7 @@ import { UF_DATA } from '@/data/uf-codes';
 import { BaseClientePanel } from '../components/admin/rotas/BaseClientePanel';
 import { SupervisorRoutesPanel } from '../components/admin/rotas/SupervisorRoutesPanel';
 import { VisitScheduler } from '../components/admin/rotas/VisitScheduler';
+import { HelpDocumentation } from '@/components/help/HelpDocumentation';
 const MiniMapBrasil = React.lazy(() => import('../components/admin/MiniMapBrasil'));
 import { AuditLogsPanel } from '../components/admin/AuditLogsPanel';
 import { SystemConfigPanel } from '../components/admin/SystemConfigPanel';
@@ -262,7 +263,7 @@ interface SystemNotification { id: number; title: string; message: string; creat
 interface AuditLog { id: string; action: string; entity: string; entityId: string; details: string; uf?: string; municipio?: string; performedBy: string; timestamp: string; ipAddress?: string; }
 interface ModulePermission { userId: number; moduleId: string; canView: boolean; canEdit: boolean; }
 
-type TabId = 'dashboard' | 'users' | 'territories' | 'groups' | 'notifications' | 'audit' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'cycles' | 'roteiro_seq' | 'resumo_roteiro' | 'user_types' | 'system' | 'reps' | 'visitas' | 'visitas_agendar' | `user_type_${number}`;
+type TabId = 'dashboard' | 'ajuda' | 'users' | 'territories' | 'groups' | 'notifications' | 'audit' | 'personal' | 'rotas' | 'baserotas' | 'clusters' | 'blocos' | 'roteiros' | 'agenda' | 'densidade' | 'cycles' | 'roteiro_seq' | 'resumo_roteiro' | 'user_types' | 'system' | 'reps' | 'visitas' | 'visitas_agendar' | `user_type_${number}`;
 
 interface NavItem {
   id: TabId | 'settings' | 'rotas_menu' | 'users_menu' | 'visitas_menu' | 'ajuda';
@@ -1309,7 +1310,7 @@ export default function Admin() {
     }
   ].filter(item => {
     // If it's a core section (like dashboard), allow or check specific permission if needed
-    if (item.id === 'dashboard') return true;
+    if (item.id === 'dashboard' || item.id === 'ajuda') return true;
 
     // Modular permission check
     const moduleMap: Record<string, string> = {
@@ -2750,7 +2751,14 @@ export default function Admin() {
           </div>
         </header>
 
-        <main className="admin-content">
+        <main className={activeTab === 'ajuda' ? 'admin-content admin-content--help' : 'admin-content'}>
+
+          {/* ━━ AJUDA / DOCUMENTAÇÃO ━━ */}
+          {activeTab === 'ajuda' && (
+            <div className="admin-help-wrap -mx-2 md:-mx-4">
+              <HelpDocumentation embedded />
+            </div>
+          )}
 
           {/* ━━ DASHBOARD ━━ */}
           {activeTab === 'dashboard' && (() => {
