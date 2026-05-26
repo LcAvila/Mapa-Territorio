@@ -24,6 +24,7 @@ interface DetailPanelProps {
 }
 
 import { useApiUsers, useApiTerritories } from "@/hooks/use-api-data";
+import { useMemo } from "react";
 
 export default function DetailPanel({ 
   municipio, uf, municipioId, modo, onClose, onViewBairros, ufCode, 
@@ -34,6 +35,18 @@ export default function DetailPanel({
   const { data: municipiosInfo, isLoading: loadingInfo } = useMunicipioInfo(ufCode || null);
   const { data: apiUsers = [] } = useApiUsers(!!token);
   const { data: apiTerritories = [] } = useApiTerritories(!!token);
+
+  const filteredApiTerritories = useMemo(() => {
+    if (role === 'admin') return apiTerritories;
+    
+    const currentUser = apiUsers.find(u => u.id === loggedUserId);
+    const managedIds = currentUser?.managedUserIds || [];
+    
+    return apiTerritories.filter(t => 
+      t.userId === loggedUserId || managedIds.includes(t.userId || 0)
+    );
+  }, [role, apiTerritories, apiUsers, loggedUserId]);
+
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
 
@@ -50,14 +63,22 @@ export default function DetailPanel({
 
   // Filtrar usuários que têm territórios no estado UF
   const usersInState = apiUsers.filter((u: SystemUser) => {
+    // Para supervisores e reps, restringir a visibilidade na listagem lateral
+    if (role === 'supervisor') {
+      const isMeOrTeam = u.id === loggedUserId || loggedUser?.managedUserIds?.includes(u.id);
+      if (!isMeOrTeam) return false;
+    } else if (role !== 'admin' && u.id !== loggedUserId) {
+      return false;
+    }
+
     // Verificar se o usuário tem algum território neste estado
-    const hasTerritoryInState = apiTerritories.some((t: TerritoryAssignment) => 
+    const hasTerritoryInState = filteredApiTerritories.some((t: TerritoryAssignment) => 
       t.userId === u.id && t.uf === uf && t.modo === modo
     );
     return hasTerritoryInState;
   });
 
-  const userIds = getMunicipioResponsaveis(municipio, uf, modo, apiTerritories);
+  const userIds = getMunicipioResponsaveis(municipio, uf, modo, filteredApiTerritories);
 
   const normalizeCityName = (value: string) =>
     value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();

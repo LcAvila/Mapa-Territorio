@@ -1,8 +1,26 @@
-import { prisma } from '../prisma';
+import { 
+  PrismaClient, 
+  RouteSequence, 
+  RouteSequenceItem, 
+  VisitCheckin, 
+  VisitResult, 
+  Cliente, 
+  RouteClientSnapshot,
+  User,
+  Notification
+} from '@prisma/client';
 import {
   resolveClientCoordinates,
   normalizeBrazilCoordinates,
 } from '../utils/client-coordinates';
+import { 
+  optimizeSequence, 
+  calculateRoute, 
+  formatDuration, 
+  formatDistance 
+} from './HereRoutingService';
+
+type PrismaDb = PrismaClient;
 
 export interface CheckinDTO {
   route_sequence_item_id: number;
@@ -24,15 +42,23 @@ export interface VisitResultDTO {
   sale_made?: boolean;
   sale_value?: number;
   notes?: string;
+  media_url?: string;
+  media_type?: string;
   userId: number;
 }
 
 export class VisitRouteService {
+  private prisma: PrismaDb;
+
+  constructor(prisma: PrismaDb) {
+    this.prisma = prisma;
+  }
+
   /**
    * Inicia a execução de um roteiro.
    */
   async startRoute(sequenceId: number) {
-    return await prisma.routeSequence.update({
+    return await (this.prisma as any).routeSequence.update({
       where: { id: sequenceId },
       data: { 
         optimization_status: 'em_execucao',
@@ -51,7 +77,7 @@ export class VisitRouteService {
    * Valida se a distância entre as coordenadas atuais e as do cliente estão dentro de um raio aceitável.
    */
   async checkin(data: CheckinDTO) {
-    const item = await prisma.routeSequenceItem.findUnique({
+    const item = await (this.prisma as any).routeSequenceItem.findUnique({
       where: { id: data.route_sequence_item_id },
       include: { clientSnapshot: true }
     });
@@ -66,7 +92,7 @@ export class VisitRouteService {
       }
     }
 
-    const checkin = await prisma.visitCheckin.create({
+    const checkin = await (this.prisma as any).visitCheckin.create({
       data: {
         route_sequence_item_id: data.route_sequence_item_id,
         checkin_at: new Date(),
@@ -78,7 +104,7 @@ export class VisitRouteService {
     });
 
     // Atualiza status do item
-    await prisma.routeSequenceItem.update({
+    await (this.prisma as any).routeSequenceItem.update({
       where: { id: data.route_sequence_item_id },
       data: { status: 'visitando' } // Status temporário enquanto está no cliente
     });
@@ -90,7 +116,7 @@ export class VisitRouteService {
    * Realiza check-out de uma parada.
    */
   async checkout(data: CheckoutDTO) {
-    return await prisma.visitCheckin.update({
+    return await (this.prisma as any).visitCheckin.update({
       where: { id: data.checkin_id },
       data: {
         checkout_at: new Date(),
@@ -105,20 +131,22 @@ export class VisitRouteService {
    * Registra o resultado final da visita.
    */
   async registerResult(data: VisitResultDTO) {
-    const result = await prisma.visitResult.create({
+    const result = await (this.prisma as any).visitResult.create({
       data: {
         route_sequence_item_id: data.route_sequence_item_id,
         result_status: data.status,
         sale_made: data.sale_made || false,
         sale_value: data.sale_value,
         notes: data.notes,
+        media_url: data.media_url,
+        media_type: data.media_type,
         registered_by: data.userId,
         registered_at: new Date()
       }
     });
 
     // Atualiza status final do item na sequência
-    await prisma.routeSequenceItem.update({
+    await (this.prisma as any).routeSequenceItem.update({
       where: { id: data.route_sequence_item_id },
       data: { status: data.status }
     });
@@ -140,16 +168,16 @@ export class VisitRouteService {
     startLng?: number
   }) {
     // 1. Buscar informações dos clientes e resolver coordenadas corretas
-    const clientsRaw = await prisma.cliente.findMany({
+    const clientsRaw = await (this.prisma as any).cliente.findMany({
       where: { id_cliente: { in: data.clientIds } },
     });
 
     const clients = await Promise.all(
-      clientsRaw.map(async (c) => {
+      clientsRaw.map(async (c: Cliente) => {
         const coords = await resolveClientCoordinates(c);
         if (coords) {
           if (coords.source === 'geocoded') {
-            await prisma.cliente.update({
+            await (this.prisma as any).cliente.update({
               where: { id_cliente: c.id_cliente },
               data: { latitude: coords.lat, longitude: coords.lng },
             });
@@ -161,102 +189,136 @@ export class VisitRouteService {
     );
 
     const missingCoords = clients.filter(
-      (c) => c.latitude == null || c.longitude == null
+      (c: any) => c.latitude == null || c.longitude == null
     );
     if (missingCoords.length > 0) {
-      const names = missingCoords.map((c) => c.nome_cliente).join(', ');
+      const names = missingCoords.map((c: any) => c.nome_cliente).join(', ');
       throw new Error(
         `Não foi possível localizar no mapa: ${names}. Verifique endereço, cidade, UF e CEP.`
       );
     }
 
-    // Sort clients by distance to optimize route sequence (Nearest Neighbor)
-    let sortedClients: typeof clients = [];
-    const remainingClients = [...clients];
-    
     // Determine start coordinates
-    let currentLat = data.startLat;
-    let currentLng = data.startLng;
+    let startLat = data.startLat;
+    let startLng = data.startLng;
     
-    // If no start coordinates provided, try to find a client with coordinates as starting point
-    if (currentLat === undefined || currentLng === undefined) {
-      const firstWithCoords = remainingClients.find(c => c.latitude !== null && c.longitude !== null);
+    if (startLat === undefined || startLng === undefined) {
+      const firstWithCoords = clients.find((c: any) => c.latitude !== null && c.longitude !== null);
       if (firstWithCoords) {
-        currentLat = firstWithCoords.latitude!;
-        currentLng = firstWithCoords.longitude!;
+        startLat = (firstWithCoords as any).latitude!;
+        startLng = (firstWithCoords as any).longitude!;
       }
     }
-    
-    // Nearest neighbor algorithm
-    while (remainingClients.length > 0) {
-      if (currentLat !== undefined && currentLng !== undefined) {
+
+    if (startLat === undefined || startLng === undefined) {
+      throw new Error('Não foi possível determinar o ponto de partida do roteiro.');
+    }
+
+    // Otimização de sequência via HERE API (Distância Real)
+    let sortedClients: any[] = [];
+    try {
+      const waypoints = clients.map((c: any) => ({
+        lat: c.latitude!,
+        lng: c.longitude!,
+        label: c.nome_cliente
+      }));
+
+      const optimization = await optimizeSequence(
+        { lat: startLat, lng: startLng, label: 'Início' },
+        waypoints
+      );
+
+      sortedClients = optimization.orderedIndices.map(idx => clients[idx]);
+    } catch (err) {
+      console.error('[OPTIMIZE] Falha ao usar HERE Sequence API, usando Vizinho Mais Próximo:', err);
+      // Fallback para Vizinho Mais Próximo se a API falhar
+      const remainingClients = [...clients];
+      let currentLat = startLat;
+      let currentLng = startLng;
+      
+      while (remainingClients.length > 0) {
         let nearestIndex = -1;
         let minDistance = Infinity;
         
         for (let i = 0; i < remainingClients.length; i++) {
-          const c = remainingClients[i];
-          if (c.latitude !== null && c.longitude !== null) {
-            const dist = this.calculateDistance(currentLat, currentLng, c.latitude, c.longitude);
-            if (dist < minDistance) {
-              minDistance = dist;
-              nearestIndex = i;
-            }
+          const c: any = remainingClients[i];
+          const dist = this.calculateDistance(currentLat, currentLng, c.latitude!, c.longitude!);
+          if (dist < minDistance) {
+            minDistance = dist;
+            nearestIndex = i;
           }
         }
         
-        if (nearestIndex !== -1) {
-          const nearestClient = remainingClients.splice(nearestIndex, 1)[0];
-          sortedClients.push(nearestClient);
-          currentLat = nearestClient.latitude!;
-          currentLng = nearestClient.longitude!;
-        } else {
-          // No more clients with coordinates, append remaining
-          sortedClients = [...sortedClients, ...remainingClients];
-          break;
-        }
-      } else {
-        // No starting coords and no clients have coords, just take them as is
-        sortedClients = [...sortedClients, ...remainingClients];
-        break;
+        const nearestClient = remainingClients.splice(nearestIndex, 1)[0];
+        sortedClients.push(nearestClient);
+        currentLat = (nearestClient as any).latitude!;
+        currentLng = (nearestClient as any).longitude!;
       }
     }
 
+    // Calcular Distância e Tempo Real via HERE Routing
+    let totalKm = 0;
+    let totalSeconds = 0;
+    let routeSummary: any = null;
+
+    try {
+      const routePoints = [
+        { lat: startLat, lng: startLng },
+        ...sortedClients.map((c: any) => ({ lat: c.latitude!, lng: c.longitude! }))
+      ];
+      
+      const routeResult = await calculateRoute(routePoints, 'car');
+      totalKm = routeResult.totalDistance / 1000;
+      totalSeconds = routeResult.totalDuration;
+      routeSummary = routeResult;
+    } catch (err) {
+      console.error('[ROUTING] Falha ao calcular rota real:', err);
+      // Fallback para cálculo manual (Haversine)
+      let prevLat = startLat;
+      let prevLng = startLng;
+      sortedClients.forEach((c: any) => {
+        totalKm += this.calculateDistance(prevLat, prevLng, c.latitude!, c.longitude!);
+        prevLat = c.latitude!;
+        prevLng = c.longitude!;
+      });
+    }
+
     // 2. Criar a sequência principal
-    const sequence = await prisma.routeSequence.create({
+    const sequence = await (this.prisma as any).routeSequence.create({
       data: {
         name: data.name?.trim() || null,
         supervisor_user_id: data.supervisorId,
         route_date: data.date,
         semana: data.semana,
-        total_visits: clients.length,
-        optimization_status: 'pending',
-        start_lat: data.startLat,
-        start_lng: data.startLng,
-        start_label: data.startPoint === 'base' ? 'Base da Empresa' : 'Localização Atual'
+        total_visits: sortedClients.length,
+        optimization_status: 'completed',
+        start_lat: startLat,
+        start_lng: startLng,
+        start_label: data.startPoint === 'base' ? 'Base da Empresa' : 'Localização Atual',
+        total_distance_km: totalKm,
+        total_duration_minutes: Math.round(totalSeconds / 60),
+        average_km_per_visit: sortedClients.length > 0 ? totalKm / sortedClients.length : 0,
+        optimization_provider: 'HERE Routing V8'
       }
     });
 
-    // 3. Criar os itens do roteiro com distância entre paradas
-    let prevLat = data.startLat;
-    let prevLng = data.startLng;
-    let totalKm = 0;
+    // 3. Criar os itens do roteiro
+    let prevLat = startLat;
+    let prevLng = startLng;
     const startLabel = data.startPoint === 'base' ? 'Base da Empresa' : 'Localização Atual';
 
-    const items = sortedClients.map((c, index) => {
+    const items = sortedClients.map((c: any, index: number) => {
       let distanceKm: number | null = null;
-      if (
-        prevLat != null &&
-        prevLng != null &&
-        c.latitude != null &&
-        c.longitude != null
-      ) {
-        distanceKm = this.calculateDistance(prevLat, prevLng, c.latitude, c.longitude);
-        totalKm += distanceKm;
+      
+      // Tentar pegar distância da seção da rota real se disponível
+      if (routeSummary && routeSummary.sections && routeSummary.sections[index]) {
+        distanceKm = routeSummary.sections[index].summary.length / 1000;
+      } else {
+        distanceKm = this.calculateDistance(prevLat, prevLng, c.latitude!, c.longitude!);
       }
-      if (c.latitude != null && c.longitude != null) {
-        prevLat = c.latitude;
-        prevLng = c.longitude;
-      }
+
+      prevLat = c.latitude!;
+      prevLng = c.longitude!;
 
       return {
         route_sequence_id: sequence.id,
@@ -267,32 +329,21 @@ export class VisitRouteService {
         stop_lat: c.latitude,
         stop_lng: c.longitude,
         distance_from_previous_km: distanceKm,
-        logistic_note:
-          index === 0 ? `Saída de ${startLabel}` : null,
+        logistic_note: index === 0 ? `Saída de ${startLabel}` : null,
         status: 'pendente',
       };
     });
 
-    await prisma.routeSequenceItem.createMany({ data: items });
-
-    if (totalKm > 0) {
-      await prisma.routeSequence.update({
-        where: { id: sequence.id },
-        data: {
-          total_distance_km: totalKm,
-          average_km_per_visit: sortedClients.length > 0 ? totalKm / sortedClients.length : 0,
-        },
-      });
-    }
+    await (this.prisma as any).routeSequenceItem.createMany({ data: items });
 
     // 4. Notificar o representante
     try {
-      const supervisor = await prisma.user.findUnique({
+      const supervisor = await (this.prisma as any).user.findUnique({
         where: { id: data.supervisorId },
         select: { full_name: true }
       });
 
-      await prisma.notification.create({
+      await (this.prisma as any).notification.create({
         data: {
           title: 'Novo Roteiro Agendado',
           message: `Você tem um novo roteiro com ${clients.length} paradas agendado para o dia ${data.date.toLocaleDateString('pt-BR')}.`,
@@ -312,7 +363,7 @@ export class VisitRouteService {
    * Detalhes completos do roteiro para supervisão (paradas, endereços, distâncias, motivos).
    */
   async getRouteDetails(sequenceId: number) {
-    const sequence = await prisma.routeSequence.findUnique({
+    const sequence = await (this.prisma as any).routeSequence.findUnique({
       where: { id: sequenceId },
       include: {
         supervisor: { select: { id: true, full_name: true, username: true } },
@@ -325,17 +376,19 @@ export class VisitRouteService {
     if (!sequence) throw new Error('Roteiro não encontrado');
 
     const clientIds = sequence.items
-      .map((i) => i.client_id)
-      .filter((id): id is number => id != null);
+      .map((i: any) => i.client_id)
+      .filter((id: any): id is number => id != null);
 
     const clients =
       clientIds.length > 0
-        ? await prisma.cliente.findMany({
+        ? await (this.prisma as any).cliente.findMany({
             where: { id_cliente: { in: clientIds } },
             select: {
               id_cliente: true,
               nome_cliente: true,
               nome_abreviado: true,
+              latitude: true,
+              longitude: true,
               cep: true,
               endereco_completo: true,
               bairro: true,
@@ -354,25 +407,25 @@ export class VisitRouteService {
           })
         : [];
 
-    const clientMap = new Map(clients.map((c) => [c.id_cliente, c]));
+    const clientMap = new Map<number, any>(clients.map((c: any) => [c.id_cliente, c]));
 
     const snapshotIds = sequence.items
-      .map((i) => i.client_snapshot_id)
-      .filter((id): id is number => id != null);
+      .map((i: any) => i.client_snapshot_id)
+      .filter((id: any): id is number => id != null);
 
     const snapshots =
       snapshotIds.length > 0
-        ? await prisma.routeClientSnapshot.findMany({
+        ? await (this.prisma as any).routeClientSnapshot.findMany({
             where: { id: { in: snapshotIds } },
           })
         : [];
-    const snapshotMap = new Map(snapshots.map((s) => [s.id, s]));
+    const snapshotMap = new Map<number, any>(snapshots.map((s: any) => [s.id, s]));
 
     let prevLat = sequence.start_lat;
     let prevLng = sequence.start_lng;
     let computedTotalKm = 0;
 
-    const stops = sequence.items.map((item) => {
+    const stops = sequence.items.map((item: any) => {
       const client = item.client_id ? clientMap.get(item.client_id) : undefined;
       const snapshot = item.client_snapshot_id
         ? snapshotMap.get(item.client_snapshot_id)
@@ -478,7 +531,7 @@ export class VisitRouteService {
       motivo: this.buildRouteMotivo(sequence, stops.length),
       summary: {
         total_stops: sequence.total_visits ?? stops.length,
-        completed_stops: stops.filter((s) => s.status === 'visitada').length,
+        completed_stops: stops.filter((s: any) => s.status === 'visitada').length,
         total_distance_km: Math.round(totalKm * 10) / 10,
         average_km_per_visit: sequence.average_km_per_visit
           ? Math.round(sequence.average_km_per_visit * 10) / 10
@@ -588,7 +641,7 @@ export class VisitRouteService {
    * Retorna os detalhes de uma sequência de roteiro para execução.
    */
   async getSequence(sequenceId: number) {
-    return await prisma.routeSequence.findUnique({
+    return await (this.prisma as any).routeSequence.findUnique({
       where: { id: sequenceId },
       include: {
         items: {
@@ -618,7 +671,7 @@ export class VisitRouteService {
    * Retorna um resumo dos roteiros em execução para supervisão.
    */
   async getSummary(userId?: number) {
-    const sequences = await prisma.routeSequence.findMany({
+    const sequences = await (this.prisma as any).routeSequence.findMany({
       where: {
         optimization_status: { in: ['completed', 'em_execucao', 'pending'] },
         ...(userId ? { supervisor_user_id: userId } : {})
@@ -630,17 +683,17 @@ export class VisitRouteService {
       orderBy: { created_at: 'desc' }
     });
 
-    return sequences.map(s => ({
+    return sequences.map((s: any) => ({
       id: s.id,
       name: s.name?.trim() || `Roteiro #${s.id}`,
       representative: s.supervisor?.full_name || 'Sem Supervisor',
       date: (s.route_date || s.created_at).toISOString().split('T')[0],
       semana: s.semana,
       total_stops: s.total_visits || 0,
-      completed_stops: s.items.filter(i => i.status === 'visitada').length,
+      completed_stops: s.items.filter((i: any) => i.status === 'visitada').length,
       status: s.optimization_status,
       completion_rate: (s.total_visits || 0) > 0 
-        ? Math.round((s.items.filter(i => i.status === 'visitada').length / (s.total_visits || 1)) * 100) 
+        ? Math.round((s.items.filter((i: any) => i.status === 'visitada').length / (s.total_visits || 1)) * 100) 
         : 0
     }));
   }
@@ -653,7 +706,7 @@ export class VisitRouteService {
     data: { name?: string; route_date?: Date; semana?: string | null },
     actor: { id: number; role: string }
   ) {
-    const existing = await prisma.routeSequence.findUnique({
+    const existing = await (this.prisma as any).routeSequence.findUnique({
       where: { id: sequenceId },
       select: { id: true, supervisor_user_id: true },
     });
@@ -684,7 +737,7 @@ export class VisitRouteService {
       throw new Error('Nenhum campo para atualizar.');
     }
 
-    return prisma.routeSequence.update({
+    return (this.prisma as any).routeSequence.update({
       where: { id: sequenceId },
       data: updateData,
       include: {
@@ -698,7 +751,7 @@ export class VisitRouteService {
    * Remove um roteiro e seus itens (cascade).
    */
   async deleteRoute(sequenceId: number, actor: { id: number; role: string }) {
-    const existing = await prisma.routeSequence.findUnique({
+    const existing = await (this.prisma as any).routeSequence.findUnique({
       where: { id: sequenceId },
       select: { id: true, supervisor_user_id: true, optimization_status: true },
     });
@@ -713,7 +766,7 @@ export class VisitRouteService {
       throw new Error('Não é possível excluir um roteiro em execução.');
     }
 
-    await prisma.routeSequence.delete({ where: { id: sequenceId } });
+    await (this.prisma as any).routeSequence.delete({ where: { id: sequenceId } });
     return { success: true, id: sequenceId };
   }
 
@@ -740,12 +793,12 @@ export class VisitRouteService {
   async getSuggestions(userId: number) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
+ 
     // Obter todos os IDs de usuários na hierarquia (recursivo)
     const allUserIds = await this.getAllSubordinateIds(userId);
 
     // Buscar clientes dos usuários da hierarquia que não tiveram visitas recentes concluídas
-    const suggestions = await prisma.cliente.findMany({
+    const suggestions = await (this.prisma as any).cliente.findMany({
       where: {
         userId: { in: allUserIds },
         status_ativo: true,
@@ -782,7 +835,7 @@ export class VisitRouteService {
       }
     });
 
-    return suggestions.map(s => ({
+    return suggestions.map((s: any) => ({
       ...s,
       last_visit: s.historicos[0]?.data_visita || null,
       reason: s.historicos.length === 0 ? 'Nunca visitado' : 'Sem visita há +30 dias'
@@ -793,7 +846,7 @@ export class VisitRouteService {
    * Helper privado para obter todos os IDs de subordinados de forma recursiva.
    */
   private async getAllSubordinateIds(userId: number): Promise<number[]> {
-    const user = await prisma.user.findUnique({
+    const user = await (this.prisma as any).user.findUnique({
       where: { id: userId },
       select: { 
         id: true, 
@@ -817,7 +870,7 @@ export class VisitRouteService {
    * Retorna os pontos da rota em formato GeoJSON para visualização no mapa.
    */
   async getRouteGeoJSON(sequenceId: number) {
-    const sequence = await prisma.routeSequence.findUnique({
+    const sequence = await (this.prisma as any).routeSequence.findUnique({
       where: { id: sequenceId },
       include: {
         items: {
@@ -829,16 +882,16 @@ export class VisitRouteService {
     if (!sequence) throw new Error('Roteiro não encontrado');
 
     const clientIds = sequence.items
-      .map((i) => i.client_id)
-      .filter((id): id is number => id != null);
+      .map((i: any) => i.client_id)
+      .filter((id: any): id is number => id != null);
 
     const clients =
       clientIds.length > 0
-        ? await prisma.cliente.findMany({
+        ? await (this.prisma as any).cliente.findMany({
             where: { id_cliente: { in: clientIds } },
           })
         : [];
-    const clientMap = new Map(clients.map((c) => [c.id_cliente, c]));
+    const clientMap = new Map<number, any>(clients.map((c: any) => [c.id_cliente, c]));
 
     const features: any[] = [];
     const lineCoordinates: number[][] = [];
@@ -851,6 +904,7 @@ export class VisitRouteService {
       status: string;
       city: string | null;
       label: string;
+      address: string | null;
       source: 'stored' | 'geocoded';
     }> = [];
 
@@ -859,10 +913,12 @@ export class VisitRouteService {
       let lat: number | null = null;
       let lng: number | null = null;
       let label = item.city || 'Parada';
+      let address: string | null = null;
       let source: 'stored' | 'geocoded' = 'stored';
 
       if (client) {
         label = client.nome_cliente;
+        address = client.endereco_completo;
         const resolved = await resolveClientCoordinates(client);
         if (resolved) {
           lat = resolved.lat;
@@ -884,12 +940,12 @@ export class VisitRouteService {
         item.stop_lng !== lng ||
         source === 'geocoded'
       ) {
-        await prisma.routeSequenceItem.update({
+        await (this.prisma as any).routeSequenceItem.update({
           where: { id: item.id },
           data: { stop_lat: lat, stop_lng: lng, city: client?.cidade ?? item.city },
         });
         if (client && source === 'geocoded') {
-          await prisma.cliente.update({
+          await (this.prisma as any).cliente.update({
             where: { id_cliente: client.id_cliente },
             data: { latitude: lat, longitude: lng },
           });
@@ -905,6 +961,7 @@ export class VisitRouteService {
         status: item.status,
         city: client?.cidade ?? item.city,
         label,
+        address,
         source,
       });
     }
@@ -917,6 +974,7 @@ export class VisitRouteService {
           properties: {
             type: 'start',
             label: sequence.start_label || 'Ponto de Partida',
+            address: sequence.start_label || 'Localização Atual',
           },
           geometry: {
             type: 'Point',
@@ -932,6 +990,7 @@ export class VisitRouteService {
         properties: {
           type: 'start',
           label: sequence.start_label || 'Primeira parada',
+          address: first.address,
         },
         geometry: {
           type: 'Point',
@@ -940,7 +999,24 @@ export class VisitRouteService {
       });
     }
 
+    const usedCoords = new Map<string, number>();
     for (const stop of resolvedStops) {
+      let finalLat = stop.lat;
+      let finalLng = stop.lng;
+      const coordKey = `${stop.lat.toFixed(4)},${stop.lng.toFixed(4)}`;
+
+      // Se a coordenada (arredondada) já foi usada, aplica um deslocamento
+      // O deslocamento aumenta conforme o número de clientes no mesmo local
+      const count = usedCoords.get(coordKey) || 0;
+      if (count > 0) {
+        // Criar um pequeno círculo de alfinetes ao redor do ponto original
+        const angle = (count * 137.5) * (Math.PI / 180); // Ângulo de ouro para distribuição uniforme
+        const radius = 0.0006 * Math.sqrt(count); // Aumenta o raio conforme cresce o número de duplicados
+        finalLat += radius * Math.sin(angle);
+        finalLng += radius * Math.cos(angle);
+      }
+      usedCoords.set(coordKey, count + 1);
+
       features.push({
         type: 'Feature',
         properties: {
@@ -948,14 +1024,15 @@ export class VisitRouteService {
           sequence: stop.sequence,
           status: stop.status,
           city: stop.city,
-          label: stop.label,
+          label: stop.label, // Nome do cliente
+          address: stop.address,
         },
         geometry: {
           type: 'Point',
-          coordinates: [stop.lng, stop.lat],
+          coordinates: [finalLng, finalLat],
         },
       });
-      lineCoordinates.push([stop.lng, stop.lat]);
+      lineCoordinates.push([finalLng, finalLat]);
     }
 
     if (lineCoordinates.length > 1) {

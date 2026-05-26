@@ -380,23 +380,57 @@ export default function BrazilMap({
   const { data: apiUsers = [] } = useApiUsers(!!token);
   const { data: apiTerritories = [] } = useApiTerritories(!!token);
 
+  const filteredApiTerritories = useMemo(() => {
+    if (role === 'admin') return apiTerritories;
+    
+    const currentUser = apiUsers.find(u => u.id === loggedUserId);
+    const managedIds = currentUser?.managedUserIds || [];
+    
+    return apiTerritories.filter(t => 
+      t.userId === loggedUserId || managedIds.includes(t.userId || 0)
+    );
+  }, [role, apiTerritories, apiUsers, loggedUserId]);
+
   const effectiveAssignedStates = useMemo(() => {
-    if (role === 'admin') return assignedStates;
-    const fromProps = buildAssignedStates(assigned_state, assignedStates);
-    if (fromProps.length > 0) return fromProps;
-    const myUfs = apiTerritories
+    // 1. Estados atribuídos diretamente ao usuário
+    const myUfs = filteredApiTerritories
       .filter((t) => t.userId === loggedUserId)
-      .map((t) => t.uf)
-      .filter(Boolean);
-    return buildAssignedStates(assigned_state, myUfs);
-  }, [role, assigned_state, assignedStates, apiTerritories, loggedUserId]);
+      .map((t) => t.uf);
+
+    // 2. Se for supervisor, incluir estados dos usuários gerenciados
+    let managedUfs: string[] = [];
+    if (role === 'supervisor') {
+      const currentUser = apiUsers.find(u => u.id === loggedUserId);
+      const managedIds = currentUser?.managedUserIds || [];
+      
+      if (managedIds.length > 0) {
+        managedUfs = filteredApiTerritories
+          .filter(t => managedIds.includes(t.userId || 0))
+          .map(t => t.uf);
+      }
+    }
+
+    const combinedUfs = Array.from(new Set([...myUfs, ...managedUfs])).filter(Boolean) as string[];
+    
+    // Se for admin, pode ver tudo se não houver filtro, ou os estados passados via props
+    if (role === 'admin') return assignedStates || [];
+
+    // Para outros papéis (Supervisor, Rep), usamos a lógica de prioridade:
+    // Props -> Territórios API (incluindo time se supervisor) -> Fallback do Perfil
+    if (assignedStates && assignedStates.length > 0) return assignedStates;
+    if (combinedUfs.length > 0) return buildAssignedStates(assigned_state, combinedUfs);
+
+    return buildAssignedStates(assigned_state, []);
+  }, [role, assigned_state, assignedStates, filteredApiTerritories, loggedUserId, apiUsers]);
   const queryClient = useQueryClient();
+
+  const isAdminLike = role === 'admin' || role === 'supervisor';
 
   const filteredStatesGeo = useMemo(() => {
     if (!statesGeo) return null;
     
-    // Admins see everything
-    if (role === 'admin') return statesGeo;
+    // Admins e Supervisores veem o mapa completo (mas com restrições de interação nos estados não permitidos)
+    if (isAdminLike) return statesGeo;
     
     // Non-admins with no assigned states should see NOTHING (isolation)
     if (!effectiveAssignedStates || effectiveAssignedStates.length === 0) {
@@ -438,8 +472,8 @@ export default function BrazilMap({
     }
   }, [token, queryClient, modo]);
 
-  // If the logged-in user is not admin, always show their clients; otherwise use the admin filter
-  const effectiveUserFilter = role !== 'admin' ? loggedUserId : (filtroUsuario || null);
+  // If the logged-in user is not admin/supervisor, always show their clients; otherwise use the admin filter
+  const effectiveUserFilter = !isAdminLike ? loggedUserId : (filtroUsuario || null);
   const { data: apiClientes = [] } = useApiClientes(effectiveUserFilter);
 
   const [isMapMoving, setIsMapMoving] = useState(false);
@@ -540,7 +574,7 @@ export default function BrazilMap({
     const hideSelection = isMapMoving && isSelected;
 
     // Se o usuário não tem permissão para este estado, ele deve ficar visualmente inativo
-    const isAllowed = role === 'admin' || (uf && effectiveAssignedStates.includes(uf.sigla));
+    const isAllowed = isAdminLike || (uf && effectiveAssignedStates.includes(uf.sigla));
 
     if (!isAllowed) {
       return {
@@ -558,7 +592,7 @@ export default function BrazilMap({
 
     // Se o botão "Reps" estiver ativo e NÃO houver estado selecionado, pintamos os estados com as cores dos responsáveis
     if (showUsuarios && !hasSelection && uf) {
-      const stateTerritories = apiTerritories.filter(t => t.uf === uf.sigla);
+      const stateTerritories = filteredApiTerritories.filter(t => t.uf === uf.sigla);
       if (stateTerritories.length > 0) {
         // Se houver um filtro de Rep específico, tentamos encontrar esse Rep no estado
         const matchedUserId = filtroUsuario 
@@ -629,7 +663,7 @@ export default function BrazilMap({
       };
     }
 
-    const userIds = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
+    const userIds = getMunicipioResponsaveis(name, selectedUF, modo, filteredApiTerritories);
 
     // Only highlight if the search query is a specific word that matches name/user
     if (searchQuery && searchQuery.length > 2) {
@@ -679,7 +713,7 @@ export default function BrazilMap({
       fillOpacity: 0.8, // Opacidade fixa quando ativo
       dashArray: user.isVago ? "6 4" : undefined,
     };
-  }, [citiesList, municipioNamesByCode, selectedUF, modo, filtroUsuario, mostrarVagos, searchQuery, apiTerritories, apiUsers, selectedClients, showUsuarios]);
+  }, [citiesList, municipioNamesByCode, selectedUF, modo, filtroUsuario, mostrarVagos, searchQuery, filteredApiTerritories, apiUsers, selectedClients, showUsuarios]);
 
   const stateOutlineStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
@@ -689,7 +723,7 @@ export default function BrazilMap({
     const hideSelection = isMapMoving && isSel;
 
     // Se o usuário não tem permissão para este estado, ele não deve nem ser "interativo" (não disparar eventos de mouse)
-    const isAllowed = role === 'admin' || (uf && effectiveAssignedStates.includes(uf.sigla));
+    const isAllowed = isAdminLike || (uf && effectiveAssignedStates.includes(uf.sigla));
 
     return {
       fillColor: "transparent" as const,
@@ -757,7 +791,7 @@ export default function BrazilMap({
 
     // Check if interaction is allowed
     // Se o usuário tiver um estado vinculado, ele SÓ pode interagir com esse estado.
-    const isAllowed = role === 'admin' || (effectiveAssignedStates.length > 0 && effectiveAssignedStates.includes(uf.sigla));
+    const isAllowed = isAdminLike || (effectiveAssignedStates.length > 0 && effectiveAssignedStates.includes(uf.sigla));
 
     if (layer instanceof L.Path) {
       const el = layer.getElement() as HTMLElement | null;
@@ -806,7 +840,7 @@ export default function BrazilMap({
         onContextMenuState?.(uf.nome, uf.sigla, e.originalEvent.clientX, e.originalEvent.clientY);
       },
     });
-  }, [stateStyle, onSelectUF, onContextMenuState, statesMetadata, role, effectiveAssignedStates, selectedUF, mapTheme]);
+  }, [stateStyle, onSelectUF, onContextMenuState, statesMetadata, role, isAdminLike, effectiveAssignedStates, selectedUF, mapTheme]);
 
   const onEachMunicipio = useCallback((feature: unknown, layer: L.Layer) => {
     const f = feature as GeoJSONFeature;
@@ -816,7 +850,7 @@ export default function BrazilMap({
     const city = citiesList.find((c: { name: string; ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea));
     const ibgeName = municipioNamesByCode?.[String(codArea)];
     const name = city?.name || ibgeName || String(f?.properties?.name || f?.properties?.nome || "").trim() || `Município ${codArea}`;
-    const userIds = getMunicipioResponsaveis(name, selectedUF, modo, apiTerritories);
+    const userIds = getMunicipioResponsaveis(name, selectedUF, modo, filteredApiTerritories);
 
     // Role-based restrictions mapping
     const userDetails = userIds.map(id => {
@@ -898,7 +932,7 @@ export default function BrazilMap({
         }
       },
     });
-  }, [citiesList, municipioNamesByCode, selectedUF, modo, municipioStyle, onSelectMunicipio, apiTerritories, apiUsers, onContextMenuMunicipio, role, estado_end, onResetMap, onSelectUF, handleClaimMunicipio]);
+  }, [citiesList, municipioNamesByCode, selectedUF, modo, municipioStyle, onSelectMunicipio, filteredApiTerritories, apiUsers, onContextMenuMunicipio, role, estado_end, onResetMap, onSelectUF, handleClaimMunicipio]);
 
   // ── Neighborhood label markers — names from Brasil Aberto metadata if possible ───
   const markers: Array<{ center: L.LatLng; name: string }> = [];
@@ -966,18 +1000,18 @@ export default function BrazilMap({
   }, [handleBack]);
 
   const minZoom = useMemo(() => {
-    if (role === 'admin' || effectiveAssignedStates.length === 0) return 3;
+    if (isAdminLike || effectiveAssignedStates.length === 0) return 3;
     return (ufInfo?.zoom || 4);
-  }, [role, effectiveAssignedStates, ufInfo]);
+  }, [isAdminLike, effectiveAssignedStates, ufInfo]);
 
   const maxBounds = useMemo(() => {
-    if (role === 'admin' || effectiveAssignedStates.length === 0 || !filteredStatesGeo) return undefined;
+    if (isAdminLike || effectiveAssignedStates.length === 0 || !filteredStatesGeo) return undefined;
     try {
       return L.geoJSON(filteredStatesGeo).getBounds().pad(0.1);
     } catch (e) {
       return undefined;
     }
-  }, [role, effectiveAssignedStates, filteredStatesGeo]);
+  }, [isAdminLike, effectiveAssignedStates, filteredStatesGeo]);
 
   return (
     <div className="w-full h-full relative overflow-hidden bg-background">
@@ -1054,7 +1088,7 @@ export default function BrazilMap({
           {filteredStatesGeo && (
             <Pane name="basePane" style={{ zIndex: 100 }}>
               <GeoJSON 
-                key={`states-${effectiveAssignedStates.join(',')}-${statesMetadata?.length || 0}-${showUsuarios}-${apiTerritories.length}-${selectedUF}`} 
+                key={`states-${effectiveAssignedStates.join(',')}-${statesMetadata?.length || 0}-${showUsuarios}-${filteredApiTerritories.length}-${selectedUF}`} 
                 data={filteredStatesGeo} 
                 style={selectedUF ? stateOutlineStyle : stateStyle} 
                 onEachFeature={onEachState} 
@@ -1067,7 +1101,7 @@ export default function BrazilMap({
           <>
             <Pane name="municipiosPane" style={{ zIndex: 200 }}>
               <GeoJSON
-                key={`muns-${selectedUF}-${modo}-${filtroUsuario}-${showUsuarios}-${mostrarVagos}-${searchQuery}-${apiTerritories.length}-${citiesList.length}`}
+                key={`muns-${selectedUF}-${modo}-${filtroUsuario}-${showUsuarios}-${mostrarVagos}-${searchQuery}-${filteredApiTerritories.length}-${citiesList.length}`}
                 data={municipiosGeo}
                 style={municipioStyle}
                 onEachFeature={onEachMunicipio}

@@ -5,10 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { VisitStopCard, VisitStop } from '@/components/visit-route/VisitStopCard';
-import { Loader2, ArrowLeft, Map as MapIcon, Play, CheckCircle2, Navigation } from 'lucide-react';
+import { Loader2, ArrowLeft, Map as MapIcon, Play, CheckCircle2, Navigation, Camera, Video, Upload, Trash2 } from 'lucide-react';
 import { API_BASE_URL } from '@/lib/api-base';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context-core';
+import { supabase } from '@/lib/supabase';
 
 import { 
   Dialog, 
@@ -26,7 +27,7 @@ import { Input } from '@/components/ui/input';
 export const RoteiroExecucao: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { token, logout } = useAuth();
+  const { token, logout, userId } = useAuth();
   const [stops, setStops] = useState<VisitStop[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeStopId, setActiveStopId] = useState<number | null>(null);
@@ -42,6 +43,9 @@ export const RoteiroExecucao: React.FC = () => {
     notes: ''
   });
   const [savingResult, setSavingResult] = useState(false);
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (token) {
@@ -149,18 +153,79 @@ export const RoteiroExecucao: React.FC = () => {
 
   const handleRegisterResult = (stopId: number) => {
     setSelectedStopId(stopId);
+    const stop = stops.find(s => s.id === stopId);
+    
+    // Se já tiver resultado, preencher os campos (opcional, para visualização)
+    setResultData({
+      status: stop?.status === 'visitada' ? 'visitada' : (stop?.status === 'nao_visitada' ? 'nao_visitada' : 'visitada'),
+      sale_made: false,
+      sale_value: '',
+      notes: ''
+    });
+    
     setIsResultModalOpen(true);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validar tamanho (max 10MB para vídeo, 5MB para foto)
+    const maxSize = file.type.startsWith('video/') ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error(`O arquivo é muito grande. Máximo: ${file.type.startsWith('video/') ? '10MB' : '5MB'}`);
+      return;
+    }
+
+    setMediaFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setMediaPreview(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeMedia = () => {
+    setMediaFile(null);
+    setMediaPreview(null);
   };
 
   const submitResult = async () => {
     if (!selectedStopId) return;
 
+    // Validações Obrigatórias
+    if (!resultData.notes.trim()) {
+      return toast.error('O comentário/observação é obrigatório.');
+    }
+    if (!mediaFile) {
+      return toast.error('A foto ou vídeo do local é obrigatória.');
+    }
+
     try {
       setSavingResult(true);
+      setUploadingMedia(true);
       
       const stop = stops.find(s => s.id === selectedStopId);
 
-      // 1. Checkout se houver check-in ativo
+      // 1. Upload de Mídia para Supabase Storage
+      const fileExt = mediaFile.name.split('.').pop();
+      const fileName = `${userId}_${selectedStopId}_${Date.now()}.${fileExt}`;
+      const filePath = `visits/${fileName}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('visit-media')
+        .upload(filePath, mediaFile);
+
+      if (uploadError) {
+        console.error('Erro no upload:', uploadError);
+        throw new Error('Falha ao enviar a foto/vídeo. Verifique sua conexão.');
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('visit-media')
+        .getPublicUrl(filePath);
+
+      // 2. Checkout se houver check-in ativo
       if (stop?.checkin_id && stop.is_checked_in) {
         if (navigator.geolocation) {
           const pos = await new Promise<GeolocationPosition>((resolve) => {
@@ -182,7 +247,7 @@ export const RoteiroExecucao: React.FC = () => {
         }
       }
 
-      // 2. Registrar resultado final
+      // 3. Registrar resultado final com a URL da mídia
       const response = await fetch(`${API_BASE_URL}/api/visit-route/result`, {
         method: 'POST',
         headers: { 
@@ -194,23 +259,29 @@ export const RoteiroExecucao: React.FC = () => {
           status: resultData.status,
           sale_made: resultData.sale_made,
           sale_value: resultData.sale_value ? Number(resultData.sale_value) : undefined,
-          notes: resultData.notes
+          notes: resultData.notes,
+          media_url: publicUrl,
+          media_type: mediaFile.type.startsWith('video/') ? 'video' : 'photo'
         })
       });
 
       if (response.ok) {
-        toast.success('Resultado registrado com sucesso!');
+        toast.success('Visita finalizada com sucesso!');
         setIsResultModalOpen(false);
         setResultData({ status: 'visitada', sale_made: false, sale_value: '', notes: '' });
+        setMediaFile(null);
+        setMediaPreview(null);
+        setSelectedStopId(null); // Limpar o ID selecionado
         fetchRouteDetails();
       } else {
         if (response.status === 401) logout();
         toast.error('Erro ao salvar resultado.');
       }
-    } catch (error) {
-      toast.error('Erro de conexão ao salvar resultado.');
+    } catch (error: any) {
+      toast.error(error.message || 'Erro de conexão ao salvar resultado.');
     } finally {
       setSavingResult(false);
+      setUploadingMedia(false);
     }
   };
 
@@ -342,9 +413,72 @@ export const RoteiroExecucao: React.FC = () => {
             )}
 
             <div className="space-y-2">
-              <Label className="text-[10px] font-bold uppercase text-muted-foreground">Observações</Label>
+              <Label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center justify-between">
+                Comprovante (Foto ou Vídeo)
+                <span className="text-[8px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded-full">Obrigatório</span>
+              </Label>
+              
+              {!mediaPreview ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="h-24 flex flex-col gap-2 border-dashed border-2 hover:bg-primary/5 hover:border-primary/40"
+                    onClick={() => document.getElementById('camera-input')?.click()}
+                  >
+                    <Camera className="w-6 h-6 text-muted-foreground" />
+                    <span className="text-[10px] font-bold uppercase">Tirar Foto</span>
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="h-24 flex flex-col gap-2 border-dashed border-2 hover:bg-primary/5 hover:border-primary/40"
+                    onClick={() => document.getElementById('video-input')?.click()}
+                  >
+                    <Video className="w-6 h-6 text-muted-foreground" />
+                    <span className="text-[10px] font-bold uppercase">Gravar Vídeo</span>
+                  </Button>
+                  <input 
+                    id="camera-input" 
+                    type="file" 
+                    accept="image/*" 
+                    capture="environment" 
+                    className="hidden" 
+                    onChange={handleFileChange}
+                  />
+                  <input 
+                    id="video-input" 
+                    type="file" 
+                    accept="video/*" 
+                    capture="environment" 
+                    className="hidden" 
+                    onChange={handleFileChange}
+                  />
+                </div>
+              ) : (
+                <div className="relative rounded-lg overflow-hidden border border-border/40 bg-black aspect-video flex items-center justify-center">
+                  {mediaFile?.type.startsWith('video/') ? (
+                    <video src={mediaPreview} className="max-h-full" controls />
+                  ) : (
+                    <img src={mediaPreview} className="max-h-full object-contain" alt="Preview" />
+                  )}
+                  <Button 
+                    size="icon" 
+                    variant="destructive" 
+                    className="absolute top-2 right-2 h-8 w-8 rounded-full shadow-lg"
+                    onClick={removeMedia}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center justify-between">
+                Observações / Comentários
+                <span className="text-[8px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded-full">Obrigatório</span>
+              </Label>
               <Textarea 
-                placeholder="Detalhes sobre a visita..."
+                placeholder="Descreva o que foi tratado na visita..."
                 value={resultData.notes}
                 onChange={(e) => setResultData({...resultData, notes: e.target.value})}
                 className="resize-none h-24"
@@ -352,10 +486,19 @@ export const RoteiroExecucao: React.FC = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsResultModalOpen(false)} className="text-[11px] font-bold uppercase">Cancelar</Button>
-            <Button onClick={submitResult} disabled={savingResult} className="gap-2 text-[11px] font-bold uppercase">
-              {savingResult ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              Finalizar Visita
+            <Button variant="outline" onClick={() => setIsResultModalOpen(false)} className="text-[11px] font-bold uppercase" disabled={savingResult}>Cancelar</Button>
+            <Button onClick={submitResult} disabled={savingResult || uploadingMedia} className="gap-2 text-[11px] font-bold uppercase shadow-lg shadow-primary/20">
+              {savingResult ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {uploadingMedia ? 'Enviando Arquivo...' : 'Salvando...'}
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  Finalizar Visita
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

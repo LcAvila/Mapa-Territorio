@@ -66,12 +66,19 @@ export default function MapHeader({
   const allowedStates = useMemo(() => {
     const fromAuth = buildAssignedStates(assigned_state, assigned_states);
     if (fromAuth.length > 0) return fromAuth;
+
+    let teamUserIds: number[] = [];
+    if (authRole === 'supervisor') {
+      const currentUser = users.find(u => u.id === userId);
+      teamUserIds = currentUser?.managedUserIds || [];
+    }
+
     const myUfs = apiTerritories
-      .filter((t) => t.userId === userId)
+      .filter((t) => t.userId === userId || teamUserIds.includes(t.userId || 0))
       .map((t) => t.uf)
       .filter(Boolean);
     return buildAssignedStates(assigned_state, myUfs);
-  }, [assigned_state, assigned_states, apiTerritories, userId]);
+  }, [assigned_state, assigned_states, apiTerritories, userId, authRole, users]);
   const hasStateRestriction = authRole !== 'admin' && allowedStates.length > 0;
   const [showNotifications, setShowNotifications] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
