@@ -300,8 +300,6 @@ model VisitResult {
   sale_made              Boolean           @default(false)
   sale_value             Float?
   notes                  String?
-  media_url              String?
-  media_type             String?           // photo, video
   registered_by          Int
   registered_at          DateTime          @default(now())
 

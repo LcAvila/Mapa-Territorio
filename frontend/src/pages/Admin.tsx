@@ -4168,9 +4168,7 @@ export default function Admin() {
           {activeTab === 'baserotas' && (
             <BaseClientePanel 
               onSwitchToReps={() => setActiveTab('reps')} 
-              canCreate={canEdit('clientes')}
-              canEdit={canEdit('clientes')}
-              canDelete={canEdit('clientes')}
+              canCreate={role === 'admin' || canEdit('settings') || (myPermissions.find(p => p.moduleId === 'clientes')?.canEdit || false)}
               isMobileFilterOpen={isDashFiltersOpen}
               initialData={clientes as any}
               loading={loadingClientes}
