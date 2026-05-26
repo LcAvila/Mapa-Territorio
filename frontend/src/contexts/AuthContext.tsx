@@ -146,18 +146,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const limitMinutes = inactivityLimit || 30; // 30 minutes default
         const limitMs = limitMinutes * 60 * 1000;
+        // Aviso quando faltar 1 minuto ou restarem apenas 10% do tempo (o que for maior)
+        const warningThresholdMs = limitMs - Math.min(60000, limitMs * 0.1);
 
         const checkInactivity = () => {
             const lastActive = localStorage.getItem('lastActivityTime');
             if (!lastActive) {
-                // Sem timestamp: pode ser sessão restaurada sem atividade conhecida.
-                // Definimos como agora para não derrubar o usuário que acabou de logar.
                 localStorage.setItem('lastActivityTime', Date.now().toString());
                 return;
             }
+            
             const now = Date.now();
-            if (now - parseInt(lastActive, 10) > limitMs) {
+            const inactiveTime = now - parseInt(lastActive, 10);
+
+            if (inactiveTime > limitMs) {
+                console.warn('[AUTH] Inactivity limit reached. Logging out.');
+                toast.error("Sessão encerrada por inatividade.");
                 logout();
+            } else if (inactiveTime > warningThresholdMs) {
+                const remainingSeconds = Math.ceil((limitMs - inactiveTime) / 1000);
+                if (remainingSeconds > 0) {
+                    toast.warning(`Sua sessão expirará em breve (${remainingSeconds}s) devido à inatividade.`, {
+                        id: 'inactivity-warning',
+                        duration: 5000
+                    });
+                }
             }
         };
 
@@ -166,7 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
 
         checkInactivity();
-        const intervalId = setInterval(checkInactivity, 60000);
+        const intervalId = setInterval(checkInactivity, 15000); // Checar a cada 15s para ser mais responsivo ao aviso
 
         let throttleTimeout: ReturnType<typeof setTimeout> | null = null;
         const handleActivity = () => {
@@ -174,15 +187,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             throttleTimeout = setTimeout(() => {
                 updateActivity();
                 throttleTimeout = null;
-            }, 1000);
+            }, 2000); // Throttling de 2s para poupar localStorage
         };
 
-        const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-        events.forEach(e => window.addEventListener(e, handleActivity));
+        // Capturamos eventos no document para garantir que cliques em sidebars e outros elementos sejam detectados
+        const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+        events.forEach(e => document.addEventListener(e, handleActivity, { capture: true, passive: true }));
 
         return () => {
             clearInterval(intervalId);
-            events.forEach(e => window.removeEventListener(e, handleActivity));
+            events.forEach(e => document.removeEventListener(e, handleActivity, { capture: true }));
             if (throttleTimeout) clearTimeout(throttleTimeout);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -2,8 +2,9 @@ import { Request, Response } from 'express';
 import { VisitRouteService } from '../services/VisitRouteService';
 import { AuthRequest } from '../middlewares/auth';
 import { validateBody, updateVisitRouteSchema } from '../utils/validation';
+import { prisma } from '../prisma'; // Importar a instância do Prisma
 
-const visitService = new VisitRouteService();
+const visitService = new VisitRouteService(prisma); // Passar a instância do Prisma
 
 export const startRoute = async (req: Request, res: Response) => {
   try {

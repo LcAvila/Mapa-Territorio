@@ -1,6 +1,5 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/contexts/auth-context-core';
-import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import Loader from './Loader';
 
 interface ProtectedRouteProps {
@@ -9,7 +8,6 @@ interface ProtectedRouteProps {
 
 export default function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
     const { isAuthenticated, role, loading } = useAuth();
-    useInactivityLogout();
 
     if (loading) {
         return <Loader label="Verificando autenticação..." />;

@@ -27,6 +27,17 @@ export default function MapLegend({
   const { data: users = [] } = useApiUsers(!!token);
   const { data: apiTerritories = [] } = useApiTerritories(!!token);
 
+  const filteredApiTerritories = useMemo(() => {
+    if (role === 'admin') return apiTerritories;
+    
+    const currentUser = users.find(u => u.id === loggedUserId);
+    const managedIds = currentUser?.managedUserIds || [];
+    
+    return apiTerritories.filter(t => 
+      t.userId === loggedUserId || managedIds.includes(t.userId || 0)
+    );
+  }, [role, apiTerritories, users, loggedUserId]);
+
   // Get the set of userIds that have clients OR territories in the selected UF
   const userIdsInUF = useMemo(() => {
     if (!selectedUF) return null;
@@ -38,17 +49,22 @@ export default function MapLegend({
     });
     
     // Add users with territories in UF
-    apiTerritories.forEach(t => {
+    filteredApiTerritories.forEach(t => {
       if (t.uf === selectedUF && t.userId) ids.add(t.userId);
     });
     
     return ids;
-  }, [selectedUF, clients, apiTerritories]);
+  }, [selectedUF, clients, filteredApiTerritories]);
 
   // Filter users: if a UF is selected, show only those who have clients/territories there
-  // Also, if not an admin, restrict the list ENTIRELY to the user's id.
+  // Also, if not an admin, restrict the list to the user's id and their team if supervisor.
   const relevantUsers = users.filter(user => {
-    if (role !== 'admin' && user.id !== loggedUserId) return false;
+    const currentUser = users.find(u => u.id === loggedUserId);
+    const managedIds = currentUser?.managedUserIds || [];
+
+    const isMeOrTeam = user.id === loggedUserId || managedIds.includes(user.id);
+
+    if (role !== 'admin' && !isMeOrTeam) return false;
     if (!userIdsInUF) return true;
     return userIdsInUF.has(user.id);
   });
@@ -89,7 +105,7 @@ export default function MapLegend({
           activeUsers.map((user) => (
             <button
               key={user.id}
-              onClick={() => role === 'admin' ? onFilterUser(filtroUsuario === String(user.id) ? null : String(user.id)) : undefined}
+              onClick={() => (role === 'admin' || role === 'supervisor') ? onFilterUser(filtroUsuario === String(user.id) ? null : String(user.id)) : undefined}
               className={`w-full group flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-all duration-200 relative overflow-hidden ${
                 filtroUsuario === String(user.id)
                   ? "bg-primary/15 border-primary/30"
@@ -138,7 +154,7 @@ export default function MapLegend({
           </button>
         )}
 
-        {filtroUsuario && role === 'admin' && (
+        {filtroUsuario && (role === 'admin' || role === 'supervisor') && (
           <button
             onClick={() => onFilterUser(null)}
             className="w-full h-7 text-[9px] font-bold uppercase tracking-tight text-muted-foreground/70 hover:text-primary hover:bg-primary/5 rounded-md transition-all border border-transparent hover:border-primary/15"

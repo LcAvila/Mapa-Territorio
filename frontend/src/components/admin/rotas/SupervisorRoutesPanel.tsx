@@ -112,14 +112,16 @@ function RouteMapView({ geoJSON }: { geoJSON: any }) {
 
           const typeLabel = f.properties.type === 'start' ? 'Início' : `Parada #${f.properties.sequence}`;
           const nameLabel = f.properties.label || f.properties.city || 'Localização';
+          const addressLabel = f.properties.address || '';
           const statusHtml = f.properties.status
             ? `<span style="display:inline-block;margin-top:6px;padding:1px 6px;border:1px solid #ccc;border-radius:4px;font-size:8px;font-weight:800;text-transform:uppercase;">${f.properties.status}</span>`
             : '';
 
           marker.bindPopup(`
-            <div style="padding:4px;">
+            <div style="padding:4px; min-width: 150px;">
               <p style="font-size:10px;font-weight:900;text-transform:uppercase;color:hsl(var(--primary));margin-bottom:4px;">${typeLabel}</p>
-              <p style="font-size:12px;font-weight:700;">${nameLabel}</p>
+              <p style="font-size:12px;font-weight:700;margin-bottom:2px;">${nameLabel}</p>
+              ${addressLabel ? `<p style="font-size:10px;color:hsl(var(--muted-foreground));margin-bottom:4px;">${addressLabel}</p>` : ''}
               ${statusHtml}
             </div>
           `);
@@ -728,9 +730,18 @@ export const SupervisorRoutesPanel: React.FC = () => {
                               }`}>
                                 {stop.properties.sequence}
                               </div>
-                              <div className="min-w-0">
-                                <p className="text-[10px] font-black uppercase truncate">{stop.properties.city}</p>
-                                <p className="text-[8px] font-bold text-muted-foreground uppercase">{stop.properties.status}</p>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[10px] font-black uppercase truncate leading-tight">
+                                  {stop.properties.label || stop.properties.city}
+                                </p>
+                                {stop.properties.address && (
+                                  <p className="text-[8px] text-muted-foreground truncate max-w-[150px]">
+                                    {stop.properties.address}
+                                  </p>
+                                )}
+                                <p className="text-[7px] font-bold text-muted-foreground uppercase mt-0.5">
+                                  {stop.properties.status}
+                                </p>
                               </div>
                             </div>
                           </CardContent>

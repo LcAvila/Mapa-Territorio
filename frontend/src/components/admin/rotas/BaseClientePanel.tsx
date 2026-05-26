@@ -54,6 +54,8 @@ interface Cliente {
 export function BaseClientePanel({ 
   onSwitchToReps, 
   canCreate = false, 
+  canEdit = false,
+  canDelete = false,
   isMobileFilterOpen = false,
   initialData = [],
   loading: externalLoading = false,
@@ -61,6 +63,8 @@ export function BaseClientePanel({
 }: { 
   onSwitchToReps?: () => void, 
   canCreate?: boolean, 
+  canEdit?: boolean,
+  canDelete?: boolean,
   isMobileFilterOpen?: boolean,
   initialData?: Cliente[],
   loading?: boolean,
@@ -653,7 +657,7 @@ export function BaseClientePanel({
                       <TableHead className="whitespace-nowrap h-10">Cidade / UF</TableHead>
                       {currentUserRole === 'admin' && <TableHead className="whitespace-nowrap h-10">Usuário Responsável</TableHead>}
                       <TableHead className="whitespace-nowrap h-10 text-center">Status</TableHead>
-                      <TableHead className="whitespace-nowrap h-10 text-right pr-4">Ações</TableHead>
+                      {(canEdit || canDelete) && <TableHead className="whitespace-nowrap h-10 text-right pr-4">Ações</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -689,23 +693,29 @@ export function BaseClientePanel({
                               </span>
                             )}
                           </TableCell>
-                          <TableCell className="text-xs py-2 text-right pr-4">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary/80">
-                                  <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleEditClient(row)} className="gap-2 cursor-pointer font-medium text-xs">
-                                  <Pencil className="w-3.5 h-3.5" /> Editar Cliente
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleDeleteClient(row.id_cliente, row.nome_cliente)} className="gap-2 cursor-pointer text-destructive focus:text-destructive font-medium text-xs">
-                                  <Trash2 className="w-3.5 h-3.5" /> Apagar Cliente
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
+                          {(canEdit || canDelete) && (
+                            <TableCell className="text-xs py-2 text-right pr-4">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary/80">
+                                    <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  {canEdit && (
+                                    <DropdownMenuItem onClick={() => handleEditClient(row)} className="gap-2 cursor-pointer font-medium text-xs">
+                                      <Pencil className="w-3.5 h-3.5" /> Editar Cliente
+                                    </DropdownMenuItem>
+                                  )}
+                                  {canDelete && (
+                                    <DropdownMenuItem onClick={() => handleDeleteClient(row.id_cliente, row.nome_cliente)} className="gap-2 cursor-pointer text-destructive focus:text-destructive font-medium text-xs">
+                                      <Trash2 className="w-3.5 h-3.5" /> Apagar Cliente
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -827,20 +837,24 @@ export function BaseClientePanel({
               </div>
 
               <div className="p-4 bg-secondary/20 border-t border-border/40 flex gap-2">
-                <Button 
-                  className="flex-1 gap-2 font-bold text-xs h-10" 
-                  onClick={() => { setIsDetailOpen(false); handleEditClient(selectedClient); }}
-                >
-                  <Pencil className="w-3.5 h-3.5" /> Editar Cliente
-                </Button>
-                <Button 
-                  variant="outline"
-                  size="icon"
-                  className="h-10 w-10 text-destructive hover:bg-destructive/10"
-                  onClick={() => { setIsDetailOpen(false); handleDeleteClient(selectedClient.id_cliente, selectedClient.nome_cliente); }}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+                {canEdit && (
+                  <Button 
+                    className="flex-1 gap-2 font-bold text-xs h-10" 
+                    onClick={() => { setIsDetailOpen(false); handleEditClient(selectedClient); }}
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> Editar Cliente
+                  </Button>
+                )}
+                {canDelete && (
+                  <Button 
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 text-destructive hover:bg-destructive/10"
+                    onClick={() => { setIsDetailOpen(false); handleDeleteClient(selectedClient.id_cliente, selectedClient.nome_cliente); }}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             </>
           )}

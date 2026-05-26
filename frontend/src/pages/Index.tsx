@@ -31,31 +31,54 @@ const normalizeName = (s: string) =>
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const { data: apiUsers = [], isLoading: loadingUsers } = useApiUsers(true);
   const { data: apiTerritories = [], isLoading: loadingTerritories } = useApiTerritories(!!token);
 
-
+  const filteredApiTerritories = useMemo(() => {
+    if (role === 'admin') return apiTerritories;
+    
+    const currentUser = apiUsers.find(u => u.id === userId);
+    const managedIds = currentUser?.managedUserIds || [];
+    
+    return apiTerritories.filter(t => 
+      t.userId === userId || managedIds.includes(t.userId || 0)
+    );
+  }, [role, apiTerritories, apiUsers, userId]);
 
   const effectiveAssignedStates = useMemo(() => {
     if (role === 'admin') return [];
+
+    // 1. Estados atribuídos diretamente ao usuário
+    const myUfs = filteredApiTerritories
+      .filter((t) => t.userId === userId)
+      .map((t) => t.uf)
+      .filter(Boolean);
+
+    // 2. Se for supervisor, incluir estados dos usuários gerenciados
+    let managedUfs: string[] = [];
+    if (role === 'supervisor') {
+      const currentUser = apiUsers.find(u => u.id === userId);
+      const managedIds = currentUser?.managedUserIds || [];
+      if (managedIds.length > 0) {
+        managedUfs = filteredApiTerritories
+          .filter(t => managedIds.includes(t.userId || 0))
+          .map(t => t.uf)
+          .filter(Boolean);
+      }
+    }
+
+    const combinedUfs = Array.from(new Set([...myUfs, ...managedUfs]));
+    
+    // Preferência: Dados do Auth -> Territórios (Próprios + Time se Supervisor)
     const fromAuth = buildAssignedStates(assigned_state, assigned_states);
     if (fromAuth.length > 0) return fromAuth;
-    const myUfs = apiTerritories
-      .filter((t) => t.userId === userId)
-      .map((t) => t.uf)
-      .filter(Boolean);
-    return buildAssignedStates(assigned_state, myUfs);
-  }, [role, assigned_state, assigned_states, apiTerritories, userId]);
+
+    return buildAssignedStates(assigned_state, combinedUfs);
+  }, [role, assigned_state, assigned_states, filteredApiTerritories, userId, apiUsers]);
 
   const effectiveAssignedStatesKey = useMemo(() => {
-    if (role === 'admin') return '';
-    const fromAuth = buildAssignedStates(assigned_state, assigned_states);
-    if (fromAuth.length > 0) return assignedStatesKey(fromAuth);
-    const myUfs = apiTerritories
-      .filter((t) => t.userId === userId)
-      .map((t) => t.uf)
-      .filter(Boolean);
-    return assignedStatesKey(buildAssignedStates(assigned_state, myUfs));
-  }, [role, assigned_state, assigned_states, apiTerritories, userId]);
+    return assignedStatesKey(effectiveAssignedStates);
+  }, [effectiveAssignedStates]);
 
   const [selectedUF, setSelectedUF] = useState<string | null>(null);
   const [filtroUsuario, setFiltroUsuario] = useState<string | null>(null);
@@ -375,7 +398,6 @@ const normalizeName = (s: string) =>
     toast.info('Todos os filtros foram removidos');
   }, []);
 
-  const { data: apiUsers = [], isLoading: loadingUsers } = useApiUsers(true);
   const clientFilter = role === 'admin' ? filtroUsuario : (filtroUsuario ?? userId ?? null);
   const { data: apiClientes = [], isLoading: loadingClientes } = useApiClientes(clientFilter);
 
@@ -634,7 +656,7 @@ const normalizeName = (s: string) =>
         <MapContextMenu
           menu={{
             ...contextMenu,
-            isClaimed: apiTerritories.some(t => 
+            isClaimed: filteredApiTerritories.some(t => 
               t.municipio &&
               normalizeName(t.municipio) === normalizeName(contextMenu.nome) && 
               t.uf === contextMenu.uf && 
