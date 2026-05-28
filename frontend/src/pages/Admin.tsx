@@ -4807,8 +4807,7 @@ export default function Admin() {
                 <DialogDescription>Gestão detalhada de territórios, usuários e clientes.</DialogDescription>
               </DialogHeader>
               {ufDetailData && (
-                <div className="flex flex-col h-full bg-background">
-                  {/* Header do Modal */}
+                <div className="flex flex-col bg-background" style={{ height: 'calc(90vh - 2rem)' }}>                  {/* Header do Modal */}
                   <div className="p-6 bg-primary/10 border-b border-border/40 relative">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
@@ -4839,8 +4838,9 @@ export default function Admin() {
                   </div>
 
                   {/* Conteúdo com Tabs */}
-                  <div className="flex-1 overflow-hidden">
-                    <Tabs defaultValue="usuarios" className="h-full flex flex-col">
+                  <div className="flex-1 overflow-hidden min-h-0">
+                  <Tabs defaultValue="usuarios" className="h-full flex flex-col min-h-0">
+                    
                       <div className="px-6 border-b border-border/20 bg-muted/30">
                         <TabsList className="bg-transparent h-12 gap-6 p-0">
                           <TabsTrigger value="usuarios" className="data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-1 text-xs font-black uppercase tracking-widest border-b-2 border-transparent transition-all">
@@ -4855,8 +4855,8 @@ export default function Admin() {
                         </TabsList>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-                        {/* ABA USUÁRIOS */}
+                      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 min-h-0">
+                      {/* ABA USUÁRIOS */}
                         <TabsContent value="usuarios" className="mt-0 space-y-4">
                           {ufDetailData.userIds.length === 0 ? (
                             <div className="py-20 text-center">
