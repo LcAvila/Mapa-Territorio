@@ -500,6 +500,16 @@ export default function BrazilMap({
     'osm': { label: 'OpenStreetMap', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', opacity: 1.0 },
   } as const;
 
+  // Respect system preference: prefer light mode when the system is set to light.
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.matchMedia) {
+        const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+        if (prefersLight && mapTheme !== 'light') setMapTheme('light');
+      }
+    } catch (e) { /* ignore */ }
+  }, []);
+
   const ufInfo = selectedUF ? getUFBySigla(selectedUF) : null;
   const { data: citiesMetadata } = useCitiesMetadata(selectedUF);
   const { data: municipioNamesByCode } = useMunicipioNames(ufInfo?.codigo ?? null);
@@ -801,7 +811,11 @@ export default function BrazilMap({
       mouseover: (e) => {
         e.target.bringToFront();
         e.target.setStyle({ color: 'hsl(var(--admin-sidebar-accent))', fillOpacity: 0.35, weight: 2.5 });
-        e.target.bindTooltip(`<strong>${name}</strong>`, { sticky: true, direction: "top" }).openTooltip();
+        e.target.bindTooltip(`<strong>${name}</strong>`, {
+          sticky: true,
+          direction: "top",
+          className: "custom-tooltip"
+        }).openTooltip();
       },
       mouseout: (e) => {
         e.target.setStyle(neighborhoodStyle(f));
@@ -829,7 +843,16 @@ export default function BrazilMap({
     if (layer instanceof L.Path) {
       const el = layer.getElement() as HTMLElement | null;
       if (el) {
-        el.classList.add('map-hover-effect');
+        // Only apply the global map hover glow when no individual municipality
+        // is selected. When a município is selected, the state-hover filter
+        // can brighten child polygons (municipios) unexpectedly, so we
+        // disable the global hover effect in that case.
+        if (!selectedMunicipioCode && !selectedMunicipioName) {
+          el.classList.add('map-hover-effect');
+        } else {
+          el.classList.remove('map-hover-effect');
+        }
+
         if (!isAllowed) {
           el.style.cursor = 'default';
           el.style.pointerEvents = 'none';
@@ -873,7 +896,7 @@ export default function BrazilMap({
         onContextMenuState?.(uf.nome, uf.sigla, e.originalEvent.clientX, e.originalEvent.clientY);
       },
     });
-  }, [stateStyle, onSelectUF, onContextMenuState, statesMetadata, role, isAdminLike, effectiveAssignedStates, selectedUF, mapTheme]);
+  }, [stateStyle, onSelectUF, onContextMenuState, statesMetadata, role, isAdminLike, effectiveAssignedStates, selectedUF, mapTheme, selectedMunicipioCode, selectedMunicipioName]);
 
   const onEachMunicipio = useCallback((feature: unknown, layer: L.Layer) => {
     const f = feature as GeoJSONFeature;
@@ -953,18 +976,26 @@ export default function BrazilMap({
         // Quando já há município em foco, remove hover dos demais (sem animação/branqueamento).
         if (hasSelectedMunicipio && !isSelectedMunicipio) {
           e.target.setStyle(currentStyle);
+          e.target.closeTooltip();
           return;
         }
 
+        // Only change stroke color and weight on hover to avoid changing
+        // the municipality fill (which can look like a click/highlight).
         e.target.setStyle({
-          fillColor: currentStyle.fillColor,
-          fillOpacity: currentStyle.fillOpacity,
           color: 'hsl(var(--admin-sidebar-accent))',
           weight: 3
         });
+
+        e.target.bindTooltip(tooltipHtml, {
+          sticky: true,
+          direction: 'top',
+          className: 'custom-tooltip'
+        }).openTooltip();
       },
       mouseout: (e) => {
         e.target.setStyle(municipioStyle(f));
+        e.target.closeTooltip();
         const el = e.target.getElement?.();
         if (el) {
           el.classList.remove('map-hover-effect');
@@ -1019,14 +1050,24 @@ export default function BrazilMap({
     if (!(showClientes || showHeatmap) || !apiClientes || !statesGeo) return [];
 
     let filterGeometry: GeoJSONFeature | GeoJSONFeatureCollection | null = null;
-    if (selectedUF) {
-      const stateFeature = statesGeo.features?.find((f) => {
-        const uf = getUFByCode(Number(f?.properties?.codarea));
-        return uf && uf.sigla === selectedUF;
-      });
-      if (stateFeature) filterGeometry = stateFeature as unknown as GeoJSONFeature;
-    } else {
-      filterGeometry = statesGeo as unknown as GeoJSONFeatureCollection;
+    // If a municipality is selected, prefer filtering by that municipality geometry.
+    if (selectedMunicipioCode || selectedMunicipioName) {
+      if (munGeo) {
+        filterGeometry = munGeo as unknown as GeoJSONFeature;
+      }
+    }
+
+    // If no municipality geometry, but a state is selected, filter by state geometry
+    if (!filterGeometry) {
+      if (selectedUF) {
+        const stateFeature = statesGeo.features?.find((f) => {
+          const uf = getUFByCode(Number(f?.properties?.codarea));
+          return uf && uf.sigla === selectedUF;
+        });
+        if (stateFeature) filterGeometry = stateFeature as unknown as GeoJSONFeature;
+      } else {
+        filterGeometry = statesGeo as unknown as GeoJSONFeatureCollection;
+      }
     }
 
     return apiClientes.filter(c => {
@@ -1038,6 +1079,12 @@ export default function BrazilMap({
         const pt = turfPoint([c.longitude, c.latitude]);
         if (filterGeometry) {
           return booleanPointInPolygon(pt, filterGeometry as Parameters<typeof booleanPointInPolygon>[1]);
+        }
+        // Fallback: if we have a selected municipality name but no geometry,
+        // filter by client city name match.
+        if ((selectedMunicipioName || selectedMunicipioCode) && c.cidade) {
+          const targetName = (selectedMunicipioName || '').toLowerCase();
+          if (targetName && c.cidade.toLowerCase() === targetName) return true;
         }
       } catch (e) {
         console.warn("Critical check failure for client", c.id_cliente, e);
@@ -1122,7 +1169,7 @@ export default function BrazilMap({
         {!neighborhoodGeo && !munGeo && stateGeo && <ZoomToFeature geoJson={stateGeo} maxZoom={ufInfo?.zoom || 7} skipIfZoomed={true} />}
 
         {/* World Shadow Mask (Brazil or Municipality Focus) */}
-        {statesGeo && <WorldMask brazilGeo={statesGeo} focusGeo={munGeo} theme={mapTheme} />}
+        {statesGeo && <WorldMask brazilGeo={statesGeo} focusGeo={(neighborhoodGeo || munGeo || stateGeo) ?? null} theme={mapTheme} />}
 
         <Pane name="backgroundTilePane" style={{ zIndex: 10 }}>
           <TileLayer
@@ -1131,6 +1178,16 @@ export default function BrazilMap({
             attribution=""
             opacity={MAP_THEMES[mapTheme].opacity}
             pane="backgroundTilePane"
+          />
+        </Pane>
+        {/* Streets / labels overlay to show street names and roads */}
+        <Pane name="labelsPane" style={{ zIndex: 150, pointerEvents: 'none' }}>
+          <TileLayer
+            key={`labels-osm`}
+            url={'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'}
+            attribution={'© OpenStreetMap contributors'}
+            opacity={0.9}
+            pane="labelsPane"
           />
         </Pane>
 
