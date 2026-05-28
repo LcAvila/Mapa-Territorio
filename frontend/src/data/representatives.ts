@@ -40,6 +40,7 @@ export interface SystemUser {
   base_logistica?: string;
   userTypeId?: number;
   tipo?: string;
+  canVisit?: boolean; 
   created_at?: string;
   createdAt?: string;
   last_active?: string;

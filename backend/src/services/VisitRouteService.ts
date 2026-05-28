@@ -24,6 +24,8 @@ export interface VisitResultDTO {
   sale_made?: boolean;
   sale_value?: number;
   notes?: string;
+  media_url?: string;
+  media_type?: 'photo' | 'video';
   userId: number;
 }
 
@@ -105,13 +107,19 @@ export class VisitRouteService {
    * Registra o resultado final da visita.
    */
   async registerResult(data: VisitResultDTO) {
+    const baseNotes = (data.notes || '').trim();
+    const evidenceBlock = data.media_url
+      ? `\n\n[comprovante_${data.media_type || 'photo'}]: ${data.media_url}`
+      : '';
+    const finalNotes = `${baseNotes}${evidenceBlock}`.trim() || undefined;
+
     const result = await prisma.visitResult.create({
       data: {
         route_sequence_item_id: data.route_sequence_item_id,
         result_status: data.status,
         sale_made: data.sale_made || false,
         sale_value: data.sale_value,
-        notes: data.notes,
+        notes: finalNotes,
         registered_by: data.userId,
         registered_at: new Date()
       }

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { API_BASE_URL } from '@/lib/api-base';
 import { buildAssignedStates } from '@/lib/user-territory';
+import { toast } from 'sonner';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);

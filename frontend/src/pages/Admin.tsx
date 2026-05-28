@@ -256,6 +256,7 @@ interface UserType {
   isAdmin: boolean;
   isSystemDefault: boolean;
   createdAt: string;
+  canVisit?: boolean;
 }
 
 interface Group { id: string; name: string; userIds: number[]; createdAt: string; }
@@ -2261,6 +2262,7 @@ export default function Admin() {
           userTypeId: '',
           default_screen: 'mapa',
           managedUserIds: [],
+          canVisit: false,
           permissions: availableModules.map((m: any) => ({ moduleId: m.id, canView: true, canEdit: false }))
         });
         setIsUserModalOpen(false);
@@ -3265,6 +3267,7 @@ export default function Admin() {
                       userTypeId: '',
                       default_screen: 'mapa',
                       managedUserIds: [],
+                      canVisit: false,
                       permissions: availableModules.map((m: any) => ({ moduleId: m.id, canView: true, canEdit: false }))
                     });
                     setIsUserModalOpen(true);
@@ -4166,14 +4169,24 @@ export default function Admin() {
 
           {/* ━━ BASE CLIENTE (Standalone) ━━ */}
           {activeTab === 'baserotas' && (
+            (() => {
+              const clientesPerm = myPermissions.find(p => p.moduleId === 'clientes');
+              const canManageClientes = role === 'admin' || canEdit('settings') || !!clientesPerm?.canEdit;
+              const canViewClientesActions = role === 'admin' || canAccess('settings') || !!clientesPerm?.canView || canManageClientes;
+              return (
             <BaseClientePanel 
               onSwitchToReps={() => setActiveTab('reps')} 
-              canCreate={role === 'admin' || canEdit('settings') || (myPermissions.find(p => p.moduleId === 'clientes')?.canEdit || false)}
+              canView={canViewClientesActions}
+              canCreate={canManageClientes}
+              canEdit={canManageClientes}
+              canDelete={canManageClientes}
               isMobileFilterOpen={isDashFiltersOpen}
               initialData={clientes as any}
               loading={loadingClientes}
               onRefresh={fetchClientes}
             />
+              );
+            })()
           )}
 
           {/* ━━ VISITAS ━━ */}
@@ -4895,6 +4908,7 @@ export default function Admin() {
                                           companyName: u.company_name || u.companyName || '',
                                           groupId: String(u.groupId || ''),
                                           userTypeId: String(u.userTypeId || ''),
+                                          canVisit: !!(u as any).canVisit,
                                           managedUserIds: u.managedUsers?.map(m => m.id) || []
                                         });
                                         setIsUserModalOpen(true);

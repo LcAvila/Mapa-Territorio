@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { AddressMapPicker } from './AddressMapPicker';
 import { API_BASE_URL } from '@/lib/api-base';
 import { useAuth } from '@/contexts/auth-context-core';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface Cliente {
   id_cliente: number;
@@ -53,6 +54,7 @@ interface Cliente {
 
 export function BaseClientePanel({ 
   onSwitchToReps, 
+  canView = true,
   canCreate = false, 
   canEdit = false,
   canDelete = false,
@@ -62,6 +64,7 @@ export function BaseClientePanel({
   onRefresh
 }: { 
   onSwitchToReps?: () => void, 
+  canView?: boolean,
   canCreate?: boolean, 
   canEdit?: boolean,
   canDelete?: boolean,
@@ -89,6 +92,11 @@ export function BaseClientePanel({
   const [selectedClient, setSelectedClient] = useState<Cliente | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [editingClientId, setEditingClientId] = useState<number | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; id: number | null; name: string }>({
+    open: false,
+    id: null,
+    name: ''
+  });
 
   const [filterUF, setFilterUF] = useState('');
   const [filterUser, setFilterUser] = useState('');
@@ -117,6 +125,8 @@ export function BaseClientePanel({
   const [systemUsers, setSystemUsers] = useState<{ id: number, username: string, full_name: string | null }[]>([]);
   const [fetchingCep, setFetchingCep] = useState(false);
   const [bairrosLocais, setBairrosLocais] = useState<string[]>([]);
+  const canSeeActionColumn = canView || canEdit || canDelete;
+  const canUseActionMenu = canEdit || canDelete;
 
   useEffect(() => {
     if (formData.cidade && formData.uf) {
@@ -350,7 +360,6 @@ export function BaseClientePanel({
   };
 
   const handleDeleteClient = async (id: number, name: string) => {
-    if (!window.confirm(`Tem certeza que deseja apagar o cliente "${name}"? Esta ação não pode ser desfeita.`)) return;
     try {
       setInternalLoading(true);
       const token = localStorage.getItem('token');
@@ -371,6 +380,18 @@ export function BaseClientePanel({
       toast.error(message);
       setInternalLoading(false);
     }
+  };
+
+  const requestDeleteClient = (id: number, name: string) => {
+    setDeleteDialog({ open: true, id, name });
+  };
+
+  const confirmDeleteClient = async () => {
+    if (!deleteDialog.id) return;
+    const id = deleteDialog.id;
+    const name = deleteDialog.name;
+    setDeleteDialog({ open: false, id: null, name: '' });
+    await handleDeleteClient(id, name);
   };
 
   const filteredClientes = clientes.filter(c => {
@@ -657,7 +678,7 @@ export function BaseClientePanel({
                       <TableHead className="whitespace-nowrap h-10">Cidade / UF</TableHead>
                       {currentUserRole === 'admin' && <TableHead className="whitespace-nowrap h-10">Usuário Responsável</TableHead>}
                       <TableHead className="whitespace-nowrap h-10 text-center">Status</TableHead>
-                      {(canEdit || canDelete) && <TableHead className="whitespace-nowrap h-10 text-right pr-4">Ações</TableHead>}
+                      {canSeeActionColumn && <TableHead className="whitespace-nowrap h-10 text-right pr-4">Ações</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -693,11 +714,17 @@ export function BaseClientePanel({
                               </span>
                             )}
                           </TableCell>
-                          {(canEdit || canDelete) && (
+                          {canSeeActionColumn && (
                             <TableCell className="text-xs py-2 text-right pr-4">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary/80">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={!canUseActionMenu}
+                                    title={!canUseActionMenu ? "Sem permissão para editar/excluir" : "Ações"}
+                                  >
                                     <MoreVertical className="w-4 h-4 text-muted-foreground" />
                                   </Button>
                                 </DropdownMenuTrigger>
@@ -708,8 +735,13 @@ export function BaseClientePanel({
                                     </DropdownMenuItem>
                                   )}
                                   {canDelete && (
-                                    <DropdownMenuItem onClick={() => handleDeleteClient(row.id_cliente, row.nome_cliente)} className="gap-2 cursor-pointer text-destructive focus:text-destructive font-medium text-xs">
+                                    <DropdownMenuItem onClick={() => requestDeleteClient(row.id_cliente, row.nome_cliente)} className="gap-2 cursor-pointer text-destructive focus:text-destructive font-medium text-xs">
                                       <Trash2 className="w-3.5 h-3.5" /> Apagar Cliente
+                                    </DropdownMenuItem>
+                                  )}
+                                  {!canUseActionMenu && (
+                                    <DropdownMenuItem disabled className="text-xs">
+                                      Sem permissão para editar/excluir
                                     </DropdownMenuItem>
                                   )}
                                 </DropdownMenuContent>
@@ -850,7 +882,7 @@ export function BaseClientePanel({
                     variant="outline"
                     size="icon"
                     className="h-10 w-10 text-destructive hover:bg-destructive/10"
-                    onClick={() => { setIsDetailOpen(false); handleDeleteClient(selectedClient.id_cliente, selectedClient.nome_cliente); }}
+                    onClick={() => { setIsDetailOpen(false); requestDeleteClient(selectedClient.id_cliente, selectedClient.nome_cliente); }}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -860,6 +892,16 @@ export function BaseClientePanel({
           )}
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={deleteDialog.open}
+        title="Excluir cliente"
+        description={`Tem certeza que deseja apagar o cliente "${deleteDialog.name}"? Esta ação não pode ser desfeita.`}
+        confirmLabel="Apagar"
+        cancelLabel="Cancelar"
+        variant="danger"
+        onCancel={() => setDeleteDialog({ open: false, id: null, name: '' })}
+        onConfirm={confirmDeleteClient}
+      />
     </div>
   );
 }

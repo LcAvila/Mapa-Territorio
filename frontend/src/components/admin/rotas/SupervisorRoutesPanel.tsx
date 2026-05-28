@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Search, Map as MapIcon, Calendar, User as UserIcon, TrendingUp, CheckCircle2, Clock, AlertCircle, X, Navigation, Pencil, Trash2, MoreHorizontal, FileText } from 'lucide-react';
+import { Loader2, Search, Map as MapIcon, Calendar, User as UserIcon, TrendingUp, CheckCircle2, Clock, AlertCircle, X, Navigation, Pencil, Trash2, MoreHorizontal, FileText, PlayCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -157,6 +158,7 @@ function RouteMapView({ geoJSON }: { geoJSON: any }) {
 }
 
 export const SupervisorRoutesPanel: React.FC = () => {
+  const navigate = useNavigate();
   const { token, logout, userId, role } = useAuth();
   const [routes, setRoutes] = useState<RouteSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -379,6 +381,10 @@ export const SupervisorRoutesPanel: React.FC = () => {
     }
   };
 
+  const handleOpenExecution = (routeId: number) => {
+    navigate(`/roteiro/${routeId}`);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border/40 pb-4">
@@ -522,6 +528,17 @@ export const SupervisorRoutesPanel: React.FC = () => {
                         >
                           <MapIcon className="w-4 h-4" />
                         </Button>
+                        {(route.status === 'pending' || route.status === 'em_execucao') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"
+                            title="Executar roteiro e confirmar visitas"
+                            onClick={() => handleOpenExecution(route.id)}
+                          >
+                            <PlayCircle className="w-4 h-4" />
+                          </Button>
+                        )}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -552,6 +569,14 @@ export const SupervisorRoutesPanel: React.FC = () => {
                             >
                               <MapIcon className="w-3.5 h-3.5" /> Ver no mapa
                             </DropdownMenuItem>
+                            {(route.status === 'pending' || route.status === 'em_execucao') && (
+                              <DropdownMenuItem
+                                className="gap-2 cursor-pointer text-xs font-medium"
+                                onClick={() => handleOpenExecution(route.id)}
+                              >
+                                <PlayCircle className="w-3.5 h-3.5" /> Executar / Confirmar visitas
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="gap-2 cursor-pointer text-xs font-medium text-destructive focus:text-destructive"

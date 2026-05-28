@@ -80,6 +80,18 @@ export const checkout = async (req: Request, res: Response) => {
 export const registerResult = async (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user; // Assumindo que o middleware de auth coloca o user no req
+    const { status, notes, media_url, media_type } = req.body || {};
+
+    // Confirmação de visita concluída exige evidência (foto/vídeo) e observação.
+    if (status === 'visitada') {
+      if (!notes || !String(notes).trim()) {
+        return res.status(400).json({ message: 'Observação é obrigatória para confirmar visita.' });
+      }
+      if (!media_url || !String(media_url).trim()) {
+        return res.status(400).json({ message: 'Foto/vídeo do local é obrigatório para confirmar visita.' });
+      }
+    }
+
     const result = await visitService.registerResult({ ...req.body, userId });
     res.status(201).json(result);
   } catch (error: any) {

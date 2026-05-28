@@ -67,6 +67,7 @@ const API_BASE = API_BASE_URL;
 function MapController({ center, zoom, flyToLocation, selectedUF }: { center: [number, number]; zoom: number; flyToLocation?: { center: [number, number]; zoom: number } | null; selectedUF: string | null }) {
   const map = useMap();
   const isFirst = useRef(true);
+  const previousSelectedUfRef = useRef<string | null>(null);
 
   const centerLat = center[0];
   const centerLng = center[1];
@@ -75,16 +76,16 @@ function MapController({ center, zoom, flyToLocation, selectedUF }: { center: [n
   // Lógica de animação baseada em estado (UF ou visão Brasil)
   useEffect(() => {
     if (!map) return;
-    // SÓ executamos se não estivemos num foco de cliente (flyToLocation)
-    // E se não estivermos já num nível de zoom detalhado (evita resetar zoom manual)
-    if (!hasFlyTo && map.getZoom() < 8) {
-      if (selectedUF || isFirst.current) {
-        map.setView(center, zoom, { 
-          animate: true,
-          duration: 1.5
-        });
-        isFirst.current = false;
-      }
+    const selectedUfChanged = previousSelectedUfRef.current !== selectedUF;
+    previousSelectedUfRef.current = selectedUF;
+
+    // Reenquadra quando troca de UF/visão Brasil, sem brigar com foco manual de cliente.
+    if (!hasFlyTo && (selectedUfChanged || isFirst.current)) {
+      map.setView(center, zoom, {
+        animate: true,
+        duration: 1.5
+      });
+      isFirst.current = false;
     }
   }, [map, center, zoom, hasFlyTo, selectedUF]);
 
@@ -263,10 +264,19 @@ function ZoomToFeature({
       const layer = L.geoJSON(geoJson as Parameters<typeof L.geoJSON>[0]);
       const bounds = layer.getBounds();
       if (bounds.isValid()) {
+        const boundsSpan = Math.max(
+          Math.abs(bounds.getNorth() - bounds.getSouth()),
+          Math.abs(bounds.getEast() - bounds.getWest())
+        );
+        const dynamicMaxZoom = boundsSpan > 25 ? Math.min(maxZoom, 5) :
+          boundsSpan > 10 ? Math.min(maxZoom, 7) :
+          boundsSpan > 4 ? Math.min(maxZoom, 9) :
+          maxZoom;
+
         map.flyToBounds(bounds, {
-          padding: [50, 50],
+          padding: [36, 36],
           duration: 1.5,
-          maxZoom: maxZoom
+          maxZoom: dynamicMaxZoom
         });
         // Ensure map is correctly aligned after transition
         setTimeout(() => map.invalidateSize(), 1600);
@@ -485,7 +495,7 @@ export default function BrazilMap({
   const MAP_THEMES = {
     'dark': { label: 'Escuro', url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', opacity: 0.4 },
     'dark-labels': { label: 'Escuro + Labels', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', opacity: 0.5 },
-    'light': { label: 'Claro', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', opacity: 0.35 },
+    'light': { label: 'Claro', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', opacity: 0.55 },
     'satellite': { label: 'Satélite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opacity: 1.0 },
     'osm': { label: 'OpenStreetMap', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', opacity: 1.0 },
   } as const;
@@ -619,21 +629,22 @@ export default function BrazilMap({
     const isLightTheme = mapTheme === 'light';
     
     // CORRIGIDO: Se houver seleção e este não for o estado selecionado, ele deve ser transparente ou sutil
-    const baseFillColor = isLightTheme ? "#ffffff" : "#334155";
+    const baseFillColor = isLightTheme ? "#e2e8f0" : "#334155";
     const baseStrokeColor = isLightTheme ? "#64748b" : "#475569";
     
-    // Se houver seleção de QUALQUER estado, estados não selecionados ficam quase transparentes
-    const baseFillOpacity = hasSelection 
-      ? (isSelected ? 0.15 : 0) // O selecionado mantém um pouco, os outros 0
-      : (isLightTheme ? 1.0 : 0.8); // Sem seleção, mantém o preenchimento normal
+    // Se houver seleção de QUALQUER estado, aplica o mesmo "escurecimento" nos não selecionados
+    // independentemente do tema para manter consistência visual entre light/dark.
+    const baseFillOpacity = hasSelection
+      ? (isSelected ? 0.15 : 0.42)
+      : (isLightTheme ? 0.7 : 0.8);
 
     return {
-      fillColor: isSelected ? "hsl(168, 70%, 45%)" : baseFillColor,
+      fillColor: isSelected ? "hsl(168, 70%, 45%)" : (hasSelection ? "#334155" : baseFillColor),
       weight: isSelected ? 2 : (isLightTheme ? 1.5 : 1.0),
-      opacity: hasSelection && !isSelected ? 0.3 : 1, // Esmaece estados não selecionados
-      color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : baseStrokeColor,
-      fillOpacity: isSelected ? 0.05 : baseFillOpacity, // Selecionado fica mais "limpo" para brilhar sobre a máscara
-      interactive: !hasSelection || isSelected // Desativa interação nos outros quando um está aberto
+      opacity: hasSelection && !isSelected ? 0.75 : 1,
+      color: isSelected && !hideSelection ? "hsl(var(--admin-sidebar-accent))" : (hasSelection ? "#1e293b" : baseStrokeColor),
+      fillOpacity: isSelected ? 0.05 : baseFillOpacity,
+      interactive: true // Permite alternar diretamente para outro estado
     };
   }, [selectedUF, isMapMoving, showUsuarios, apiTerritories, apiUsers, role, effectiveAssignedStates, mapTheme, filtroUsuario]);
 
@@ -647,19 +658,34 @@ export default function BrazilMap({
     const city = citiesList.find((c: { ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea));
     const ibgeName = municipioNamesByCode?.[String(codArea)];
     const name = city?.name || ibgeName || String(f?.properties?.name || f?.properties?.nome || "").trim() || `Município ${codArea}`;
-    
-    const isTarget = name.toLowerCase() === (selectedMunicipioName || "").toLowerCase();
-    const hasSelection = !!selectedMunicipioName;
 
-    // Se houver seleção e este NÃO for o alvo, esmaecemos radicalmente para dar o efeito de "sombra"
+    const selectedCode = selectedMunicipioCode ? String(selectedMunicipioCode) : null;
+    const isTargetByCode = !!selectedCode && String(codArea) === selectedCode;
+    const isTargetByName = !!selectedMunicipioName && name.toLowerCase() === selectedMunicipioName.toLowerCase();
+    const isTarget = isTargetByCode || isTargetByName;
+    const hasSelection = !!selectedCode || !!selectedMunicipioName;
+
+    // Se houver seleção e este NÃO for o alvo, aplica "sombra" suave igual ao comportamento dos estados
     if (hasSelection && !isTarget) {
       return { 
-        fillColor: "#e2e8f0", 
-        weight: 0.5, 
-        opacity: 0.15, 
-        color: "#94a3b8", 
-        fillOpacity: 0.05,
-        interactive: false // Desativa interação nos outros quando um está aberto
+        fillColor: "#334155",
+        weight: 0.8,
+        opacity: 0.6,
+        color: "#475569",
+        fillOpacity: 0.35,
+        interactive: true // Permite trocar o foco para outro município
+      };
+    }
+
+    // Município alvo selecionado: destaque fixo e limpo
+    if (isTarget) {
+      return {
+        fillColor: "hsl(168, 70%, 45%)",
+        weight: 3,
+        opacity: 1,
+        color: "hsl(var(--admin-sidebar-accent))",
+        fillOpacity: 0.22,
+        interactive: true
       };
     }
 
@@ -713,7 +739,7 @@ export default function BrazilMap({
       fillOpacity: 0.8, // Opacidade fixa quando ativo
       dashArray: user.isVago ? "6 4" : undefined,
     };
-  }, [citiesList, municipioNamesByCode, selectedUF, modo, filtroUsuario, mostrarVagos, searchQuery, filteredApiTerritories, apiUsers, selectedClients, showUsuarios]);
+  }, [citiesList, municipioNamesByCode, selectedUF, modo, filtroUsuario, mostrarVagos, searchQuery, filteredApiTerritories, apiUsers, selectedClients, showUsuarios, selectedMunicipioCode, selectedMunicipioName]);
 
   const stateOutlineStyle = useCallback((feature: unknown) => {
     const f = feature as GeoJSONFeature;
@@ -741,7 +767,10 @@ export default function BrazilMap({
     const city = citiesList.find((c: { ibgeCode: number | string }) => String(c.ibgeCode) === String(codArea));
     const ibgeName = municipioNamesByCode?.[String(codArea)];
     const name = city?.name || ibgeName || "";
-    const isTarget = name.toLowerCase() === (selectedMunicipioName || "").toLowerCase();
+    const selectedCode = selectedMunicipioCode ? String(selectedMunicipioCode) : null;
+    const isTargetByCode = !!selectedCode && String(codArea) === selectedCode;
+    const isTargetByName = !!selectedMunicipioName && name.toLowerCase() === selectedMunicipioName.toLowerCase();
+    const isTarget = isTargetByCode || isTargetByName;
     
     // Se o município é o alvo, damos um destaque de borda mais forte
     return isTarget
@@ -753,7 +782,7 @@ export default function BrazilMap({
           fillOpacity: 0.15 
         }
       : { fillColor: "transparent", weight: 0, opacity: 0, color: "transparent", fillOpacity: 0 };
-  }, [citiesList, municipioNamesByCode, selectedMunicipioName]);
+  }, [citiesList, municipioNamesByCode, selectedMunicipioName, selectedMunicipioCode]);
 
   const onEachNeighborhood = useCallback((feature: unknown, layer: L.Layer) => {
     const f = feature as GeoJSONFeature;
@@ -761,7 +790,11 @@ export default function BrazilMap({
 
     if (layer instanceof L.Path) {
       const el = layer.getElement();
-      if (el) el.classList.add('map-hover-effect');
+      if (el) {
+        // Municípios com estilo de foco/sombra têm hover controlado por lógica própria.
+        // Remove o efeito CSS global para evitar "clarear" os escurecidos.
+        el.classList.remove('map-hover-effect');
+      }
     }
 
     (layer as L.Path).on({
@@ -887,23 +920,56 @@ export default function BrazilMap({
     `;
 
     if (layer instanceof L.Path) {
-      const el = layer.getElement();
-      if (el) el.classList.add('map-hover-effect');
+      const clearMunicipioHoverClass = () => {
+        const el = layer.getElement();
+        if (el) {
+          // Garante que o efeito global de hover (brightness/drop-shadow) nunca
+          // seja aplicado aos municípios.
+          el.classList.remove('map-hover-effect');
+          el.classList.add('map-municipio-no-hover');
+        }
+      };
+      clearMunicipioHoverClass();
+      (layer as L.Path).on('add', clearMunicipioHoverClass);
     }
 
     (layer as L.Path).on({
       mouseover: (e) => {
+        const selectedCode = selectedMunicipioCode ? String(selectedMunicipioCode) : null;
+        const hasSelectedMunicipio = !!selectedCode || !!selectedMunicipioName;
+        const isSelectedByCode = !!selectedCode && String(codArea) === selectedCode;
+        const isSelectedByName = !!selectedMunicipioName && name.toLowerCase() === selectedMunicipioName.toLowerCase();
+        const isSelectedMunicipio = isSelectedByCode || isSelectedByName;
         const currentStyle = municipioStyle(f);
-        e.target.setStyle({ 
-          color: 'hsl(var(--admin-sidebar-accent))', 
-          fillOpacity: Math.min(0.8, currentStyle.fillOpacity + 0.2), 
-          weight: 3 
+        const el = e.target.getElement?.();
+        if (el) {
+          el.classList.remove('map-hover-effect');
+          el.classList.add('map-municipio-no-hover');
+        }
+
+        // Garante que hover não exiba tooltip/caixa branca de nenhum estado anterior.
+        e.target.unbindTooltip();
+
+        // Quando já há município em foco, remove hover dos demais (sem animação/branqueamento).
+        if (hasSelectedMunicipio && !isSelectedMunicipio) {
+          e.target.setStyle(currentStyle);
+          return;
+        }
+
+        e.target.setStyle({
+          fillColor: currentStyle.fillColor,
+          fillOpacity: currentStyle.fillOpacity,
+          color: 'hsl(var(--admin-sidebar-accent))',
+          weight: 3
         });
-        e.target.bindTooltip(tooltipHtml, { sticky: true }).openTooltip();
       },
       mouseout: (e) => {
         e.target.setStyle(municipioStyle(f));
-        e.target.closeTooltip();
+        const el = e.target.getElement?.();
+        if (el) {
+          el.classList.remove('map-hover-effect');
+          el.classList.add('map-municipio-no-hover');
+        }
       },
       click: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
@@ -932,7 +998,7 @@ export default function BrazilMap({
         }
       },
     });
-  }, [citiesList, municipioNamesByCode, selectedUF, modo, municipioStyle, onSelectMunicipio, filteredApiTerritories, apiUsers, onContextMenuMunicipio, role, estado_end, onResetMap, onSelectUF, handleClaimMunicipio]);
+  }, [citiesList, municipioNamesByCode, selectedUF, modo, municipioStyle, onSelectMunicipio, filteredApiTerritories, apiUsers, onContextMenuMunicipio, role, estado_end, onResetMap, onSelectUF, handleClaimMunicipio, selectedMunicipioCode, selectedMunicipioName]);
 
   // ── Neighborhood label markers — names from Brasil Aberto metadata if possible ───
   const markers: Array<{ center: L.LatLng; name: string }> = [];
@@ -1028,7 +1094,7 @@ export default function BrazilMap({
         zoomAnimation={false}
         fadeAnimation={false}
         markerZoomAnimation={false}
-        style={{ background: "#f8fafc" }}
+        style={{ background: "#0f172a" }}
         minZoom={minZoom}
         maxBounds={maxBounds}
         maxBoundsViscosity={1.0}
@@ -1090,7 +1156,7 @@ export default function BrazilMap({
               <GeoJSON 
                 key={`states-${effectiveAssignedStates.join(',')}-${statesMetadata?.length || 0}-${showUsuarios}-${filteredApiTerritories.length}-${selectedUF}`} 
                 data={filteredStatesGeo} 
-                style={selectedUF ? stateOutlineStyle : stateStyle} 
+                style={stateStyle} 
                 onEachFeature={onEachState} 
               />
             </Pane>
@@ -1362,6 +1428,12 @@ export default function BrazilMap({
         .map-motion-blur {
           filter: blur(0.5px) contrast(1.1);
           transition: filter 0.3s ease;
+        }
+        .map-municipio-no-hover {
+          filter: none !important;
+        }
+        .map-municipio-no-hover:hover {
+          filter: none !important;
         }
       `}</style>
     </div>

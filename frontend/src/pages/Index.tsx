@@ -87,9 +87,9 @@ const normalizeName = (s: string) =>
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMunicipio, setSelectedMunicipio] = useState<{ nome: string; uf: string; id?: number } | null>(null);
   const [municipioCodeForBairros, setMunicipioCodeForBairros] = useState<number | null>(null);
-  const [showClientes, setShowClientes] = useState(true);
+  const [showClientes, setShowClientes] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
-  const [showUsuarios, setShowUsuarios] = useState(role !== 'admin');
+  const [showUsuarios, setShowUsuarios] = useState(false);
   const [flyToLocation, setFlyToLocation] = useState<{ center: [number, number]; zoom: number } | null>(null);
 
   // Reset local filters when user changes (not when territories refetch)
@@ -103,6 +103,9 @@ const normalizeName = (s: string) =>
     setMunicipioCodeForBairros(null);
     setSelectedClients([]);
     setFlyToLocation(null);
+    setShowClientes(false);
+    setShowHeatmap(false);
+    setShowUsuarios(false);
     queryClient.clear();
 
     const states = buildAssignedStates(assigned_state, assigned_states);
