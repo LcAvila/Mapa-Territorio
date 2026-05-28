@@ -1,153 +1,204 @@
 import { useQuery } from "@tanstack/react-query";
 import { API_BASE_URL } from "@/lib/api-base";
 import { useAuth } from "@/contexts/auth-context-core";
-import { toast } from "sonner";
 
 const API_BASE = `${API_BASE_URL}/api/location`;
 const IBGE_MALHAS = "https://servicodados.ibge.gov.br/api/v3/malhas";
 const IBGE_LOC = "https://servicodados.ibge.gov.br/api/v1/localidades";
 
-// ── Metadata Hooks (Brasil Aberto via Backend) ────────────────────────────────
+type GeoFeatureCollection = {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    properties: Record<string, unknown>;
+    geometry: Record<string, unknown> | null;
+  }>;
+};
+
+async function fetchAuthedJson<T>(url: string, token: string, tokenVersion: number | null) {
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "x-user-token-version": String(tokenVersion ?? 0),
+    },
+  });
+
+  if (res.status === 401) {
+    throw new Error("Sessão expirada ou não autorizada.");
+  }
+
+  if (!res.ok) {
+    throw new Error(`Erro ${res.status} ao buscar ${url}`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+async function fetchPublicJson<T>(url: string) {
+  const res = await fetch(url);
+
+  if (!res.ok) {
+    throw new Error(`Erro ${res.status} ao buscar ${url}`);
+  }
+
+  return res.json() as Promise<T>;
+}
 
 export function useStatesMetadata() {
   const { token, tokenVersion } = useAuth();
+
   return useQuery({
-    queryKey: ["location", "states"],
-    queryFn: () => fetch(`${API_BASE}/states`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'x-user-token-version': String(tokenVersion || 0)
-      }
-    }).then(r => r.json()),
+    queryKey: ["location", "states", tokenVersion],
+    queryFn: async () => {
+      if (!token) throw new Error("Token ausente.");
+      return fetchAuthedJson(`${API_BASE}/states`, token, tokenVersion);
+    },
     staleTime: Infinity,
-    enabled: !!token
+    gcTime: 30 * 60_000,
+    enabled: !!token,
   });
 }
 
 export function useCitiesMetadata(ufSigla: string | null) {
   const { token, tokenVersion } = useAuth();
+
   return useQuery({
-    queryKey: ["location", "cities", ufSigla],
-    queryFn: () => fetch(`${API_BASE}/cities/${ufSigla}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'x-user-token-version': String(tokenVersion || 0)
-      }
-    }).then(r => r.json()),
+    queryKey: ["location", "cities", ufSigla, tokenVersion],
+    queryFn: async () => {
+      if (!token || !ufSigla) throw new Error("UF ou token ausente.");
+      return fetchAuthedJson(`${API_BASE}/cities/${ufSigla}`, token, tokenVersion);
+    },
     enabled: !!ufSigla && !!token,
     staleTime: Infinity,
+    gcTime: 30 * 60_000,
   });
 }
 
 export function useDistrictsMetadata(ibgeCode: number | null) {
   const { token, tokenVersion } = useAuth();
+
   return useQuery({
-    queryKey: ["location", "districts", ibgeCode],
-    queryFn: () => fetch(`${API_BASE}/districts/${ibgeCode}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'x-user-token-version': String(tokenVersion || 0)
-      }
-    }).then(r => r.json()),
+    queryKey: ["location", "districts", ibgeCode, tokenVersion],
+    queryFn: async () => {
+      if (!token || !ibgeCode) throw new Error("Código IBGE ou token ausente.");
+      return fetchAuthedJson(`${API_BASE}/districts/${ibgeCode}`, token, tokenVersion);
+    },
     enabled: !!ibgeCode && !!token,
     staleTime: Infinity,
+    gcTime: 30 * 60_000,
   });
 }
-
-// ── GeoJSON Hooks (Visual Fallback Layer) ─────────────────────────────────────
 
 export function useStatesGeoJSON() {
   return useQuery({
     queryKey: ["geo", "states"],
-    queryFn: () => fetch(
-      `${IBGE_MALHAS}/paises/BR?formato=application/vnd.geo+json&qualidade=minima&intrarregiao=UF`
-    ).then(r => r.json()),
+    queryFn: async () => {
+      return fetchPublicJson(
+        `${IBGE_MALHAS}/paises/BR?formato=application/vnd.geo+json&qualidade=minima&intrarregiao=UF`
+      );
+    },
     staleTime: Infinity,
+    gcTime: 60 * 60_000,
   });
 }
 
 export function useMunicipiosGeoJSON(ufCode: number | null) {
   return useQuery({
     queryKey: ["geo", "municipios", ufCode],
-    queryFn: () => fetch(
-      `${IBGE_MALHAS}/estados/${ufCode}?formato=application/vnd.geo+json&qualidade=minima&intrarregiao=municipio`
-    ).then(r => r.json()),
+    queryFn: async () => {
+      if (!ufCode) throw new Error("UF code ausente.");
+      return fetchPublicJson(
+        `${IBGE_MALHAS}/estados/${ufCode}?formato=application/vnd.geo+json&qualidade=minima&intrarregiao=municipio`
+      );
+    },
     enabled: !!ufCode,
     staleTime: Infinity,
+    gcTime: 60 * 60_000,
   });
 }
 
-export function useNeighborhoodsGeoJSON(municipioCode: number | null, municipioName?: string, ufSigla?: string) {
+export function useNeighborhoodsGeoJSON(
+  municipioCode: number | null,
+  municipioName?: string,
+  ufSigla?: string
+) {
   const { token, tokenVersion } = useAuth();
-  const API = API_BASE_URL;
 
-  return useQuery({
-    queryKey: ["geo", "neighborhoods-backend", municipioCode, !!token, tokenVersion],
+  return useQuery<GeoFeatureCollection>({
+    queryKey: [
+      "geo",
+      "neighborhoods-backend",
+      municipioCode,
+      municipioName ?? null,
+      ufSigla ?? null,
+      tokenVersion,
+    ],
     queryFn: async () => {
-      if (!municipioCode || !token) return null;
-
-      try {
-        const res = await fetch(`${API}/api/location/neighborhoods-geojson/${municipioCode}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'x-user-token-version': String(tokenVersion || 0)
-          }
-        });
-        
-        if (res.status === 401) {
-          console.warn("[GeoHook] 401 Unauthorized for neighborhoods. Token might be stale.");
-          throw new Error("Sessão expirada. Recarregue a página.");
-        }
-
-        if (!res.ok) throw new Error("Erro ao buscar bairros do servidor");
-        const data = await res.json();
-        
-        if (!data || !data.features || data.features.length === 0) {
-          console.warn(`[GeoHook] No neighborhoods found for municipio ${municipioCode}`);
-        }
-        
-        return data;
-      } catch (e) {
-        console.error("[GeoHook] Backend neighborhoods failed", e);
-        toast.error("Não foi possível carregar os bairros para este município.");
-        return { type: "FeatureCollection", features: [] };
+      if (!municipioCode || !token) {
+        throw new Error("Município ou token ausente.");
       }
+
+      const data = await fetchAuthedJson<GeoFeatureCollection>(
+        `${API_BASE_URL}/api/location/neighborhoods-geojson/${municipioCode}`,
+        token,
+        tokenVersion
+      );
+
+      console.log("[GeoHook] Neighborhoods raw response:", data);
+
+      if (!data || data.type !== "FeatureCollection" || !Array.isArray(data.features)) {
+        throw new Error("Resposta inválida da API de bairros.");
+      }
+
+      if (data.features.length === 0) {
+        console.warn(`[GeoHook] No neighborhoods found for municipio ${municipioCode}`);
+      }
+
+      return data;
     },
     enabled: !!municipioCode && !!token,
-    staleTime: 1000 * 60 * 30, // 30 minutes
-    retry: 1
+    staleTime: 30 * 60_000,
+    gcTime: 60 * 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
   });
 }
 
-// ── Compatibility hooks ───────────────────────────────────────────────────────
-
 export function useMunicipioNames(ufCode: number | null) {
-  // Compatibility hook for style mapping — uses IBGE directly
   return useQuery({
     queryKey: ["ibge", "municipios", ufCode],
     queryFn: async () => {
-      const res = await fetch(`${IBGE_LOC}/estados/${ufCode}/municipios`);
-      if (!res.ok) throw new Error("Failed");
-      const data = await res.json();
+      if (!ufCode) throw new Error("UF code ausente.");
+
+      const data = await fetchPublicJson<{ id: number | string; nome: string }[]>(
+        `${IBGE_LOC}/estados/${ufCode}/municipios`
+      );
+
       const map: Record<string, string> = {};
-      data.forEach((m: { id: number | string; nome: string }) => { map[String(m.id)] = m.nome; });
+      data.forEach((m) => {
+        map[String(m.id)] = m.nome;
+      });
+
       return map;
     },
     enabled: !!ufCode,
     staleTime: Infinity,
+    gcTime: 60 * 60_000,
   });
 }
 
-/** Compatibility hook for DetailPanel: returns list of { id, nome } for a given UF code */
 export function useMunicipioInfo(ufCode: number | null) {
   return useQuery({
     queryKey: ["ibge", "municipios-info", ufCode],
     queryFn: async () => {
-      const res = await fetch(`${IBGE_LOC}/estados/${ufCode}/municipios`);
-      if (!res.ok) throw new Error("Failed");
-      return res.json() as Promise<{ id: number; nome: string }[]>;
+      if (!ufCode) throw new Error("UF code ausente.");
+
+      return fetchPublicJson<{ id: number; nome: string }[]>(
+        `${IBGE_LOC}/estados/${ufCode}/municipios`
+      );
     },
     enabled: !!ufCode,
     staleTime: Infinity,
+    gcTime: 60 * 60_000,
   });
 }

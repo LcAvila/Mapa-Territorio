@@ -19,19 +19,28 @@ import { Navigate } from "react-router-dom";
 
 import { ThemeProvider } from "./contexts/ThemeContext";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,
+      gcTime: 5 * 60_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const RootRedirect = () => {
   const { defaultWorkspace } = useAuth();
-  
+
   if (defaultWorkspace === 'mapa' || !defaultWorkspace) {
     return <Navigate to="/mapa" replace />;
   }
-  
+
   if (defaultWorkspace === 'admin') {
     return <Navigate to="/admin" replace />;
   }
-  
+
   return <Navigate to={`/admin?tab=${defaultWorkspace}`} replace />;
 };
 
@@ -55,12 +64,6 @@ const App = () => (
                   <Route path="/perfil" element={<Profile />} />
                   <Route path="/ajuda" element={<Ajuda />} />
                   <Route path="/roteiro/:id" element={<RoteiroExecucao />} />
-                </Route>
-
-
-                {/* Rotas Administrativas */}
-                <Route element={<ProtectedRoute allowedRoles={['admin', 'supervisor', 'user']} />}>
-                  <Route path="/admin" element={<Admin />} />
                 </Route>
 
                 <Route path="*" element={<NotFound />} />
