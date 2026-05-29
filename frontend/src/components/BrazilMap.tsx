@@ -488,16 +488,46 @@ export default function BrazilMap({
 
   const [isMapMoving, setIsMapMoving] = useState(false);
   const [selectedNeighborhood, setSelectedNeighborhood] = useState<string | null>(null);
-  const [mapTheme, setMapTheme] = useState<'dark' | 'dark-labels' | 'light' | 'satellite' | 'osm'>('light');
+  const [mapTheme, setMapTheme] = useState<'dark' | 'light' | 'satellite' | 'osm' | 'toner' | 'terrain' | 'watercolor'>('light');
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [clientContextMenu, setClientContextMenu] = useState<{ client: Cliente, x: number, y: number } | null>(null);
 
   const MAP_THEMES = {
-    'dark': { label: 'Escuro', url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', opacity: 0.4 },
-    'dark-labels': { label: 'Escuro + Labels', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', opacity: 0.5 },
-    'light': { label: 'Claro', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', opacity: 0.55 },
-    'satellite': { label: 'Satélite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opacity: 1.0 },
-    'osm': { label: 'OpenStreetMap', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', opacity: 1.0 },
+    dark: {
+      label: 'Escuro',
+      url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      opacity: 1.0
+    },
+    light: {
+      label: 'Claro',
+      url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+      opacity: 1.0
+    },
+    satellite: {
+      label: 'Satélite',
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      opacity: 1.0
+    },
+    osm: {
+      label: 'Padrão',
+      url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      opacity: 1.0
+    },
+    toner: {
+      label: 'Toner',
+      url: 'https://stamen-tiles-{s}.a.ssl.fastly.net/toner/{z}/{x}/{y}.png',
+      opacity: 1.0
+    },
+    terrain: {
+      label: 'Terrain',
+      url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+      opacity: 1.0
+    },
+    watercolor: {
+      label: 'Watercolor',
+      url: 'https://stamen-tiles-{s}.a.ssl.fastly.net/watercolor/{z}/{x}/{y}.jpg',
+      opacity: 1.0
+    }
   } as const;
 
   // Respect system preference: prefer light mode when the system is set to light.
@@ -796,31 +826,37 @@ export default function BrazilMap({
 
   const onEachNeighborhood = useCallback((feature: unknown, layer: L.Layer) => {
     const f = feature as GeoJSONFeature;
-    const name = f.properties?.nome || "Bairro";
+    const name = String(
+      f.properties?.nome ||
+      f.properties?.NOME ||
+      f.properties?.name ||
+      f.properties?.bairro ||
+      "Bairro"
+    );
 
-    if (layer instanceof L.Path) {
-      const el = layer.getElement();
-      if (el) {
-        // Municípios com estilo de foco/sombra têm hover controlado por lógica própria.
-        // Remove o efeito CSS global para evitar "clarear" os escurecidos.
-        el.classList.remove('map-hover-effect');
+    if (!(layer instanceof L.Path)) return;
+
+    const pathLayer = layer as L.Path;
+    const handleMouseOver = () => {
+      if (typeof pathLayer.bringToFront === 'function') {
+        pathLayer.bringToFront();
       }
-    }
+      pathLayer.setStyle({ color: 'hsl(var(--admin-sidebar-accent))', fillOpacity: 0.35, weight: 2.5 });
+      pathLayer.bindTooltip(`<strong>${name}</strong>`, {
+        sticky: true,
+        direction: "top",
+        className: "custom-tooltip"
+      }).openTooltip();
+    };
 
-    (layer as L.Path).on({
-      mouseover: (e) => {
-        e.target.bringToFront();
-        e.target.setStyle({ color: 'hsl(var(--admin-sidebar-accent))', fillOpacity: 0.35, weight: 2.5 });
-        e.target.bindTooltip(`<strong>${name}</strong>`, {
-          sticky: true,
-          direction: "top",
-          className: "custom-tooltip"
-        }).openTooltip();
-      },
-      mouseout: (e) => {
-        e.target.setStyle(neighborhoodStyle(f));
-        e.target.closeTooltip();
-      },
+    const handleMouseOut = () => {
+      pathLayer.setStyle(neighborhoodStyle(f));
+      pathLayer.closeTooltip();
+    };
+
+    pathLayer.on({
+      mouseover: () => handleMouseOver(),
+      mouseout: () => handleMouseOut(),
       click: (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
         setSelectedNeighborhood(name);
@@ -970,13 +1006,8 @@ export default function BrazilMap({
           el.classList.add('map-municipio-no-hover');
         }
 
-        // Garante que hover não exiba tooltip/caixa branca de nenhum estado anterior.
-        e.target.unbindTooltip();
-
-        // Quando já há município em foco, remove hover dos demais (sem animação/branqueamento).
+        // If a municipality is already selected, ignore hover on other municipalities entirely.
         if (hasSelectedMunicipio && !isSelectedMunicipio) {
-          e.target.setStyle(currentStyle);
-          e.target.closeTooltip();
           return;
         }
 
@@ -1030,20 +1061,6 @@ export default function BrazilMap({
       },
     });
   }, [citiesList, municipioNamesByCode, selectedUF, modo, municipioStyle, onSelectMunicipio, filteredApiTerritories, apiUsers, onContextMenuMunicipio, role, estado_end, onResetMap, onSelectUF, handleClaimMunicipio, selectedMunicipioCode, selectedMunicipioName]);
-
-  // ── Neighborhood label markers — names from Brasil Aberto metadata if possible ───
-  const markers: Array<{ center: L.LatLng; name: string }> = [];
-  if (neighborhoodsGeo?.features) {
-    for (const feature of neighborhoodsGeo.features) {
-      const name = feature.properties?.nome || "Bairro";
-      if (!name || !feature.geometry) continue;
-      try {
-        const bounds = L.geoJSON(feature).getBounds();
-        if (bounds.isValid()) markers.push({ center: bounds.getCenter(), name });
-      } catch { /* skip invalid geometry */ }
-    }
-  }
-
 
   // Filter clients
   const visibleClientes = useMemo(() => {
@@ -1146,7 +1163,6 @@ export default function BrazilMap({
         maxBounds={maxBounds}
         maxBoundsViscosity={1.0}
       >
-        <AttributionControl prefix={false} />
         <MapController center={center} zoom={zoom} flyToLocation={flyToLocation} selectedUF={selectedUF} />
         <MapAnimationController
           onMoveStart={() => setIsMapMoving(true)}
@@ -1178,16 +1194,6 @@ export default function BrazilMap({
             attribution=""
             opacity={MAP_THEMES[mapTheme].opacity}
             pane="backgroundTilePane"
-          />
-        </Pane>
-        {/* Streets / labels overlay to show street names and roads */}
-        <Pane name="labelsPane" style={{ zIndex: 150, pointerEvents: 'none' }}>
-          <TileLayer
-            key={`labels-osm`}
-            url={'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'}
-            attribution={'© OpenStreetMap contributors'}
-            opacity={0.9}
-            pane="labelsPane"
           />
         </Pane>
 
@@ -1259,26 +1265,6 @@ export default function BrazilMap({
                 interactive={true}
               />
             )}
-
-            {/* Label markers */}
-            {!isMapMoving && markers.map((m, i) => (
-              <CircleMarker
-                key={`nhood-marker-${i}`}
-                center={m.center}
-                radius={0}
-                pathOptions={{ opacity: 0, fillOpacity: 0 }}
-                interactive={false}
-              >
-                <LeafletTooltip
-                  permanent
-                  direction="center"
-                  className="neighborhood-map-label"
-                  offset={[0, 0]}
-                >
-                  {m.name}
-                </LeafletTooltip>
-              </CircleMarker>
-            ))}
 
             {/* Loading indicator */}
             <AnimatePresence>
@@ -1418,11 +1404,6 @@ export default function BrazilMap({
               )}
             </div>
 
-            {municipioCodeForBairros && markers.length > 0 && !loadingNeighborhoods && (
-              <div className="px-3 py-1.5 bg-card/80 backdrop-blur-sm border border-border/50 rounded-md text-[10px] text-muted-foreground w-fit">
-                {markers.length} bairro(s) carregado(s)
-              </div>
-            )}
           </motion.div>
         )}
       </AnimatePresence>

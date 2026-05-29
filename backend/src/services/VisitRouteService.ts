@@ -722,6 +722,24 @@ export class VisitRouteService {
     }
 
     await prisma.routeSequence.delete({ where: { id: sequenceId } });
+
+    // Também remover notificações geradas para o supervisor referentes a este roteiro.
+    try {
+      if (existing.supervisor_user_id) {
+        // Deleta notificações direcionadas a este usuário que mencionem "Roteiro" no título
+        await prisma.notification.deleteMany({
+          where: {
+            targetAll: false,
+            title: { contains: 'Roteiro' },
+            // `targetUserIds` é JSON; `contains` funciona para procurar um valor dentro do JSON
+            targetUserIds: { contains: String(existing.supervisor_user_id) },
+          },
+        });
+      }
+    } catch (err) {
+      console.error('[NOTIFY] Erro ao remover notificações relacionadas ao roteiro:', err);
+    }
+
     return { success: true, id: sequenceId };
   }
 

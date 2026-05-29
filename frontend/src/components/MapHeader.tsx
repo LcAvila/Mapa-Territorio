@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck, Users, Flame, Filter, X, UserCheck, Check, RefreshCw, ShieldCheck, BadgeCheck, HelpCircle, LayoutDashboard } from "lucide-react";
+import { LogIn, Settings, LogOut, Search, ChevronDown, MapPin, RotateCcw, FileDown, Loader2, User, Bell, Truck, Users, Flame, Filter, X, UserCheck, Check, RefreshCw, ShieldCheck, BadgeCheck, HelpCircle, LayoutDashboard, MessageSquare } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context-core";
 import { UF_DATA } from "@/data/uf-codes";
 import { SystemUser, Cliente, SearchSuggestion, useApiTerritories } from "@/hooks/use-api-data";
@@ -83,6 +83,8 @@ export default function MapHeader({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showNotificationDialog, setShowNotificationDialog] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<UserNotification | null>(null);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
@@ -163,15 +165,32 @@ export default function MapHeader({
       });
       
       if (res.ok) {
-        // Atualiza o estado local para refletir a mudança imediatamente
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, seen: true } : n));
       } else if (res.status === 404) {
-        // Se a notificação não existe mais no servidor, remove do estado local
         setNotifications(prev => prev.filter(n => n.id !== id));
       }
     } catch (error) {
       console.error('Error marking as seen on server:', error);
     }
+  };
+
+  const openNotification = async (notification: UserNotification) => {
+    setShowNotifications(false);
+    setSelectedNotification(notification);
+    setShowNotificationDialog(true);
+
+    if (!notification.seen) {
+      setNotifications((prev) => prev.map((n) => n.id === notification.id ? { ...n, seen: true } : n));
+      await markAsRead(notification.id);
+    }
+  };
+
+  const markAllAsSeen = async () => {
+    const unread = myNotifications.filter((n) => !n.seen);
+    if (unread.length === 0) return;
+
+    setNotifications((prev) => prev.map((n) => ({ ...n, seen: true })));
+    await Promise.all(unread.map((n) => markAsRead(n.id).catch(() => null)));
   };
 
   const fetchNotifications = React.useCallback(async () => {
@@ -601,14 +620,14 @@ export default function MapHeader({
         ) : (
           <div className="flex items-center gap-3">
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               onClick={() => navigate('/admin')}
-              className="h-8 gap-1.5 px-2 sm:px-3 hover:bg-primary/10 hover:text-primary"
-              title="Painel Admin"
+              className="h-9 gap-2 rounded-full border-primary/20 bg-primary/5 px-3 transition-all hover:bg-primary/10 hover:text-primary"
+              title="Painel administrativo"
             >
-              <LayoutDashboard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline text-xs font-semibold">Admin</span>
+              <ShieldCheck className="w-4 h-4" />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">Painel</span>
             </Button>
             <Popover open={showNotifications} onOpenChange={setShowNotifications}>
               <PopoverTrigger asChild>
@@ -621,37 +640,81 @@ export default function MapHeader({
                   )}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[360px] p-0 bg-card border-border shadow-2xl z-[3000]" align="end">
-                <div className="px-4 py-3 border-b border-border/60 flex items-center justify-between">
+              <PopoverContent className="w-[380px] p-0 bg-card border-border shadow-2xl z-[3000]" align="end">
+                <div className="px-4 py-3 border-b border-border/60 flex items-start justify-between gap-3">
                   <div>
-                    <h4 className="text-sm font-bold">Central de Notificações</h4>
-                    <p className="text-[11px] text-muted-foreground">Atualizações e respostas dos seus interesses</p>
+                    <h4 className="text-sm font-bold">Notificações</h4>
+                    <p className="text-[11px] text-muted-foreground">Toques importantes para o seu trabalho no mapa</p>
                   </div>
+                  {unreadCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={(event) => { event.stopPropagation(); markAllAsSeen(); }}
+                      className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary hover:text-primary/80 transition-colors"
+                    >
+                      Marcar todas
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">{myNotifications.length} itens</span>
+                  )}
                 </div>
-                <div className="max-h-[360px] overflow-y-auto custom-scrollbar divide-y divide-border/40">
+                <div className="max-h-[380px] overflow-y-auto custom-scrollbar">
                   {loadingNotifications ? (
                     <div className="py-8 text-center text-xs text-muted-foreground">Carregando...</div>
                   ) : myNotifications.length === 0 ? (
                     <div className="py-10 text-center text-xs text-muted-foreground">Nenhuma notificação</div>
                   ) : (
                     myNotifications.map((n) => (
-                      <div key={n.id} className={`px-4 py-3 hover:bg-secondary/40 transition-colors relative ${!n.seen ? 'bg-primary/[0.03] border-l-2 border-l-primary' : ''}`}>
-                        <div className="flex justify-between items-start gap-2">
-                          <p className={`text-xs font-semibold ${!n.seen ? 'text-foreground' : 'text-muted-foreground'}`}>{n.title}</p>
-                          {!n.seen && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-1" />}
+                      <button
+                        key={n.id}
+                        type="button"
+                        onClick={() => openNotification(n)}
+                        className={`w-full text-left px-4 py-3 transition-colors border-b border-border/40 ${!n.seen ? 'bg-primary/[0.05] hover:bg-primary/10 border-l-4 border-l-primary' : 'hover:bg-secondary/70'} rounded-none`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className={`text-sm font-semibold ${!n.seen ? 'text-foreground' : 'text-muted-foreground'}`}>{n.title}</p>
+                            <p className="text-[11px] text-muted-foreground mt-1 line-clamp-3" dangerouslySetInnerHTML={{ __html: n.message }} />
+                          </div>
+                          {!n.seen && <span className="rounded-full bg-primary/15 text-primary px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em]">Novo</span>}
                         </div>
-                        <div
-                          className="text-[11px] text-muted-foreground mt-1 line-clamp-2"
-                          dangerouslySetInnerHTML={{ __html: n.message }}
-                        />
-                        <p className="text-[10px] text-muted-foreground/60 mt-2">
-                          {new Date(n.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                      </div>
+                        <div className="mt-3 flex items-center justify-between text-[10px] text-muted-foreground">
+                          <span>{new Date(n.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                          <span className="font-semibold text-primary/80">Ver</span>
+                        </div>
+                      </button>
                     ))
                   )}
                 </div>
               </PopoverContent>
+              <Dialog open={showNotificationDialog} onOpenChange={(open) => {
+                if (!open) setSelectedNotification(null);
+                setShowNotificationDialog(open);
+              }}>
+                <DialogContent className="max-w-[90vw] sm:max-w-[420px] p-0 overflow-hidden border-border bg-card shadow-2xl z-[5001]">
+                  <DialogHeader className="px-4 py-4 border-b border-border/60">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-primary" />
+                      <DialogTitle className="text-sm font-bold">{selectedNotification?.title || 'Notificação'}</DialogTitle>
+                    </div>
+                    <DialogDescription className="text-[11px] text-muted-foreground mt-1">A notificação aparece aqui para você acompanhar com clareza.</DialogDescription>
+                  </DialogHeader>
+                  <div className="p-4 space-y-4">
+                    <div className="text-sm leading-relaxed text-foreground" dangerouslySetInnerHTML={{ __html: selectedNotification?.message || '' }} />
+                    {selectedNotification && (
+                      <div className="rounded-xl bg-secondary/70 p-3 text-[11px] text-muted-foreground">
+                        <p className="font-semibold text-[11px] text-foreground">Enviada em</p>
+                        <p>{new Date(selectedNotification.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="px-4 py-3 border-t border-border/60 flex justify-end">
+                    <Button variant="outline" size="sm" onClick={() => setShowNotificationDialog(false)}>
+                      Fechar
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </Popover>
 
             <Popover open={showUserMenu} onOpenChange={setShowUserMenu}>
