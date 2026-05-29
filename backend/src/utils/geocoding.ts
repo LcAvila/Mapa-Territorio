@@ -92,20 +92,45 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
   if (!API_KEY) {
     try {
       await waitForNominatimSlot();
-      console.log(`[Geocoding] Using Nominatim for: ${cleanAddress}`);
+      console.log(`[Geocoding] Using Nominatim for (structured): ${cleanAddress}`);
       const endpoint = `https://nominatim.openstreetmap.org/search`;
+
+      // Try to split common address format: "<street>, <bairro?>, <city>, <uf>, Brasil"
+      const parts = cleanAddress.split(',').map(p => p.trim()).filter(Boolean);
+      // Remove trailing 'Brasil' if present
+      if (parts.length > 0 && /brasil/i.test(parts[parts.length - 1])) parts.pop();
+
+      let street = '';
+      let city = '';
+      let state = '';
+
+      if (parts.length >= 2) {
+        state = parts[parts.length - 1];
+        city = parts[parts.length - 2];
+        street = parts.slice(0, parts.length - 2).join(', ');
+      } else {
+        // Fallback to whole address in q
+        street = cleanAddress;
+      }
+
+      const params: any = {
+        format: 'json',
+        limit: 1
+      };
+
+      if (street) params.street = street;
+      if (city) params.city = city;
+      if (state) params.state = state;
+      params.country = 'Brasil';
+
       const response = await axios.get(endpoint, {
-        params: {
-          q: `${cleanAddress}, Brasil`,
-          format: 'json',
-          limit: 1
-        },
+        params,
         headers: {
           'User-Agent': 'MapaTerritorio-App/1.0 (Integration)'
         },
         timeout: 10000
       });
-      
+
       const items = response.data;
       if (items && items.length > 0) {
         const result: GeocodeResult = {
@@ -116,6 +141,7 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
         setCache(cleanAddress, result);
         return result;
       }
+
       setCache(cleanAddress, null);
       return null;
     } catch (error) {
@@ -126,13 +152,38 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult | n
 
   // Use HERE API (primary)
   try {
+    // Try structured query using HERE 'qq' when possible to improve house-number resolution.
+    const parts = cleanAddress.split(',').map(p => p.trim()).filter(Boolean);
+    if (parts.length > 0 && /brasil/i.test(parts[parts.length - 1])) parts.pop();
+
+    let street = '';
+    let city = '';
+    let state = '';
+    if (parts.length >= 2) {
+      state = parts[parts.length - 1];
+      city = parts[parts.length - 2];
+      street = parts.slice(0, parts.length - 2).join(', ');
+    }
+
+    const params: any = {
+      apiKey: API_KEY,
+      in: 'countryCode:BRA',
+      limit: 1
+    };
+
+    if (street) {
+      // Use qq for structured query: street, city, state
+      const qqParts: string[] = [];
+      qqParts.push(`street=${street}`);
+      if (city) qqParts.push(`city=${city}`);
+      if (state) qqParts.push(`state=${state}`);
+      params.qq = qqParts.join(';');
+    } else {
+      params.q = `${cleanAddress}, Brasil`;
+    }
+
     const response = await axios.get<HereGeocodeResponse>(GEOCODE_URL, {
-      params: {
-        q: `${cleanAddress}, Brasil`,
-        apiKey: API_KEY,
-        in: 'countryCode:BRA',
-        limit: 1
-      },
+      params,
       timeout: 10000
     });
 

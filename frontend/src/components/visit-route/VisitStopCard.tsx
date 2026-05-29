@@ -77,14 +77,30 @@ export const VisitStopCard: React.FC<VisitStopCardProps> = ({ stop, isActive, on
                   <Play className="w-3.5 h-3.5" /> Fazer Check-in
                 </Button>
               )}
-              {stop.status === 'visitando' && (
-                <Button size="sm" onClick={() => onViewDetails(stop.id)} variant="outline" className="h-8 gap-2 font-bold text-[11px] uppercase border-blue-500/50 text-blue-500 hover:bg-blue-500/5">
-                  <Clock className="w-3.5 h-3.5" /> Registrar Resultado
+
+              {/* Confirmar Visita disponível para paradas não finalizadas */}
+              {stop.status !== 'visitada' && (
+                <Button size="sm" onClick={() => onViewDetails(stop.id)} className="h-8 gap-2 font-bold text-[11px] uppercase bg-green-50 border border-green-200 text-green-700 hover:bg-green-100">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Confirmar Visita
                 </Button>
               )}
+
               <Button size="sm" variant="ghost" onClick={() => onViewDetails(stop.id)} className="h-8 text-[11px] font-bold uppercase text-muted-foreground">
                 Detalhes
               </Button>
+            </div>
+            {/* Extra details */}
+            <div className="mt-3 text-[12px] text-muted-foreground flex flex-col gap-1">
+              {typeof stop.distance_from_previous_km === 'number' && (
+                <div className="flex items-center gap-2"><MapPin className="w-3 h-3" /> {stop.distance_from_previous_km.toFixed(2)} km desde a parada anterior</div>
+              )}
+              {typeof stop.duration_from_previous_minutes === 'number' && (
+                <div className="flex items-center gap-2"><Clock className="w-3 h-3" /> {Math.round(stop.duration_from_previous_minutes)} min desde a parada anterior</div>
+              )}
+              <div className="flex items-center gap-2">
+                {stop.is_checked_in ? <CheckCircle2 className="w-3 h-3 text-blue-500" /> : <Circle className="w-3 h-3 text-muted-foreground" />}
+                <span>{stop.is_checked_in ? 'Check-in ativo' : 'Sem check-in'}</span>
+              </div>
             </div>
           </div>
         </div>

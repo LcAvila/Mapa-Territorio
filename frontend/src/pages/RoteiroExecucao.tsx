@@ -313,30 +313,36 @@ export const RoteiroExecucao: React.FC = () => {
       </header>
 
       <main className="flex-1 p-4 max-w-2xl mx-auto w-full space-y-4">
-        {!routeStarted ? (
-          <Card className="bg-primary/5 border-primary/20 border-dashed">
-            <CardContent className="p-8 text-center space-y-4">
-              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto border border-primary/20">
-                <Navigation className="w-8 h-8 text-primary" />
-              </div>
-              <div className="space-y-1">
-                <h2 className="text-lg font-black uppercase tracking-tight">Pronto para começar?</h2>
-                <p className="text-sm text-muted-foreground">Inicie o roteiro para habilitar os check-ins e o GPS.</p>
-              </div>
-              <Button onClick={handleStartRoute} size="lg" className="w-full gap-2 font-black uppercase tracking-widest shadow-lg shadow-primary/20">
-                <Play className="w-5 h-5" /> Iniciar Roteiro
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 gap-3">
-            <div className="flex items-center justify-between px-1">
-              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Próximas Visitas</span>
-              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 animate-pulse">
-                Em Execução
-              </Badge>
-            </div>
-            {stops.map((stop) => (
+        <div className="grid grid-cols-1 gap-3">
+          {!routeStarted && (
+            <Card className="bg-secondary/5 border-secondary/20">
+              <CardContent className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-black uppercase tracking-tight">Roteiro não iniciado</p>
+                  <p className="text-xs text-muted-foreground">Você ainda pode ver as paradas. Clique em iniciar para habilitar check-ins e GPS.</p>
+                </div>
+                <Button onClick={handleStartRoute} size="sm" className="h-10 gap-2 font-black uppercase">
+                  <Play className="w-4 h-4" /> Iniciar Roteiro
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Próximas Visitas</span>
+            <Badge variant="outline" className={`bg-primary/10 border-primary/20 ${routeStarted ? 'text-primary animate-pulse' : 'text-muted-foreground'}`}>
+              {routeStarted ? 'Em Execução' : 'Aguardando início'}
+            </Badge>
+          </div>
+
+          {stops.length === 0 ? (
+            <Card className="border-dashed border-border/40 bg-background/80">
+              <CardContent className="p-6 text-center text-sm text-muted-foreground">
+                Nenhuma parada cadastrada para este roteiro.
+              </CardContent>
+            </Card>
+          ) : (
+            stops.map((stop) => (
               <VisitStopCard
                 key={stop.id}
                 stop={stop}
@@ -344,9 +350,9 @@ export const RoteiroExecucao: React.FC = () => {
                 onCheckin={handleCheckin}
                 onViewDetails={handleRegisterResult}
               />
-            ))}
-          </div>
-        )}
+            ))
+          )}
+        </div>
       </main>
 
       {/* Footer com Progresso */}
